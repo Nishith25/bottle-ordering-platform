@@ -4,6 +4,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -15,8 +16,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import BottleVisual from "../../components/BottleVisual";
 import { useCart } from "../../context/CartContext";
-import {
-  PRODUCTS,
+import { useProducts } from "../../context/ProductContext";
+import type {
   Product,
   ProductCategory,
 } from "../../data/products";
@@ -47,7 +48,9 @@ function ProductCard({
     <View
       style={[
         styles.productCard,
-        { backgroundColor: product.cardColor },
+        {
+          backgroundColor: product.cardColor,
+        },
       ]}
     >
       <View style={styles.productTopRow}>
@@ -64,7 +67,10 @@ function ProductCard({
               size={11}
               color="#42664F"
             />
-            <Text style={styles.planBadgeText}>Plans</Text>
+
+            <Text style={styles.planBadgeText}>
+              Plans
+            </Text>
           </View>
         ) : null}
       </View>
@@ -87,7 +93,10 @@ function ProductCard({
         />
       </View>
 
-      <Text numberOfLines={2} style={styles.productName}>
+      <Text
+        numberOfLines={2}
+        style={styles.productName}
+      >
         {product.name}
       </Text>
 
@@ -103,6 +112,7 @@ function ProductCard({
           <Text style={styles.price}>
             ₹{product.price}
           </Text>
+
           <Text style={styles.taxText}>
             per bottle
           </Text>
@@ -114,7 +124,8 @@ function ProductCard({
             style={({ pressed }) => [
               styles.addButton,
               {
-                backgroundColor: product.accentColor,
+                backgroundColor:
+                  product.accentColor,
               },
               pressed && styles.pressed,
             ]}
@@ -128,7 +139,9 @@ function ProductCard({
         ) : (
           <View style={styles.quantityControl}>
             <Pressable
-              onPress={() => decreaseItem(product.id)}
+              onPress={() =>
+                decreaseItem(product.id)
+              }
               style={styles.quantityButton}
             >
               <Ionicons
@@ -143,7 +156,9 @@ function ProductCard({
             </Text>
 
             <Pressable
-              onPress={() => increaseItem(product.id)}
+              onPress={() =>
+                increaseItem(product.id)
+              }
               style={styles.quantityButton}
             >
               <Ionicons
@@ -161,23 +176,39 @@ function ProductCard({
 
 export default function BottlesScreen() {
   const router = useRouter();
-  const { itemCount, subtotal } = useCart();
-  const [selectedFilter, setSelectedFilter] =
-    useState<Filter>("All");
+
+  const {
+    itemCount,
+    subtotal,
+  } = useCart();
+
+  const {
+    products,
+    loading,
+    refreshing,
+    error,
+    refreshProducts,
+  } = useProducts();
+
+  const [
+    selectedFilter,
+    setSelectedFilter,
+  ] = useState<Filter>("All");
 
   const filteredProducts = useMemo(() => {
+    const availableProducts = products.filter(
+      (product) => product.available
+    );
+
     if (selectedFilter === "All") {
-      return PRODUCTS.filter(
-        (product) => product.available
-      );
+      return availableProducts;
     }
 
-    return PRODUCTS.filter(
+    return availableProducts.filter(
       (product) =>
-        product.available &&
         product.category === selectedFilter
     );
-  }, [selectedFilter]);
+  }, [products, selectedFilter]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -192,8 +223,8 @@ export default function BottlesScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Freshly prepared 300 ml bottles for one-time
-            orders or subscriptions.
+            Freshly prepared 300 ml bottles for
+            one-time orders or subscriptions.
           </Text>
         </View>
 
@@ -222,21 +253,26 @@ export default function BottlesScreen() {
 
       <View style={styles.filterRow}>
         {FILTERS.map((filter) => {
-          const active = selectedFilter === filter;
+          const active =
+            selectedFilter === filter;
 
           return (
             <Pressable
               key={filter}
-              onPress={() => setSelectedFilter(filter)}
+              onPress={() =>
+                setSelectedFilter(filter)
+              }
               style={[
                 styles.filterButton,
-                active && styles.filterButtonActive,
+                active &&
+                  styles.filterButtonActive,
               ]}
             >
               <Text
                 style={[
                   styles.filterText,
-                  active && styles.filterTextActive,
+                  active &&
+                    styles.filterTextActive,
                 ]}
               >
                 {filter}
@@ -246,42 +282,133 @@ export default function BottlesScreen() {
         })}
       </View>
 
-      <FlatList
-        data={filteredProducts}
-        numColumns={2}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ProductCard product={item} />
-        )}
-        columnWrapperStyle={styles.productRow}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.listContent,
-          itemCount > 0 && styles.listWithCartBar,
-        ]}
-        ListFooterComponent={
-          <View style={styles.deliveryNotice}>
-            <View style={styles.deliveryIcon}>
-              <Ionicons
-                name="location-outline"
-                size={20}
-                color="#386E52"
-              />
-            </View>
+      {loading ? (
+        <View style={styles.stateContainer}>
+          <ActivityIndicator
+            size="large"
+            color="#245C42"
+          />
 
-            <View style={styles.deliveryText}>
-              <Text style={styles.deliveryTitle}>
-                Selected delivery locations only
-              </Text>
+          <Text style={styles.stateTitle}>
+            Loading fresh bottles
+          </Text>
 
-              <Text style={styles.deliveryDescription}>
-                Your pincode will be checked before the
-                order can be placed.
-              </Text>
-            </View>
+          <Text style={styles.stateDescription}>
+            Getting the latest products and
+            prices from the server.
+          </Text>
+        </View>
+      ) : error ? (
+        <View style={styles.stateContainer}>
+          <View style={styles.errorIcon}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={30}
+              color="#A84C4C"
+            />
           </View>
-        }
-      />
+
+          <Text style={styles.stateTitle}>
+            Unable to load bottles
+          </Text>
+
+          <Text style={styles.stateDescription}>
+            {error}
+          </Text>
+
+          <Pressable
+            onPress={() => {
+              void refreshProducts();
+            }}
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="refresh"
+              size={17}
+              color="#FFFFFF"
+            />
+
+            <Text style={styles.retryButtonText}>
+              Try again
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          numColumns={2}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ProductCard product={item} />
+          )}
+          columnWrapperStyle={styles.productRow}
+          showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={() => {
+            void refreshProducts();
+          }}
+          contentContainerStyle={[
+            styles.listContent,
+            itemCount > 0 &&
+              styles.listWithCartBar,
+          ]}
+          ListEmptyComponent={
+            <View style={styles.emptyList}>
+              <Ionicons
+                name="nutrition-outline"
+                size={35}
+                color="#35694E"
+              />
+
+              <Text style={styles.stateTitle}>
+                No bottles available
+              </Text>
+
+              <Text
+                style={styles.stateDescription}
+              >
+                Available products will appear
+                here.
+              </Text>
+            </View>
+          }
+          ListFooterComponent={
+            filteredProducts.length > 0 ? (
+              <View style={styles.deliveryNotice}>
+                <View style={styles.deliveryIcon}>
+                  <Ionicons
+                    name="location-outline"
+                    size={20}
+                    color="#386E52"
+                  />
+                </View>
+
+                <View style={styles.deliveryText}>
+                  <Text
+                    style={styles.deliveryTitle}
+                  >
+                    Selected delivery locations
+                    only
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.deliveryDescription
+                    }
+                  >
+                    Your pincode will be checked
+                    before the order can be
+                    placed.
+                  </Text>
+                </View>
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {itemCount > 0 ? (
         <View style={styles.floatingCartWrapper}>
@@ -292,24 +419,40 @@ export default function BottlesScreen() {
               pressed && styles.pressed,
             ]}
           >
-            <View style={styles.floatingCartCount}>
-              <Text style={styles.floatingCartCountText}>
+            <View
+              style={styles.floatingCartCount}
+            >
+              <Text
+                style={
+                  styles.floatingCartCountText
+                }
+              >
                 {itemCount}
               </Text>
             </View>
 
             <View style={styles.floatingCartText}>
-              <Text style={styles.floatingCartTitle}>
+              <Text
+                style={styles.floatingCartTitle}
+              >
                 View your cart
               </Text>
 
-              <Text style={styles.floatingCartSubtitle}>
+              <Text
+                style={
+                  styles.floatingCartSubtitle
+                }
+              >
                 {itemCount}{" "}
-                {itemCount === 1 ? "bottle" : "bottles"}
+                {itemCount === 1
+                  ? "bottle"
+                  : "bottles"}
               </Text>
             </View>
 
-            <Text style={styles.floatingCartPrice}>
+            <Text
+              style={styles.floatingCartPrice}
+            >
               ₹{subtotal}
             </Text>
 
@@ -445,6 +588,7 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 24,
     overflow: "hidden",
+
     ...Platform.select({
       ios: {
         shadowColor: "#17221C",
@@ -455,6 +599,7 @@ const styles = StyleSheet.create({
           height: 6,
         },
       },
+
       android: {
         elevation: 2,
       },
@@ -609,6 +754,63 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
     marginTop: 3,
+  },
+
+  stateContainer: {
+    flex: 1,
+    paddingHorizontal: 35,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyList: {
+    minHeight: 360,
+    paddingHorizontal: 35,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stateTitle: {
+    color: "#1C2922",
+    fontSize: 17,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 16,
+  },
+
+  stateDescription: {
+    color: "#747E78",
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: "center",
+    marginTop: 7,
+  },
+
+  errorIcon: {
+    width: 66,
+    height: 66,
+    borderRadius: 22,
+    backgroundColor: "#FAECEC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  retryButton: {
+    minHeight: 47,
+    paddingHorizontal: 19,
+    borderRadius: 15,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 18,
+  },
+
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
   },
 
   floatingCartWrapper: {
