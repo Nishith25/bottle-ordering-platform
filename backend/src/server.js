@@ -14,6 +14,10 @@ const adminRoutes = require(
   "./routes/admin"
 );
 
+const adminInventoryRoutes = require(
+  "./routes/adminInventory"
+);
+
 const adminOrderRoutes = require(
   "./routes/adminOrders"
 );
@@ -175,10 +179,6 @@ app.use(
   subscriptionRoutes
 );
 
-/*
- * Specific admin routes remain above
- * the general /api/admin router.
- */
 app.use(
   "/api/admin/orders",
   adminOrderRoutes
@@ -192,6 +192,11 @@ app.use(
 app.use(
   "/api/admin/users",
   adminUserRoutes
+);
+
+app.use(
+  "/api/admin/inventory",
+  adminInventoryRoutes
 );
 
 app.use(
@@ -241,8 +246,7 @@ app.use(
             ? "An unexpected server error occurred."
             : error.message,
 
-        ...(process.env
-          .NODE_ENV ===
+        ...(process.env.NODE_ENV ===
         "development"
           ? {
               stack:

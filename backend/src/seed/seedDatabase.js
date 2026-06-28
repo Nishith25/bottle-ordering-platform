@@ -46,6 +46,8 @@ const products = [
     accentColor: "#32694B",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
     sortOrder: 1,
   },
 
@@ -74,6 +76,8 @@ const products = [
     accentColor: "#647729",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
     sortOrder: 2,
   },
 
@@ -81,7 +85,9 @@ const products = [
     productId:
       "watermelon-splash",
 
-    name: "Watermelon Splash",
+    name:
+      "Watermelon Splash",
+
     shortName: "Watermelon",
 
     description:
@@ -102,6 +108,8 @@ const products = [
     accentColor: "#A94443",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
     sortOrder: 3,
   },
 
@@ -130,6 +138,8 @@ const products = [
     accentColor: "#8D680C",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
     sortOrder: 4,
   },
 ];
@@ -189,7 +199,6 @@ const subscriptionPlans = [
     bottleCount: 4,
     deliveriesPerCycle: 1,
     discountPercent: 5,
-
     badge: "Starter plan",
 
     features: [
@@ -215,7 +224,6 @@ const subscriptionPlans = [
     bottleCount: 16,
     deliveriesPerCycle: 4,
     discountPercent: 10,
-
     badge: "Best value",
 
     features: [
@@ -231,30 +239,70 @@ const subscriptionPlans = [
 ];
 
 async function seedProducts() {
-  const operations = products.map(
-    (product) => ({
-      updateOne: {
-        filter: {
-          productId:
-            product.productId,
-        },
+  const operations =
+    products.map(
+      (product) => ({
+        updateOne: {
+          filter: {
+            productId:
+              product.productId,
+          },
 
-        update: {
-          $setOnInsert: product,
-        },
+          update: {
+            $setOnInsert:
+              product,
+          },
 
-        upsert: true,
-      },
-    })
-  );
+          upsert: true,
+        },
+      })
+    );
 
   const result =
     await Product.bulkWrite(
       operations
     );
 
+  const missingStockResult =
+    await Product.updateMany(
+      {
+        stockQuantity: {
+          $exists: false,
+        },
+      },
+
+      {
+        $set: {
+          stockQuantity: 50,
+        },
+      }
+    );
+
+  const missingThresholdResult =
+    await Product.updateMany(
+      {
+        lowStockThreshold: {
+          $exists: false,
+        },
+      },
+
+      {
+        $set: {
+          lowStockThreshold: 10,
+        },
+      }
+    );
+
   console.log(
     `Products seeded. New products: ${result.upsertedCount}`
+  );
+
+  console.log(
+    `Legacy products updated with stock: ${missingStockResult.modifiedCount}`
+  );
+
+  console.log(
+    `Legacy products updated with thresholds: ${missingThresholdResult.modifiedCount}`
   );
 }
 
@@ -294,7 +342,8 @@ async function seedSubscriptionPlans() {
       (plan) => ({
         updateOne: {
           filter: {
-            planId: plan.planId,
+            planId:
+              plan.planId,
           },
 
           update: {

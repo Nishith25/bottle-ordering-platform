@@ -85,6 +85,36 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
 
+    stockQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+
+      validate: {
+        validator(value) {
+          return Number.isInteger(value);
+        },
+
+        message:
+          "Stock quantity must be a whole number.",
+      },
+    },
+
+    lowStockThreshold: {
+      type: Number,
+      default: 10,
+      min: 0,
+
+      validate: {
+        validator(value) {
+          return Number.isInteger(value);
+        },
+
+        message:
+          "Low-stock threshold must be a whole number.",
+      },
+    },
+
     sortOrder: {
       type: Number,
       default: 0,
@@ -98,6 +128,11 @@ const productSchema = new mongoose.Schema(
 productSchema.index({
   available: 1,
   sortOrder: 1,
+});
+
+productSchema.index({
+  stockQuantity: 1,
+  lowStockThreshold: 1,
 });
 
 module.exports = mongoose.model(

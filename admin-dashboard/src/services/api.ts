@@ -10,9 +10,10 @@ type ApiBaseResponse = {
   message?: string;
 };
 
-type ApiRequestOptions = RequestInit & {
-  token?: string | null;
-};
+type ApiRequestOptions =
+  RequestInit & {
+    token?: string | null;
+  };
 
 export type AdminUser = {
   id: string;
@@ -46,10 +47,12 @@ export type DashboardTotals = {
 
 export type DashboardData = {
   totals: DashboardTotals;
+
   orderStatusBreakdown: Record<
     string,
     number
   >;
+
   subscriptionStatusBreakdown: Record<
     string,
     number
@@ -76,6 +79,8 @@ export type AdminProduct = {
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  stockQuantity: number;
+  lowStockThreshold: number;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -96,12 +101,15 @@ export type ProductPayload = {
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  stockQuantity: number;
+  lowStockThreshold: number;
   sortOrder: number;
 };
 
-type LoginResponse = ApiBaseResponse & {
-  data: AdminSession;
-};
+type LoginResponse =
+  ApiBaseResponse & {
+    data: AdminSession;
+  };
 
 type CurrentUserResponse =
   ApiBaseResponse & {
@@ -115,29 +123,35 @@ type DashboardResponse =
     data: DashboardData;
   };
 
-type ProductsResponse = ApiBaseResponse & {
-  count: number;
+type ProductsResponse =
+  ApiBaseResponse & {
+    count: number;
 
-  data: {
-    products: AdminProduct[];
+    data: {
+      products:
+        AdminProduct[];
+    };
   };
-};
 
-type ProductResponse = ApiBaseResponse & {
-  data: {
-    product: AdminProduct;
+type ProductResponse =
+  ApiBaseResponse & {
+    data: {
+      product:
+        AdminProduct;
+    };
   };
-};
 
 async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const controller = new AbortController();
+  const controller =
+    new AbortController();
 
-  const timeoutId = window.setTimeout(() => {
-    controller.abort();
-  }, 12000);
+  const timeoutId =
+    window.setTimeout(() => {
+      controller.abort();
+    }, 12000);
 
   const {
     token,
@@ -153,8 +167,9 @@ async function apiRequest<T>(
   };
 
   if (requestOptions.body) {
-    requestHeaders["Content-Type"] =
-      "application/json";
+    requestHeaders[
+      "Content-Type"
+    ] = "application/json";
   }
 
   if (token) {
@@ -165,7 +180,10 @@ async function apiRequest<T>(
   if (headers) {
     Object.assign(
       requestHeaders,
-      headers as Record<string, string>
+      headers as Record<
+        string,
+        string
+      >
     );
   }
 
@@ -174,21 +192,27 @@ async function apiRequest<T>(
       `${API_BASE_URL}${path}`,
       {
         ...requestOptions,
-        headers: requestHeaders,
-        signal: controller.signal,
+
+        headers:
+          requestHeaders,
+
+        signal:
+          controller.signal,
       }
     );
 
     const responseText =
       await response.text();
 
-    let payload: T & ApiBaseResponse;
+    let payload:
+      T & ApiBaseResponse;
 
     try {
       payload = responseText
         ? JSON.parse(responseText)
         : ({
-            success: response.ok,
+            success:
+              response.ok,
           } as T & ApiBaseResponse);
     } catch {
       throw new Error(
@@ -210,20 +234,25 @@ async function apiRequest<T>(
   } catch (error) {
     if (
       error instanceof Error &&
-      error.name === "AbortError"
+      error.name ===
+        "AbortError"
     ) {
       throw new Error(
         "The server took too long to respond."
       );
     }
 
-    if (error instanceof TypeError) {
+    if (
+      error instanceof TypeError
+    ) {
       throw new Error(
         "Unable to connect to the backend."
       );
     }
 
-    if (error instanceof Error) {
+    if (
+      error instanceof Error
+    ) {
       throw error;
     }
 
@@ -231,7 +260,9 @@ async function apiRequest<T>(
       "Unable to complete the request."
     );
   } finally {
-    window.clearTimeout(timeoutId);
+    window.clearTimeout(
+      timeoutId
+    );
   }
 }
 
@@ -252,7 +283,10 @@ export async function loginAdmin(
       }
     );
 
-  if (response.data.user.role !== "admin") {
+  if (
+    response.data.user.role !==
+    "admin"
+  ) {
     throw new Error(
       "This account does not have administrator access."
     );
@@ -272,7 +306,10 @@ export async function fetchAdminUser(
       }
     );
 
-  if (response.data.user.role !== "admin") {
+  if (
+    response.data.user.role !==
+    "admin"
+  ) {
     throw new Error(
       "This account does not have administrator access."
     );
@@ -306,44 +343,161 @@ export async function fetchAdminProducts(
       }
     );
 
-  return response.data.products;
+  return response.data.products.map(
+    (product) => ({
+      ...product,
+
+      stockQuantity:
+        product.stockQuantity ??
+        0,
+
+      lowStockThreshold:
+        product.lowStockThreshold ??
+        10,
+    })
+  );
+}
+
+async function updateInventory(
+  token: string,
+  productId: string,
+  payload: {
+    stockQuantity?: number;
+    lowStockThreshold?: number;
+    adjustment?: number;
+  }
+): Promise<AdminProduct> {
+  const response =
+    await apiRequest<ProductResponse>(
+      `/api/admin/inventory/${encodeURIComponent(
+        productId
+      )}`,
+      {
+        method: "PATCH",
+        token,
+
+        body:
+          JSON.stringify(
+            payload
+          ),
+      }
+    );
+
+  return response.data.product;
 }
 
 export async function createAdminProduct(
   token: string,
   payload: ProductPayload
 ): Promise<AdminProduct> {
+  const {
+    stockQuantity,
+    lowStockThreshold,
+    ...cataloguePayload
+  } = payload;
+
   const response =
     await apiRequest<ProductResponse>(
       "/api/admin/products",
       {
         method: "POST",
         token,
-        body: JSON.stringify(payload),
+
+        body:
+          JSON.stringify(
+            cataloguePayload
+          ),
       }
     );
 
-  return response.data.product;
+  return updateInventory(
+    token,
+    response.data.product.productId,
+    {
+      stockQuantity,
+      lowStockThreshold,
+    }
+  );
 }
 
 export async function updateAdminProduct(
   token: string,
   productId: string,
-  payload: Partial<ProductPayload>
+  payload:
+    Partial<ProductPayload>
 ): Promise<AdminProduct> {
-  const response =
-    await apiRequest<ProductResponse>(
-      `/api/admin/products/${encodeURIComponent(
-        productId
-      )}`,
-      {
-        method: "PATCH",
-        token,
-        body: JSON.stringify(payload),
-      }
-    );
+  const {
+    stockQuantity,
+    lowStockThreshold,
+    ...cataloguePayload
+  } = payload;
 
-  return response.data.product;
+  let latestProduct:
+    AdminProduct | null = null;
+
+  if (
+    Object.keys(
+      cataloguePayload
+    ).length > 0
+  ) {
+    const response =
+      await apiRequest<ProductResponse>(
+        `/api/admin/products/${encodeURIComponent(
+          productId
+        )}`,
+        {
+          method: "PATCH",
+          token,
+
+          body:
+            JSON.stringify(
+              cataloguePayload
+            ),
+        }
+      );
+
+    latestProduct =
+      response.data.product;
+  }
+
+  if (
+    stockQuantity !==
+      undefined ||
+    lowStockThreshold !==
+      undefined
+  ) {
+    latestProduct =
+      await updateInventory(
+        token,
+        productId,
+        {
+          stockQuantity,
+          lowStockThreshold,
+        }
+      );
+  }
+
+  if (!latestProduct) {
+    throw new Error(
+      "No product changes were provided."
+    );
+  }
+
+  return latestProduct;
+}
+
+export async function adjustAdminProductStock(
+  token: string,
+  productId: string,
+  adjustment: number
+): Promise<AdminProduct> {
+  return updateInventory(
+    token,
+    productId,
+    {
+      adjustment,
+    }
+  );
 }
 
 export async function archiveAdminProduct(

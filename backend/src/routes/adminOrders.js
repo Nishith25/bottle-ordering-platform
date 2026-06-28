@@ -1,6 +1,7 @@
 // backend/src/routes/adminOrders.js
 
 const express = require("express");
+const mongoose = require("mongoose");
 
 const {
   protect,
@@ -9,6 +10,10 @@ const {
 
 const Order = require("../models/Order");
 const User = require("../models/User");
+
+const {
+  restoreOrderInventory,
+} = require("../services/inventory");
 
 const router = express.Router();
 
@@ -25,7 +30,10 @@ const ORDER_STATUSES = [
 ];
 
 const ALLOWED_TRANSITIONS = {
-  placed: ["confirmed", "cancelled"],
+  placed: [
+    "confirmed",
+    "cancelled",
+  ],
 
   confirmed: [
     "preparing",
@@ -37,10 +45,11 @@ const ALLOWED_TRANSITIONS = {
     "cancelled",
   ],
 
-  out_for_delivery: ["delivered"],
+  out_for_delivery: [
+    "delivered",
+  ],
 
   delivered: [],
-
   cancelled: [],
 };
 
@@ -55,13 +64,6 @@ function escapeRegex(value) {
   );
 }
 
-/**
- * GET /api/admin/orders
- *
- * Query parameters:
- * status=placed
- * search=customer name, email, phone or order number
- */
 router.get(
   "/",
   async (req, res, next) => {
@@ -87,6 +89,7 @@ router.get(
         ) {
           return res.status(400).json({
             success: false,
+
             message:
               "Invalid order status filter.",
           });
@@ -106,13 +109,18 @@ router.get(
           await User.find({
             $or: [
               {
-                fullName: searchRegex,
+                fullName:
+                  searchRegex,
               },
+
               {
-                email: searchRegex,
+                email:
+                  searchRegex,
               },
+
               {
-                phone: searchRegex,
+                phone:
+                  searchRegex,
               },
             ],
           })
@@ -142,7 +150,8 @@ router.get(
 
           {
             user: {
-              $in: matchingUserIds,
+              $in:
+                matchingUserIds,
             },
           },
         ];
@@ -166,7 +175,8 @@ router.get(
         Order.aggregate([
           {
             $group: {
-              _id: "$orderStatus",
+              _id:
+                "$orderStatus",
 
               count: {
                 $sum: 1,
@@ -176,22 +186,27 @@ router.get(
         ]),
       ]);
 
-      const counts = ORDER_STATUSES.reduce(
-        (result, orderStatus) => {
-          result[orderStatus] = 0;
-          return result;
-        },
-        {}
-      );
+      const counts =
+        ORDER_STATUSES.reduce(
+          (
+            result,
+            orderStatus
+          ) => {
+            result[orderStatus] = 0;
+            return result;
+          },
+          {}
+        );
 
-      for (const item of statusBreakdown) {
+      for (
+        const item of statusBreakdown
+      ) {
         counts[item._id] =
           item.count;
       }
 
       return res.status(200).json({
         success: true,
-
         count: orders.length,
 
         data: {
@@ -205,12 +220,12 @@ router.get(
   }
 );
 
-/**
- * PATCH /api/admin/orders/:orderId/status
- */
 router.patch(
   "/:orderId/status",
   async (req, res, next) => {
+    const session =
+      await mongoose.startSession();
+
     try {
       const nextStatus =
         cleanText(
@@ -229,100 +244,106 @@ router.patch(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Please select a valid order status.",
         });
       }
 
-      const order =
-        await Order.findById(
-          req.params.orderId
-        );
+      let updatedOrderId = null;
 
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: "Order not found.",
-        });
-      }
+      await session.withTransaction(
+        async () => {
+          const order =
+            await Order.findById(
+              req.params.orderId
+            ).session(session);
 
-      if (
-        order.orderStatus ===
-        nextStatus
-      ) {
-        const unchangedOrder =
-          await Order.findById(
-            order._id
-          )
-            .populate(
-              "user",
-              "fullName email phone role"
+          if (!order) {
+            const error = new Error(
+              "Order not found."
+            );
+
+            error.statusCode = 404;
+            throw error;
+          }
+
+          if (
+            order.orderStatus ===
+            nextStatus
+          ) {
+            updatedOrderId =
+              order._id;
+
+            return;
+          }
+
+          const allowedStatuses =
+            ALLOWED_TRANSITIONS[
+              order.orderStatus
+            ] ?? [];
+
+          if (
+            !allowedStatuses.includes(
+              nextStatus
             )
-            .lean();
+          ) {
+            const error = new Error(
+              `Order cannot move from ${order.orderStatus} to ${nextStatus}.`
+            );
 
-        return res.status(200).json({
-          success: true,
+            error.statusCode = 400;
+            throw error;
+          }
 
-          message:
-            "Order status is already up to date.",
+          order.orderStatus =
+            nextStatus;
 
-          data: {
-            order: unchangedOrder,
-          },
-        });
-      }
+          if (
+            nextStatus ===
+            "cancelled"
+          ) {
+            order.cancelledAt =
+              new Date();
 
-      const allowedStatuses =
-        ALLOWED_TRANSITIONS[
-          order.orderStatus
-        ] ?? [];
+            order.cancellationReason =
+              cancellationReason ||
+              "Cancelled by administrator";
 
-      if (
-        !allowedStatuses.includes(
-          nextStatus
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
+            await restoreOrderInventory({
+              order,
+              session,
+            });
+          }
 
-          message: `Order cannot move from ${order.orderStatus} to ${nextStatus}.`,
-        });
-      }
+          if (
+            nextStatus ===
+            "delivered"
+          ) {
+            order.deliveredAt =
+              new Date();
 
-      order.orderStatus =
-        nextStatus;
+            if (
+              order.paymentMethod ===
+              "cod"
+            ) {
+              order.paymentStatus =
+                "paid";
+            }
+          }
 
-      if (
-        nextStatus === "cancelled"
-      ) {
-        order.cancelledAt =
-          new Date();
+          await order.save({
+            session,
+          });
 
-        order.cancellationReason =
-          cancellationReason ||
-          "Cancelled by administrator";
-      }
-
-      if (
-        nextStatus === "delivered"
-      ) {
-        order.deliveredAt =
-          new Date();
-
-        if (
-          order.paymentMethod ===
-          "cod"
-        ) {
-          order.paymentStatus =
-            "paid";
+          updatedOrderId =
+            order._id;
         }
-      }
-
-      await order.save();
+      );
 
       const updatedOrder =
         await Order.findById(
-          order._id
+          updatedOrderId
         )
           .populate(
             "user",
@@ -346,11 +367,14 @@ router.patch(
       ) {
         return res.status(404).json({
           success: false,
-          message: "Order not found.",
+          message:
+            "Order not found.",
         });
       }
 
       return next(error);
+    } finally {
+      await session.endSession();
     }
   }
 );

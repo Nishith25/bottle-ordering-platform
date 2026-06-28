@@ -160,11 +160,15 @@ const orderSchema = new mongoose.Schema(
     items: {
       type: [orderItemSchema],
       required: true,
+
       validate: {
         validator(items) {
-          return Array.isArray(items) &&
-            items.length > 0;
+          return (
+            Array.isArray(items) &&
+            items.length > 0
+          );
         },
+
         message:
           "An order must contain at least one bottle.",
       },
@@ -206,12 +210,14 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
+
       enum: [
         "pending",
         "paid",
         "failed",
         "refunded",
       ],
+
       default: "pending",
     },
 
@@ -223,6 +229,7 @@ const orderSchema = new mongoose.Schema(
 
     orderStatus: {
       type: String,
+
       enum: [
         "placed",
         "confirmed",
@@ -231,6 +238,7 @@ const orderSchema = new mongoose.Schema(
         "delivered",
         "cancelled",
       ],
+
       default: "placed",
     },
 
@@ -246,6 +254,21 @@ const orderSchema = new mongoose.Schema(
     },
 
     deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    inventoryReserved: {
+      type: Boolean,
+      default: false,
+    },
+
+    inventoryRestored: {
+      type: Boolean,
+      default: false,
+    },
+
+    inventoryRestoredAt: {
       type: Date,
       default: null,
     },

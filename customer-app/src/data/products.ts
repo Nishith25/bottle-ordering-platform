@@ -1,4 +1,5 @@
 // customer-app/src/data/products.ts
+
 export type ProductCategory =
   | "Hydrating"
   | "Fruity";
@@ -6,7 +7,6 @@ export type ProductCategory =
 export type Product = {
   id: string;
 
-  // MongoDB document ID returned by the backend
   databaseId?: string;
 
   name: string;
@@ -22,6 +22,8 @@ export type Product = {
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  stockQuantity: number;
+  lowStockThreshold: number;
   sortOrder?: number;
 };
 
@@ -30,9 +32,16 @@ export const PRODUCTS: Product[] = [
     id: "coconut-chia-refresh",
     name: "Coconut Chia Refresh",
     shortName: "Coconut",
+
     description:
       "A light and refreshing coconut-water blend with fresh fruit and chia seeds.",
-    ingredients: ["Coconut water", "Fresh fruit", "Chia seeds"],
+
+    ingredients: [
+      "Coconut water",
+      "Fresh fruit",
+      "Chia seeds",
+    ],
+
     sizeMl: 300,
     price: 99,
     category: "Hydrating",
@@ -41,14 +50,24 @@ export const PRODUCTS: Product[] = [
     accentColor: "#32694B",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
   },
+
   {
     id: "cane-chia-splash",
     name: "Cane Chia Splash",
     shortName: "Cane Chia",
+
     description:
       "Naturally sweet sugarcane juice balanced with fruit pieces and chia seeds.",
-    ingredients: ["Sugarcane juice", "Fresh fruit", "Chia seeds"],
+
+    ingredients: [
+      "Sugarcane juice",
+      "Fresh fruit",
+      "Chia seeds",
+    ],
+
     sizeMl: 300,
     price: 89,
     category: "Hydrating",
@@ -57,14 +76,24 @@ export const PRODUCTS: Product[] = [
     accentColor: "#647729",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
   },
+
   {
     id: "watermelon-splash",
     name: "Watermelon Splash",
     shortName: "Watermelon",
+
     description:
       "Fresh watermelon juice with juicy fruit pieces and soaked chia seeds.",
-    ingredients: ["Watermelon juice", "Fruit pieces", "Chia seeds"],
+
+    ingredients: [
+      "Watermelon juice",
+      "Fruit pieces",
+      "Chia seeds",
+    ],
+
     sizeMl: 300,
     price: 109,
     category: "Fruity",
@@ -73,14 +102,24 @@ export const PRODUCTS: Product[] = [
     accentColor: "#A94443",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
   },
+
   {
     id: "pineapple-punch",
     name: "Pineapple Punch",
     shortName: "Pineapple",
+
     description:
       "A bright tropical pineapple drink with fruit pieces and chia seeds.",
-    ingredients: ["Pineapple juice", "Fruit pieces", "Chia seeds"],
+
+    ingredients: [
+      "Pineapple juice",
+      "Fruit pieces",
+      "Chia seeds",
+    ],
+
     sizeMl: 300,
     price: 109,
     category: "Fruity",
@@ -89,5 +128,7 @@ export const PRODUCTS: Product[] = [
     accentColor: "#8D680C",
     subscriptionEligible: true,
     available: true,
+    stockQuantity: 50,
+    lowStockThreshold: 10,
   },
 ];

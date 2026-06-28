@@ -1,0 +1,150 @@
+/* admin-dashboard/src/pages/products.css */
+
+.inventory-summary-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.inventory-summary-card {
+  min-height: 105px;
+  padding: 17px;
+  border: 1px solid #e1e6df;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.inventory-summary-card span,
+.inventory-summary-card strong {
+  display: block;
+}
+
+.inventory-summary-card span {
+  color: #748078;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.inventory-summary-card strong {
+  margin-top: 12px;
+  color: #203128;
+  font-size: 26px;
+}
+
+.inventory-summary-card.warning {
+  background: #fff9eb;
+}
+
+.inventory-summary-card.warning strong {
+  color: #8a681e;
+}
+
+.inventory-summary-card.danger {
+  background: #fff1f1;
+}
+
+.inventory-summary-card.danger strong {
+  color: #994b4b;
+}
+
+.stock-cell strong,
+.stock-cell span {
+  display: block;
+}
+
+.stock-cell strong {
+  color: #263b2f;
+  font-size: 13px;
+}
+
+.stock-state {
+  width: fit-content;
+  padding: 4px 7px;
+  margin-top: 5px;
+  border-radius: 8px;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.stock-good {
+  color: #28704a;
+  background: #e5f2e8;
+}
+
+.stock-low {
+  color: #87651c;
+  background: #faf1d9;
+}
+
+.stock-out {
+  color: #994b4b;
+  background: #faecec;
+}
+
+.product-action-stack {
+  display: grid;
+  gap: 7px;
+}
+
+.stock-adjustment-row {
+  display: flex;
+  gap: 6px;
+}
+
+.stock-adjustment-button {
+  min-width: 42px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid #ead0d0;
+  border-radius: 9px;
+  color: #914747;
+  background: #fff5f5;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.stock-adjustment-button.positive {
+  color: #286747;
+  border-color: #cee3d3;
+  background: #f2faf4;
+}
+
+.stock-adjustment-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.inventory-form-note {
+  padding: 14px;
+  margin-top: 18px;
+  border: 1px solid #dbe6dd;
+  border-radius: 16px;
+  background: #eef5ef;
+}
+
+.inventory-form-note strong {
+  color: #294b38;
+  font-size: 10px;
+}
+
+.inventory-form-note p {
+  margin: 5px 0 0;
+  color: #68776e;
+  font-size: 8px;
+  line-height: 14px;
+}
+
+@media (max-width: 950px) {
+  .inventory-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .inventory-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

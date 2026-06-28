@@ -35,6 +35,8 @@ type BackendProduct = {
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  stockQuantity?: number;
+  lowStockThreshold?: number;
   sortOrder?: number;
 };
 
@@ -474,19 +476,40 @@ function normaliseProduct(
     name: product.name,
     shortName: product.shortName,
     description: product.description,
+
     ingredients:
       product.ingredients ?? [],
+
     sizeMl: product.sizeMl,
     price: product.price,
     category: product.category,
-    imageUrl: product.imageUrl ?? "",
-    liquidColor: product.liquidColor,
-    cardColor: product.cardColor,
-    accentColor: product.accentColor,
+
+    imageUrl:
+      product.imageUrl ?? "",
+
+    liquidColor:
+      product.liquidColor,
+
+    cardColor:
+      product.cardColor,
+
+    accentColor:
+      product.accentColor,
+
     subscriptionEligible:
       product.subscriptionEligible,
-    available: product.available,
-    sortOrder: product.sortOrder ?? 0,
+
+    available:
+      product.available,
+
+    stockQuantity:
+      product.stockQuantity ?? 0,
+
+    lowStockThreshold:
+      product.lowStockThreshold ?? 10,
+
+    sortOrder:
+      product.sortOrder ?? 0,
   };
 }
 

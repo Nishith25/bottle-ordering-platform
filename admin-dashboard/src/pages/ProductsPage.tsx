@@ -11,6 +11,7 @@ import {
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
+  adjustAdminProductStock,
   archiveAdminProduct,
   createAdminProduct,
   fetchAdminProducts,
@@ -19,6 +20,8 @@ import {
   type ProductCategory,
   type ProductPayload,
 } from "../services/api";
+
+import "./products.css";
 
 type ProductFormState = {
   productId: string;
@@ -35,6 +38,8 @@ type ProductFormState = {
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  stockQuantity: string;
+  lowStockThreshold: string;
   sortOrder: string;
 };
 
@@ -53,11 +58,45 @@ const EMPTY_FORM: ProductFormState = {
   accentColor: "#32694B",
   subscriptionEligible: true,
   available: true,
+  stockQuantity: "50",
+  lowStockThreshold: "10",
   sortOrder: "0",
 };
 
+function getStockState(
+  product: AdminProduct
+) {
+  if (
+    product.stockQuantity <= 0
+  ) {
+    return {
+      label: "Out of stock",
+      className:
+        "stock-out",
+    };
+  }
+
+  if (
+    product.stockQuantity <=
+    product.lowStockThreshold
+  ) {
+    return {
+      label: "Low stock",
+      className:
+        "stock-low",
+    };
+  }
+
+  return {
+    label: "In stock",
+    className:
+      "stock-good",
+  };
+}
+
 export default function ProductsPage() {
-  const { token } = useAdminAuth();
+  const { token } =
+    useAdminAuth();
 
   const [products, setProducts] =
     useState<AdminProduct[]>([]);
@@ -68,11 +107,22 @@ export default function ProductsPage() {
   const [saving, setSaving] =
     useState(false);
 
+  const [
+    updatingProductId,
+    setUpdatingProductId,
+  ] = useState<
+    string | null
+  >(null);
+
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
   const [success, setSuccess] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
   const [search, setSearch] =
     useState("");
@@ -80,8 +130,12 @@ export default function ProductsPage() {
   const [formOpen, setFormOpen] =
     useState(false);
 
-  const [editingProductId, setEditingProductId] =
-    useState<string | null>(null);
+  const [
+    editingProductId,
+    setEditingProductId,
+  ] = useState<
+    string | null
+  >(null);
 
   const [form, setForm] =
     useState<ProductFormState>(
@@ -99,12 +153,15 @@ export default function ProductsPage() {
 
       try {
         const data =
-          await fetchAdminProducts(token);
+          await fetchAdminProducts(
+            token
+          );
 
         setProducts(data);
       } catch (requestError) {
         setError(
-          requestError instanceof Error
+          requestError instanceof
+            Error
             ? requestError.message
             : "Unable to load products."
         );
@@ -117,8 +174,8 @@ export default function ProductsPage() {
     void loadProducts();
   }, [loadProducts]);
 
-  const filteredProducts = useMemo(
-    () => {
+  const filteredProducts =
+    useMemo(() => {
       const query = search
         .trim()
         .toLowerCase();
@@ -139,15 +196,46 @@ export default function ProductsPage() {
             .toLowerCase()
             .includes(query)
       );
-    },
-    [products, search]
-  );
+    }, [products, search]);
+
+  const inventorySummary =
+    useMemo(() => {
+      return {
+        totalUnits:
+          products.reduce(
+            (
+              total,
+              product
+            ) =>
+              total +
+              product.stockQuantity,
+            0
+          ),
+
+        lowStock:
+          products.filter(
+            (product) =>
+              product.stockQuantity >
+                0 &&
+              product.stockQuantity <=
+                product.lowStockThreshold
+          ).length,
+
+        outOfStock:
+          products.filter(
+            (product) =>
+              product.stockQuantity <=
+              0
+          ).length,
+      };
+    }, [products]);
 
   function updateField<
     K extends keyof ProductFormState,
   >(
     field: K,
-    value: ProductFormState[K]
+    value:
+      ProductFormState[K]
   ) {
     setForm((current) => ({
       ...current,
@@ -180,33 +268,65 @@ export default function ProductsPage() {
     );
 
     setForm({
-      productId: product.productId,
+      productId:
+        product.productId,
+
       name: product.name,
-      shortName: product.shortName,
+
+      shortName:
+        product.shortName,
+
       description:
         product.description,
 
       ingredients:
-        product.ingredients.join(", "),
+        product.ingredients.join(
+          ", "
+        ),
 
-      sizeMl: String(product.sizeMl),
-      price: String(product.price),
-      category: product.category,
-      imageUrl: product.imageUrl,
+      sizeMl: String(
+        product.sizeMl
+      ),
+
+      price: String(
+        product.price
+      ),
+
+      category:
+        product.category,
+
+      imageUrl:
+        product.imageUrl,
+
       liquidColor:
         product.liquidColor,
-      cardColor: product.cardColor,
+
+      cardColor:
+        product.cardColor,
+
       accentColor:
         product.accentColor,
 
       subscriptionEligible:
         product.subscriptionEligible,
 
-      available: product.available,
+      available:
+        product.available,
 
-      sortOrder: String(
-        product.sortOrder
-      ),
+      stockQuantity:
+        String(
+          product.stockQuantity
+        ),
+
+      lowStockThreshold:
+        String(
+          product.lowStockThreshold
+        ),
+
+      sortOrder:
+        String(
+          product.sortOrder
+        ),
     });
 
     setFormOpen(true);
@@ -217,10 +337,17 @@ export default function ProductsPage() {
       productId: form.productId
         .trim()
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, ""),
+        .replace(
+          /[^a-z0-9]+/g,
+          "-"
+        )
+        .replace(
+          /^-+|-+$/g,
+          ""
+        ),
 
-      name: form.name.trim(),
+      name:
+        form.name.trim(),
 
       shortName:
         form.shortName.trim(),
@@ -228,30 +355,55 @@ export default function ProductsPage() {
       description:
         form.description.trim(),
 
-      ingredients: form.ingredients
-        .split(",")
-        .map((ingredient) =>
-          ingredient.trim()
-        )
-        .filter(Boolean),
+      ingredients:
+        form.ingredients
+          .split(",")
+          .map((ingredient) =>
+            ingredient.trim()
+          )
+          .filter(Boolean),
 
-      sizeMl: Number(form.sizeMl),
-      price: Number(form.price),
-      category: form.category,
-      imageUrl: form.imageUrl.trim(),
+      sizeMl:
+        Number(form.sizeMl),
+
+      price:
+        Number(form.price),
+
+      category:
+        form.category,
+
+      imageUrl:
+        form.imageUrl.trim(),
+
       liquidColor:
         form.liquidColor,
-      cardColor: form.cardColor,
+
+      cardColor:
+        form.cardColor,
+
       accentColor:
         form.accentColor,
 
       subscriptionEligible:
         form.subscriptionEligible,
 
-      available: form.available,
+      available:
+        form.available,
+
+      stockQuantity:
+        Number(
+          form.stockQuantity
+        ),
+
+      lowStockThreshold:
+        Number(
+          form.lowStockThreshold
+        ),
 
       sortOrder:
-        Number(form.sortOrder) || 0,
+        Number(
+          form.sortOrder
+        ) || 0,
     });
 
   const validatePayload = (
@@ -290,11 +442,31 @@ export default function ProductsPage() {
       return "Enter a valid product price.";
     }
 
+    if (
+      !Number.isInteger(
+        payload.stockQuantity
+      ) ||
+      payload.stockQuantity < 0
+    ) {
+      return "Stock quantity must be a whole number greater than or equal to zero.";
+    }
+
+    if (
+      !Number.isInteger(
+        payload.lowStockThreshold
+      ) ||
+      payload.lowStockThreshold <
+        0
+    ) {
+      return "Low-stock threshold must be a whole number greater than or equal to zero.";
+    }
+
     return null;
   };
 
   const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -302,7 +474,8 @@ export default function ProductsPage() {
       return;
     }
 
-    const payload = createPayload();
+    const payload =
+      createPayload();
 
     const validationError =
       validatePayload(payload);
@@ -319,7 +492,8 @@ export default function ProductsPage() {
     try {
       if (editingProductId) {
         const {
-          productId: ignoredProductId,
+          productId:
+            ignoredProductId,
           ...updates
         } = payload;
 
@@ -332,7 +506,7 @@ export default function ProductsPage() {
         );
 
         setSuccess(
-          "Product updated successfully."
+          "Product and inventory updated successfully."
         );
       } else {
         await createAdminProduct(
@@ -341,7 +515,7 @@ export default function ProductsPage() {
         );
 
         setSuccess(
-          "Product created successfully."
+          "Product created with its opening stock."
         );
       }
 
@@ -349,7 +523,8 @@ export default function ProductsPage() {
       await loadProducts();
     } catch (requestError) {
       setError(
-        requestError instanceof Error
+        requestError instanceof
+          Error
           ? requestError.message
           : "Unable to save product."
       );
@@ -358,96 +533,171 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAvailability = async (
-    product: AdminProduct
-  ) => {
-    if (!token) {
-      return;
-    }
+  const handleAvailability =
+    async (
+      product:
+        AdminProduct
+    ) => {
+      if (!token) {
+        return;
+      }
 
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await updateAdminProduct(
-        token,
-        product.productId,
-        {
-          available:
-            !product.available,
-        }
-      );
-
-      setSuccess(
-        product.available
-          ? "Product hidden from customers."
-          : "Product made available."
-      );
-
-      await loadProducts();
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to update availability."
-      );
-    }
-  };
-
-  const handleArchive = async (
-    product: AdminProduct
-  ) => {
-    if (!token) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Archive ${product.name}? It will no longer appear in the customer app.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await archiveAdminProduct(
-        token,
+      setUpdatingProductId(
         product.productId
       );
 
-      setSuccess(
-        "Product archived successfully."
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await updateAdminProduct(
+          token,
+          product.productId,
+          {
+            available:
+              !product.available,
+          }
+        );
+
+        setSuccess(
+          product.available
+            ? "Product hidden from customers."
+            : "Product made visible to customers."
+        );
+
+        await loadProducts();
+      } catch (requestError) {
+        setError(
+          requestError instanceof
+            Error
+            ? requestError.message
+            : "Unable to update availability."
+        );
+      } finally {
+        setUpdatingProductId(
+          null
+        );
+      }
+    };
+
+  const handleStockAdjustment =
+    async (
+      product:
+        AdminProduct,
+
+      adjustment: number
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      setUpdatingProductId(
+        product.productId
       );
 
-      await loadProducts();
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to archive product."
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await adjustAdminProductStock(
+          token,
+          product.productId,
+          adjustment
+        );
+
+        setSuccess(
+          `${product.name} stock ${
+            adjustment > 0
+              ? "increased"
+              : "reduced"
+          } successfully.`
+        );
+
+        await loadProducts();
+      } catch (requestError) {
+        setError(
+          requestError instanceof
+            Error
+            ? requestError.message
+            : "Unable to adjust stock."
+        );
+      } finally {
+        setUpdatingProductId(
+          null
+        );
+      }
+    };
+
+  const handleArchive =
+    async (
+      product:
+        AdminProduct
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Archive ${product.name}? It will no longer appear in the customer app.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setUpdatingProductId(
+        product.productId
       );
-    }
-  };
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await archiveAdminProduct(
+          token,
+          product.productId
+        );
+
+        setSuccess(
+          "Product archived successfully."
+        );
+
+        await loadProducts();
+      } catch (requestError) {
+        setError(
+          requestError instanceof
+            Error
+            ? requestError.message
+            : "Unable to archive product."
+        );
+      } finally {
+        setUpdatingProductId(
+          null
+        );
+      }
+    };
 
   return (
     <div className="products-page">
       <div className="page-heading-row">
         <div>
-          <h2>Bottle catalogue</h2>
+          <h2>
+            Bottle catalogue
+          </h2>
 
           <p>
-            Manage bottle details, prices and
-            customer availability.
+            Manage bottles, prices,
+            availability and live stock.
           </p>
         </div>
 
         <button
           type="button"
           className="primary-button"
-          onClick={openCreateForm}
+          onClick={
+            openCreateForm
+          }
         >
           + Add bottle
         </button>
@@ -465,12 +715,62 @@ export default function ProductsPage() {
         </div>
       ) : null}
 
+      <div className="inventory-summary-grid">
+        <article className="inventory-summary-card">
+          <span>
+            Bottle products
+          </span>
+
+          <strong>
+            {products.length}
+          </strong>
+        </article>
+
+        <article className="inventory-summary-card">
+          <span>
+            Total stock units
+          </span>
+
+          <strong>
+            {
+              inventorySummary.totalUnits
+            }
+          </strong>
+        </article>
+
+        <article className="inventory-summary-card warning">
+          <span>
+            Low-stock products
+          </span>
+
+          <strong>
+            {
+              inventorySummary.lowStock
+            }
+          </strong>
+        </article>
+
+        <article className="inventory-summary-card danger">
+          <span>
+            Out-of-stock products
+          </span>
+
+          <strong>
+            {
+              inventorySummary.outOfStock
+            }
+          </strong>
+        </article>
+      </div>
+
       <section className="panel products-toolbar">
         <input
           className="search-input"
           value={search}
           onChange={(event) =>
-            setSearch(event.target.value)
+            setSearch(
+              event.target.value
+            )
           }
           placeholder="Search bottles, ID or category"
         />
@@ -494,7 +794,10 @@ export default function ProductsPage() {
         products.length === 0 ? (
           <div className="page-state compact">
             <div className="spinner" />
-            <p>Loading products</p>
+
+            <p>
+              Loading products
+            </p>
           </div>
         ) : filteredProducts.length ===
           0 ? (
@@ -503,7 +806,9 @@ export default function ProductsPage() {
               ◫
             </div>
 
-            <h3>No products found</h3>
+            <h3>
+              No products found
+            </h3>
 
             <p>
               Add a bottle or change your
@@ -517,9 +822,10 @@ export default function ProductsPage() {
                 <tr>
                   <th>Bottle</th>
                   <th>Category</th>
-                  <th>Size</th>
                   <th>Price</th>
-                  <th>Status</th>
+                  <th>Stock</th>
+                  <th>Threshold</th>
+                  <th>Visibility</th>
                   <th>Subscription</th>
                   <th>Actions</th>
                 </tr>
@@ -527,118 +833,210 @@ export default function ProductsPage() {
 
               <tbody>
                 {filteredProducts.map(
-                  (product) => (
-                    <tr key={product._id}>
-                      <td>
-                        <div className="product-cell">
-                          <div
-                            className="product-swatch"
-                            style={{
-                              background:
-                                product.cardColor,
-                            }}
-                          >
-                            <span
+                  (product) => {
+                    const stockState =
+                      getStockState(
+                        product
+                      );
+
+                    const isUpdating =
+                      updatingProductId ===
+                      product.productId;
+
+                    return (
+                      <tr
+                        key={
+                          product._id
+                        }
+                      >
+                        <td>
+                          <div className="product-cell">
+                            <div
+                              className="product-swatch"
                               style={{
                                 background:
-                                  product.liquidColor,
-                              }}
-                            />
-                          </div>
-
-                          <div>
-                            <strong>
-                              {product.name}
-                            </strong>
-
-                            <small>
-                              {
-                                product.productId
-                              }
-                            </small>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td>
-                        {product.category}
-                      </td>
-
-                      <td>
-                        {product.sizeMl} ml
-                      </td>
-
-                      <td>
-                        <strong>
-                          ₹{product.price}
-                        </strong>
-                      </td>
-
-                      <td>
-                        <span
-                          className={`status-pill ${
-                            product.available
-                              ? "status-active"
-                              : "status-inactive"
-                          }`}
-                        >
-                          {product.available
-                            ? "Available"
-                            : "Hidden"}
-                        </span>
-                      </td>
-
-                      <td>
-                        {product.subscriptionEligible
-                          ? "Eligible"
-                          : "No"}
-                      </td>
-
-                      <td>
-                        <div className="table-actions">
-                          <button
-                            type="button"
-                            className="table-action"
-                            onClick={() =>
-                              openEditForm(
-                                product
-                              )
-                            }
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="table-action"
-                            onClick={() => {
-                              void handleAvailability(
-                                product
-                              );
-                            }}
-                          >
-                            {product.available
-                              ? "Hide"
-                              : "Activate"}
-                          </button>
-
-                          {product.available ? (
-                            <button
-                              type="button"
-                              className="table-action danger"
-                              onClick={() => {
-                                void handleArchive(
-                                  product
-                                );
+                                  product.cardColor,
                               }}
                             >
-                              Archive
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  )
+                              <span
+                                style={{
+                                  background:
+                                    product.liquidColor,
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <strong>
+                                {
+                                  product.name
+                                }
+                              </strong>
+
+                              <small>
+                                {
+                                  product.productId
+                                }
+                              </small>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          {
+                            product.category
+                          }
+                        </td>
+
+                        <td>
+                          <strong>
+                            ₹
+                            {
+                              product.price
+                            }
+                          </strong>
+                        </td>
+
+                        <td>
+                          <div className="stock-cell">
+                            <strong>
+                              {
+                                product.stockQuantity
+                              }
+                            </strong>
+
+                            <span
+                              className={`stock-state ${stockState.className}`}
+                            >
+                              {
+                                stockState.label
+                              }
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          {
+                            product.lowStockThreshold
+                          }{" "}
+                          units
+                        </td>
+
+                        <td>
+                          <span
+                            className={`status-pill ${
+                              product.available
+                                ? "status-active"
+                                : "status-inactive"
+                            }`}
+                          >
+                            {product.available
+                              ? "Visible"
+                              : "Hidden"}
+                          </span>
+                        </td>
+
+                        <td>
+                          {product.subscriptionEligible
+                            ? "Eligible"
+                            : "No"}
+                        </td>
+
+                        <td>
+                          <div className="product-action-stack">
+                            <div className="stock-adjustment-row">
+                              <button
+                                type="button"
+                                className="stock-adjustment-button"
+                                disabled={
+                                  isUpdating ||
+                                  product.stockQuantity <=
+                                    0
+                                }
+                                onClick={() => {
+                                  void handleStockAdjustment(
+                                    product,
+                                    -1
+                                  );
+                                }}
+                              >
+                                −1
+                              </button>
+
+                              <button
+                                type="button"
+                                className="stock-adjustment-button positive"
+                                disabled={
+                                  isUpdating
+                                }
+                                onClick={() => {
+                                  void handleStockAdjustment(
+                                    product,
+                                    10
+                                  );
+                                }}
+                              >
+                                +10
+                              </button>
+                            </div>
+
+                            <div className="table-actions">
+                              <button
+                                type="button"
+                                className="table-action"
+                                disabled={
+                                  isUpdating
+                                }
+                                onClick={() =>
+                                  openEditForm(
+                                    product
+                                  )
+                                }
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                className="table-action"
+                                disabled={
+                                  isUpdating
+                                }
+                                onClick={() => {
+                                  void handleAvailability(
+                                    product
+                                  );
+                                }}
+                              >
+                                {isUpdating
+                                  ? "Updating..."
+                                  : product.available
+                                    ? "Hide"
+                                    : "Show"}
+                              </button>
+
+                              {product.available ? (
+                                <button
+                                  type="button"
+                                  className="table-action danger"
+                                  disabled={
+                                    isUpdating
+                                  }
+                                  onClick={() => {
+                                    void handleArchive(
+                                      product
+                                    );
+                                  }}
+                                >
+                                  Archive
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
                 )}
               </tbody>
             </table>
@@ -665,7 +1063,9 @@ export default function ProductsPage() {
               <button
                 type="button"
                 className="modal-close"
-                onClick={resetForm}
+                onClick={
+                  resetForm
+                }
               >
                 ×
               </button>
@@ -673,14 +1073,20 @@ export default function ProductsPage() {
 
             <form
               className="product-form"
-              onSubmit={handleSubmit}
+              onSubmit={
+                handleSubmit
+              }
             >
               <div className="form-grid">
                 <label className="form-field">
-                  <span>Product ID</span>
+                  <span>
+                    Product ID
+                  </span>
 
                   <input
-                    value={form.productId}
+                    value={
+                      form.productId
+                    }
                     disabled={Boolean(
                       editingProductId
                     )}
@@ -695,7 +1101,9 @@ export default function ProductsPage() {
                 </label>
 
                 <label className="form-field">
-                  <span>Product name</span>
+                  <span>
+                    Product name
+                  </span>
 
                   <input
                     value={form.name}
@@ -710,10 +1118,14 @@ export default function ProductsPage() {
                 </label>
 
                 <label className="form-field">
-                  <span>Short label</span>
+                  <span>
+                    Short label
+                  </span>
 
                   <input
-                    value={form.shortName}
+                    value={
+                      form.shortName
+                    }
                     onChange={(event) =>
                       updateField(
                         "shortName",
@@ -728,7 +1140,9 @@ export default function ProductsPage() {
                   <span>Category</span>
 
                   <select
-                    value={form.category}
+                    value={
+                      form.category
+                    }
                     onChange={(event) =>
                       updateField(
                         "category",
@@ -753,7 +1167,9 @@ export default function ProductsPage() {
                   <input
                     type="number"
                     min="0"
-                    value={form.price}
+                    value={
+                      form.price
+                    }
                     onChange={(event) =>
                       updateField(
                         "price",
@@ -765,12 +1181,16 @@ export default function ProductsPage() {
                 </label>
 
                 <label className="form-field">
-                  <span>Size in ml</span>
+                  <span>
+                    Size in ml
+                  </span>
 
                   <input
                     type="number"
                     min="1"
-                    value={form.sizeMl}
+                    value={
+                      form.sizeMl
+                    }
                     onChange={(event) =>
                       updateField(
                         "sizeMl",
@@ -781,11 +1201,59 @@ export default function ProductsPage() {
                 </label>
 
                 <label className="form-field">
-                  <span>Sort order</span>
+                  <span>
+                    Current stock
+                  </span>
 
                   <input
                     type="number"
-                    value={form.sortOrder}
+                    min="0"
+                    step="1"
+                    value={
+                      form.stockQuantity
+                    }
+                    onChange={(event) =>
+                      updateField(
+                        "stockQuantity",
+                        event.target.value
+                      )
+                    }
+                    placeholder="50"
+                  />
+                </label>
+
+                <label className="form-field">
+                  <span>
+                    Low-stock warning at
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={
+                      form.lowStockThreshold
+                    }
+                    onChange={(event) =>
+                      updateField(
+                        "lowStockThreshold",
+                        event.target.value
+                      )
+                    }
+                    placeholder="10"
+                  />
+                </label>
+
+                <label className="form-field">
+                  <span>
+                    Sort order
+                  </span>
+
+                  <input
+                    type="number"
+                    value={
+                      form.sortOrder
+                    }
                     onChange={(event) =>
                       updateField(
                         "sortOrder",
@@ -797,11 +1265,13 @@ export default function ProductsPage() {
 
                 <label className="form-field">
                   <span>
-                    Image URL (optional)
+                    Image URL
                   </span>
 
                   <input
-                    value={form.imageUrl}
+                    value={
+                      form.imageUrl
+                    }
                     onChange={(event) =>
                       updateField(
                         "imageUrl",
@@ -813,10 +1283,14 @@ export default function ProductsPage() {
                 </label>
 
                 <label className="form-field full-width">
-                  <span>Description</span>
+                  <span>
+                    Description
+                  </span>
 
                   <textarea
-                    value={form.description}
+                    value={
+                      form.description
+                    }
                     onChange={(event) =>
                       updateField(
                         "description",
@@ -834,7 +1308,9 @@ export default function ProductsPage() {
                   </span>
 
                   <input
-                    value={form.ingredients}
+                    value={
+                      form.ingredients
+                    }
                     onChange={(event) =>
                       updateField(
                         "ingredients",
@@ -847,7 +1323,9 @@ export default function ProductsPage() {
               </div>
 
               <div className="colour-section">
-                <h3>Bottle colours</h3>
+                <h3>
+                  Bottle colours
+                </h3>
 
                 <div className="colour-grid">
                   <label className="colour-field">
@@ -872,7 +1350,9 @@ export default function ProductsPage() {
 
                     <input
                       type="color"
-                      value={form.cardColor}
+                      value={
+                        form.cardColor
+                      }
                       onChange={(event) =>
                         updateField(
                           "cardColor",
@@ -916,7 +1396,7 @@ export default function ProductsPage() {
                     }
                   />
 
-                  Available to customers
+                  Visible to customers
                 </label>
 
                 <label className="checkbox-field">
@@ -937,11 +1417,27 @@ export default function ProductsPage() {
                 </label>
               </div>
 
+              <div className="inventory-form-note">
+                <strong>
+                  Inventory note
+                </strong>
+
+                <p>
+                  Visibility and stock are
+                  separate. A visible product
+                  with zero stock will appear
+                  as out of stock and cannot
+                  be added to the cart.
+                </p>
+              </div>
+
               <div className="modal-actions">
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={resetForm}
+                  onClick={
+                    resetForm
+                  }
                 >
                   Cancel
                 </button>
