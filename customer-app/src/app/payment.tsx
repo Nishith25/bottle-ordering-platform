@@ -1,16 +1,26 @@
 // customer-app/src/app/payment.tsx
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+
+import {
+  useEffect,
+  useState,
+} from "react";
+
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
@@ -19,6 +29,17 @@ import { useOrders } from "../context/OrderContext";
 import type {
   OrderPaymentMethod,
 } from "../services/api";
+
+function readQueryValue(
+  value:
+    | string
+    | string[]
+    | undefined
+) {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -33,52 +54,204 @@ export default function PaymentScreen() {
     placingOrder,
     error,
     placeOrder,
+    startOnlinePayment,
+    completeOnlinePayment,
     clearError,
   } = useOrders();
 
   const [
     selectedMethod,
     setSelectedMethod,
-  ] = useState<OrderPaymentMethod>("cod");
+  ] =
+    useState<OrderPaymentMethod>(
+      "cod"
+    );
+
+  const [
+    browserMessage,
+    setBrowserMessage,
+  ] =
+    useState<string | null>(
+      null
+    );
 
   useEffect(() => {
     clearError();
+    setBrowserMessage(null);
   }, [clearError]);
 
-  const handlePlaceOrder = async () => {
-    if (
-      !pendingCheckout ||
-      placingOrder
-    ) {
-      return;
-    }
+  const handlePlaceOrder =
+    async () => {
+      if (
+        !pendingCheckout ||
+        placingOrder
+      ) {
+        return;
+      }
 
-    const order = await placeOrder(
-      selectedMethod
-    );
+      setBrowserMessage(null);
 
-    if (!order) {
-      return;
-    }
+      if (
+        selectedMethod === "cod"
+      ) {
+        const order =
+          await placeOrder("cod");
 
-    router.replace({
-      pathname: "/order-success",
-      params: {
-        orderId: order._id,
-      },
-    });
-  };
+        if (!order) {
+          return;
+        }
+
+        router.replace({
+          pathname:
+            "/order-success",
+
+          params: {
+            orderId:
+              order._id,
+          },
+        });
+
+        return;
+      }
+
+      const returnUrl =
+        Linking.createURL(
+          "payment-result"
+        );
+
+      const paymentSession =
+        await startOnlinePayment(
+          returnUrl
+        );
+
+      if (!paymentSession) {
+        return;
+      }
+
+      if (
+        Platform.OS === "web"
+      ) {
+        globalThis.location.assign(
+          paymentSession.checkoutUrl
+        );
+
+        return;
+      }
+
+      try {
+        const browserResult =
+          await WebBrowser.openAuthSessionAsync(
+            paymentSession.checkoutUrl,
+            returnUrl
+          );
+
+        if (
+          browserResult.type !==
+          "success"
+        ) {
+          setBrowserMessage(
+            "Payment window was closed. Reserved stock will be released automatically if payment was not completed."
+          );
+
+          return;
+        }
+
+        const parsedUrl =
+          Linking.parse(
+            browserResult.url
+          );
+
+        const returnedSession =
+          readQueryValue(
+            parsedUrl.queryParams
+              ?.session as
+              | string
+              | string[]
+              | undefined
+          ) ||
+          paymentSession.sessionToken;
+
+        const returnedStatus =
+          readQueryValue(
+            parsedUrl.queryParams
+              ?.status as
+              | string
+              | string[]
+              | undefined
+          );
+
+        const returnedMessage =
+          readQueryValue(
+            parsedUrl.queryParams
+              ?.message as
+              | string
+              | string[]
+              | undefined
+          );
+
+        const order =
+          await completeOnlinePayment(
+            returnedSession
+          );
+
+        if (order) {
+          router.replace({
+            pathname:
+              "/order-success",
+
+            params: {
+              orderId:
+                order._id,
+            },
+          });
+
+          return;
+        }
+
+        setBrowserMessage(
+          returnedMessage ||
+            (returnedStatus ===
+            "cancelled"
+              ? "Payment was cancelled."
+              : "Payment confirmation is still processing.")
+        );
+      } catch (paymentError) {
+        const message =
+          paymentError instanceof Error
+            ? paymentError.message
+            : "Unable to open Razorpay Checkout.";
+
+        setBrowserMessage(
+          message
+        );
+
+        Alert.alert(
+          "Online payment",
+          message
+        );
+      }
+    };
 
   if (authLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerContainer}>
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={
+            styles.centerContainer
+          }
+        >
           <ActivityIndicator
             size="large"
             color="#245C42"
           />
 
-          <Text style={styles.loadingText}>
+          <Text
+            style={
+              styles.loadingText
+            }
+          >
             Checking your account
           </Text>
         </View>
@@ -88,9 +261,17 @@ export default function PaymentScreen() {
 
   if (!pendingCheckout) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIcon}>
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={
+            styles.centerContainer
+          }
+        >
+          <View
+            style={styles.emptyIcon}
+          >
             <Ionicons
               name="receipt-outline"
               size={36}
@@ -98,24 +279,33 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <Text style={styles.emptyTitle}>
+          <Text
+            style={styles.emptyTitle}
+          >
             Checkout details unavailable
           </Text>
 
           <Text
-            style={styles.emptyDescription}
+            style={
+              styles.emptyDescription
+            }
           >
-            Return to your cart and enter your
-            delivery information again.
+            Return to your cart and enter
+            your delivery information
+            again.
           </Text>
 
           <Pressable
             onPress={() =>
-              router.replace("/cart")
+              router.replace(
+                "/cart"
+              )
             }
             style={({ pressed }) => [
               styles.primaryAction,
-              pressed && styles.pressed,
+
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -133,13 +323,19 @@ export default function PaymentScreen() {
 
   if (!isAuthenticated) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView
+        style={styles.safeArea}
+      >
         <View style={styles.header}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() =>
+              router.back()
+            }
             style={({ pressed }) => [
               styles.backButton,
-              pressed && styles.pressed,
+
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Ionicons
@@ -149,15 +345,27 @@ export default function PaymentScreen() {
             />
           </Pressable>
 
-          <Text style={styles.headerTitle}>
+          <Text
+            style={styles.headerTitle}
+          >
             Payment
           </Text>
 
-          <View style={styles.headerSpacer} />
+          <View
+            style={
+              styles.headerSpacer
+            }
+          />
         </View>
 
-        <View style={styles.centerContainer}>
-          <View style={styles.emptyIcon}>
+        <View
+          style={
+            styles.centerContainer
+          }
+        >
+          <View
+            style={styles.emptyIcon}
+          >
             <Ionicons
               name="person-outline"
               size={37}
@@ -165,24 +373,33 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <Text style={styles.emptyTitle}>
+          <Text
+            style={styles.emptyTitle}
+          >
             Log in to place your order
           </Text>
 
           <Text
-            style={styles.emptyDescription}
+            style={
+              styles.emptyDescription
+            }
           >
-            Your cart and delivery details will
-            remain available after you log in.
+            Your cart and delivery details
+            will remain available after
+            login.
           </Text>
 
           <Pressable
             onPress={() =>
-              router.push("/login")
+              router.push(
+                "/login"
+              )
             }
             style={({ pressed }) => [
               styles.primaryAction,
-              pressed && styles.pressed,
+
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -196,11 +413,15 @@ export default function PaymentScreen() {
 
           <Pressable
             onPress={() =>
-              router.push("/register")
+              router.push(
+                "/register"
+              )
             }
             style={({ pressed }) => [
               styles.secondaryAction,
-              pressed && styles.pressed,
+
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -217,11 +438,15 @@ export default function PaymentScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={styles.safeArea}
+    >
       <View style={styles.header}>
         <Pressable
           disabled={placingOrder}
-          onPress={() => router.back()}
+          onPress={() =>
+            router.back()
+          }
           style={({ pressed }) => [
             styles.backButton,
 
@@ -240,31 +465,45 @@ export default function PaymentScreen() {
           />
         </Pressable>
 
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>
+        <View
+          style={styles.headerText}
+        >
+          <Text
+            style={styles.headerTitle}
+          >
             Choose payment
           </Text>
 
           <Text
-            style={styles.headerSubtitle}
+            style={
+              styles.headerSubtitle
+            }
           >
             Complete your bottle order
           </Text>
         </View>
 
-        <View style={styles.headerSpacer} />
+        <View
+          style={styles.headerSpacer}
+        />
       </View>
 
       <ScrollView
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
         contentContainerStyle={
           styles.scrollContent
         }
       >
         <View
-          style={styles.progressContainer}
+          style={
+            styles.progressContainer
+          }
         >
-          <View style={styles.completeStep}>
+          <View
+            style={styles.completeStep}
+          >
             <Ionicons
               name="checkmark"
               size={15}
@@ -272,9 +511,13 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <View style={styles.progressLine} />
+          <View
+            style={styles.progressLine}
+          />
 
-          <View style={styles.completeStep}>
+          <View
+            style={styles.completeStep}
+          >
             <Ionicons
               name="checkmark"
               size={15}
@@ -282,18 +525,26 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <View style={styles.progressLine} />
+          <View
+            style={styles.progressLine}
+          />
 
-          <View style={styles.currentStep}>
+          <View
+            style={styles.currentStep}
+          >
             <Text
-              style={styles.currentStepText}
+              style={
+                styles.currentStepText
+              }
             >
               3
             </Text>
           </View>
         </View>
 
-        <View style={styles.addressCard}>
+        <View
+          style={styles.addressCard}
+        >
           <View style={styles.cardIcon}>
             <Ionicons
               name="location-outline"
@@ -302,52 +553,52 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>
+          <View
+            style={styles.cardContent}
+          >
+            <Text
+              style={styles.cardTitle}
+            >
               Delivery address
             </Text>
 
             <Text
-              style={styles.cardDescription}
+              style={
+                styles.cardDescription
+              }
             >
               {pendingCheckout.fullName}
             </Text>
 
             <Text
-              style={styles.cardDescription}
+              style={
+                styles.cardDescription
+              }
             >
-              {pendingCheckout.houseDetails},{" "}
-              {pendingCheckout.areaDetails}
+              {
+                pendingCheckout.houseDetails
+              }
+              ,{" "}
+              {
+                pendingCheckout.areaDetails
+              }
             </Text>
 
-            {pendingCheckout.landmark ? (
-              <Text
-                style={
-                  styles.cardDescription
-                }
-              >
-                Near{" "}
-                {pendingCheckout.landmark}
-              </Text>
-            ) : null}
-
             <Text
-              style={styles.cardDescription}
+              style={
+                styles.cardDescription
+              }
             >
               {pendingCheckout.area},{" "}
               {pendingCheckout.city} –{" "}
               {pendingCheckout.pincode}
             </Text>
-
-            <Text
-              style={styles.cardDescription}
-            >
-              +91 {pendingCheckout.phone}
-            </Text>
           </View>
         </View>
 
-        <View style={styles.addressCard}>
+        <View
+          style={styles.addressCard}
+        >
           <View style={styles.cardIcon}>
             <Ionicons
               name="time-outline"
@@ -356,13 +607,19 @@ export default function PaymentScreen() {
             />
           </View>
 
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>
+          <View
+            style={styles.cardContent}
+          >
+            <Text
+              style={styles.cardTitle}
+            >
               Delivery schedule
             </Text>
 
             <Text
-              style={styles.cardDescription}
+              style={
+                styles.cardDescription
+              }
             >
               {
                 pendingCheckout.deliveryDateLabel
@@ -370,14 +627,20 @@ export default function PaymentScreen() {
             </Text>
 
             <Text
-              style={styles.cardDescription}
+              style={
+                styles.cardDescription
+              }
             >
-              {pendingCheckout.deliverySlot}
+              {
+                pendingCheckout.deliverySlot
+              }
             </Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>
+        <Text
+          style={styles.sectionTitle}
+        >
           Payment method
         </Text>
 
@@ -386,109 +649,116 @@ export default function PaymentScreen() {
           description="Pay when your bottles are delivered"
           icon="cash-outline"
           selected={
-            selectedMethod === "cod"
+            selectedMethod ===
+            "cod"
           }
           onPress={() =>
-            setSelectedMethod("cod")
+            setSelectedMethod(
+              "cod"
+            )
           }
         />
 
         <PaymentOption
-          title="Online payment"
-          description="Demo online payment for development"
-          icon="card-outline"
+          title="Pay securely with Razorpay"
+          description="UPI, cards, net banking and supported wallets"
+          icon="shield-checkmark-outline"
           selected={
-            selectedMethod === "online"
+            selectedMethod ===
+            "online"
           }
           onPress={() =>
-            setSelectedMethod("online")
+            setSelectedMethod(
+              "online"
+            )
           }
         />
 
-        {selectedMethod === "online" ? (
-          <View style={styles.demoNotice}>
+        {selectedMethod ===
+        "online" ? (
+          <View
+            style={styles.infoNotice}
+          >
             <Ionicons
-              name="information-circle-outline"
+              name="lock-closed-outline"
               size={19}
               color="#35694E"
             />
 
             <Text
-              style={styles.demoNoticeText}
+              style={
+                styles.infoNoticeText
+              }
             >
-              No real payment will be
-              collected. Razorpay will be
-              connected later.
+              Razorpay Checkout opens
+              securely in your browser.
+              Payment is confirmed by the
+              backend before your order is
+              created.
             </Text>
           </View>
         ) : null}
 
-        {error ? (
-          <View style={styles.errorCard}>
+        {error ||
+        browserMessage ? (
+          <View
+            style={styles.errorCard}
+          >
             <Ionicons
               name="alert-circle-outline"
               size={19}
               color="#A34848"
             />
 
-            <Text style={styles.errorText}>
-              {error}
+            <Text
+              style={styles.errorText}
+            >
+              {error ||
+                browserMessage}
             </Text>
           </View>
         ) : null}
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>
+        <View
+          style={styles.summaryCard}
+        >
+          <Text
+            style={styles.summaryTitle}
+          >
             Order summary
           </Text>
 
-          <View style={styles.summaryRow}>
-            <Text
-              style={styles.summaryLabel}
-            >
-              Bottle total
-            </Text>
-
-            <Text
-              style={styles.summaryValue}
-            >
-              ₹{pendingCheckout.subtotal}
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text
-              style={styles.summaryLabel}
-            >
-              Delivery fee
-            </Text>
-
-            <Text
-              style={styles.summaryValue}
-            >
-              {pendingCheckout.deliveryFee ===
-              0
-                ? "Free"
-                : `₹${pendingCheckout.deliveryFee}`}
-            </Text>
-          </View>
-
-          <View
-            style={styles.summaryDivider}
+          <SummaryRow
+            label="Bottle total"
+            value={`₹${pendingCheckout.subtotal}`}
           />
 
-          <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>
-              Total
-            </Text>
+          <SummaryRow
+            label="Delivery fee"
+            value={
+              pendingCheckout.deliveryFee ===
+              0
+                ? "Free"
+                : `₹${pendingCheckout.deliveryFee}`
+            }
+          />
 
-            <Text style={styles.totalValue}>
-              ₹{pendingCheckout.total}
-            </Text>
-          </View>
+          <View
+            style={
+              styles.summaryDivider
+            }
+          />
+
+          <SummaryRow
+            label="Total"
+            value={`₹${pendingCheckout.total}`}
+            total
+          />
         </View>
 
-        <View style={styles.secureNotice}>
+        <View
+          style={styles.secureNotice}
+        >
           <Ionicons
             name="shield-checkmark-outline"
             size={20}
@@ -496,23 +766,28 @@ export default function PaymentScreen() {
           />
 
           <Text
-            style={styles.secureNoticeText}
+            style={
+              styles.secureNoticeText
+            }
           >
-            Bottle prices, availability and
-            delivery charges will be verified
-            by the backend before your order is
-            created.
+            Prices, delivery charges and
+            available stock are checked
+            again by the backend.
           </Text>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <View>
-          <Text style={styles.bottomLabel}>
+          <Text
+            style={styles.bottomLabel}
+          >
             Total
           </Text>
 
-          <Text style={styles.bottomAmount}>
+          <Text
+            style={styles.bottomAmount}
+          >
             ₹{pendingCheckout.total}
           </Text>
         </View>
@@ -545,7 +820,10 @@ export default function PaymentScreen() {
                   styles.placeOrderText
                 }
               >
-                Place order
+                {selectedMethod ===
+                "online"
+                  ? `Pay ₹${pendingCheckout.total}`
+                  : "Place COD order"}
               </Text>
 
               <Ionicons
@@ -570,7 +848,8 @@ function PaymentOption({
 }: {
   title: string;
   description: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon:
+    keyof typeof Ionicons.glyphMap;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -583,7 +862,8 @@ function PaymentOption({
         selected &&
           styles.paymentOptionSelected,
 
-        pressed && styles.pressed,
+        pressed &&
+          styles.pressed,
       ]}
     >
       <View
@@ -605,13 +885,19 @@ function PaymentOption({
         />
       </View>
 
-      <View style={styles.paymentContent}>
-        <Text style={styles.paymentTitle}>
+      <View
+        style={styles.paymentContent}
+      >
+        <Text
+          style={styles.paymentTitle}
+        >
           {title}
         </Text>
 
         <Text
-          style={styles.paymentDescription}
+          style={
+            styles.paymentDescription
+          }
         >
           {description}
         </Text>
@@ -626,10 +912,48 @@ function PaymentOption({
         ]}
       >
         {selected ? (
-          <View style={styles.radioInner} />
+          <View
+            style={styles.radioInner}
+          />
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  total = false,
+}: {
+  label: string;
+  value: string;
+  total?: boolean;
+}) {
+  return (
+    <View
+      style={styles.summaryRow}
+    >
+      <Text
+        style={
+          total
+            ? styles.totalLabel
+            : styles.summaryLabel
+        }
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={
+          total
+            ? styles.totalValue
+            : styles.summaryValue
+        }
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -836,7 +1160,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#245C42",
   },
 
-  demoNotice: {
+  infoNotice: {
     padding: 13,
     borderRadius: 16,
     backgroundColor: "#E8F0EA",
@@ -846,7 +1170,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  demoNoticeText: {
+  infoNoticeText: {
     flex: 1,
     color: "#55675C",
     fontSize: 9,
@@ -1057,6 +1381,10 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+    transform: [
+      {
+        scale: 0.98,
+      },
+    ],
   },
 });

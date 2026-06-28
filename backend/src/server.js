@@ -50,7 +50,20 @@ const subscriptionRoutes = require(
   "./routes/subscriptions"
 );
 
+const {
+  router:
+    razorpayPaymentRoutes,
+
+  razorpayWebhookHandler,
+
+  startPaymentExpiryWorker,
+} = require(
+  "./routes/razorpayPayments"
+);
+
 const app = express();
+
+app.set("trust proxy", 1);
 
 const PORT = Number(
   process.env.PORT || 5001
@@ -80,15 +93,7 @@ app.use(
       }
 
       if (
-        allowedOrigins.length === 0
-      ) {
-        return callback(
-          null,
-          true
-        );
-      }
-
-      if (
+        allowedOrigins.length === 0 ||
         allowedOrigins.includes(
           origin
         )
@@ -110,6 +115,22 @@ app.use(
 
     credentials: true,
   })
+);
+
+/*
+ * Razorpay webhook must receive the
+ * untouched raw request body.
+ * Keep this before express.json().
+ */
+app.post(
+  "/api/payments/razorpay/webhook",
+
+  express.raw({
+    type: "application/json",
+    limit: "1mb",
+  }),
+
+  razorpayWebhookHandler
 );
 
 app.use(
@@ -177,6 +198,11 @@ app.use(
 app.use(
   "/api/subscriptions",
   subscriptionRoutes
+);
+
+app.use(
+  "/api/payments/razorpay",
+  razorpayPaymentRoutes
 );
 
 app.use(
@@ -265,6 +291,8 @@ async function startServer() {
       console.log(
         `Backend running on port ${PORT}`
       );
+
+      startPaymentExpiryWorker();
     });
   } catch (error) {
     console.error(

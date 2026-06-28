@@ -15,9 +15,10 @@ type ApiBaseResponse = {
   message?: string;
 };
 
-type ApiRequestOptions = RequestInit & {
-  token?: string | null;
-};
+type ApiRequestOptions =
+  RequestInit & {
+    token?: string | null;
+  };
 
 type BackendProduct = {
   _id: string;
@@ -40,72 +41,110 @@ type BackendProduct = {
   sortOrder?: number;
 };
 
-type ProductsResponse = ApiBaseResponse & {
-  count: number;
-  data: BackendProduct[];
-};
-
-type LocationCheckResponse = ApiBaseResponse & {
-  serviceable: boolean;
-  data: ServiceableLocation | null;
-};
-
-type AuthResponse = ApiBaseResponse & {
-  data: AuthSession;
-};
-
-type CurrentUserResponse = ApiBaseResponse & {
-  data: {
-    user: AuthUser;
+type ProductsResponse =
+  ApiBaseResponse & {
+    count: number;
+    data: BackendProduct[];
   };
-};
 
-type CreateOrderResponse = ApiBaseResponse & {
-  data: {
-    order: CustomerOrder;
+type LocationCheckResponse =
+  ApiBaseResponse & {
+    serviceable: boolean;
+    data:
+      | ServiceableLocation
+      | null;
   };
-};
 
-type MyOrdersResponse = ApiBaseResponse & {
-  count: number;
-  data: {
-    orders: CustomerOrder[];
+type AuthResponse =
+  ApiBaseResponse & {
+    data: AuthSession;
   };
-};
 
-type SingleOrderResponse = ApiBaseResponse & {
-  data: {
-    order: CustomerOrder;
+type CurrentUserResponse =
+  ApiBaseResponse & {
+    data: {
+      user: AuthUser;
+    };
   };
-};
+
+type CreateOrderResponse =
+  ApiBaseResponse & {
+    data: {
+      order: CustomerOrder;
+    };
+  };
+
+type RazorpayInitiateResponse =
+  ApiBaseResponse & {
+    data: {
+      paymentSession:
+        RazorpayPaymentSession;
+    };
+  };
+
+type RazorpayStatusResponse =
+  ApiBaseResponse & {
+    data: {
+      status:
+        RazorpayPaymentSessionStatus;
+
+      order:
+        CustomerOrder | null;
+
+      message?: string;
+    };
+  };
+
+type MyOrdersResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      orders:
+        CustomerOrder[];
+    };
+  };
+
+type SingleOrderResponse =
+  ApiBaseResponse & {
+    data: {
+      order: CustomerOrder;
+    };
+  };
 
 type SubscriptionPlansResponse =
   ApiBaseResponse & {
     count: number;
+
     data: {
-      plans: SubscriptionPlan[];
+      plans:
+        SubscriptionPlan[];
     };
   };
 
 type CreateSubscriptionResponse =
   ApiBaseResponse & {
     data: {
-      subscription: CustomerSubscription;
+      subscription:
+        CustomerSubscription;
     };
   };
 
 type MySubscriptionsResponse =
   ApiBaseResponse & {
     count: number;
+
     data: {
-      subscriptions: CustomerSubscription[];
+      subscriptions:
+        CustomerSubscription[];
     };
   };
 
 type SingleSubscriptionResponse =
   ApiBaseResponse & {
     data: {
-      subscription: CustomerSubscription;
+      subscription:
+        CustomerSubscription;
     };
   };
 
@@ -123,7 +162,10 @@ export type ServiceableLocation = {
 export type PincodeCheckResult = {
   serviceable: boolean;
   message: string;
-  location: ServiceableLocation | null;
+
+  location:
+    | ServiceableLocation
+    | null;
 };
 
 export type AuthUser = {
@@ -131,11 +173,19 @@ export type AuthUser = {
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin";
+
+  role:
+    | "customer"
+    | "admin";
+
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
-  lastLoginAt: string | null;
+
+  lastLoginAt:
+    | string
+    | null;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -175,6 +225,10 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
+export type OrderPaymentGateway =
+  | ""
+  | "razorpay";
+
 export type CustomerOrderItem = {
   product: string;
   productId: string;
@@ -207,19 +261,61 @@ export type CustomerOrder = {
   _id: string;
   orderNumber: string;
   user: string;
-  items: CustomerOrderItem[];
-  deliveryAddress: OrderDeliveryAddress;
-  deliverySchedule: OrderDeliverySchedule;
+
+  items:
+    CustomerOrderItem[];
+
+  deliveryAddress:
+    OrderDeliveryAddress;
+
+  deliverySchedule:
+    OrderDeliverySchedule;
+
   subtotal: number;
   deliveryFee: number;
   total: number;
-  paymentMethod: OrderPaymentMethod;
-  paymentStatus: OrderPaymentStatus;
+
+  paymentMethod:
+    OrderPaymentMethod;
+
+  paymentGateway?:
+    OrderPaymentGateway;
+
+  paymentGatewayOrderId?:
+    string;
+
+  paymentStatus:
+    OrderPaymentStatus;
+
   paymentReference: string;
-  orderStatus: OrderStatus;
+
+  paidAt?:
+    | string
+    | null;
+
+  orderStatus:
+    OrderStatus;
+
   cancellationReason: string;
-  cancelledAt: string | null;
-  deliveredAt: string | null;
+
+  cancelledAt:
+    | string
+    | null;
+
+  deliveredAt:
+    | string
+    | null;
+
+  inventoryReserved?:
+    boolean;
+
+  inventoryRestored?:
+    boolean;
+
+  inventoryRestoredAt?:
+    | string
+    | null;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -245,7 +341,60 @@ export type CreateOrderInput = {
     deliverySlot: string;
   };
 
-  paymentMethod: OrderPaymentMethod;
+  paymentMethod:
+    OrderPaymentMethod;
+};
+
+export type RazorpayPaymentSessionStatus =
+  | "gateway_creating"
+  | "created"
+  | "abandoned"
+  | "paid"
+  | "failed"
+  | "expired";
+
+export type RazorpayPaymentSession = {
+  sessionToken: string;
+  razorpayOrderId: string;
+  amount: number;
+  amountPaise: number;
+  currency: string;
+  expiresAt: string;
+  checkoutUrl: string;
+};
+
+export type InitiateRazorpayPaymentInput = {
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+
+  deliveryAddress: {
+    fullName: string;
+    phone: string;
+    pincode: string;
+    houseDetails: string;
+    areaDetails: string;
+    landmark: string;
+  };
+
+  deliverySchedule: {
+    deliveryDateId: string;
+    deliveryDateLabel: string;
+    deliverySlot: string;
+  };
+
+  returnUrl: string;
+};
+
+export type RazorpayPaymentStatusResult = {
+  status:
+    RazorpayPaymentSessionStatus;
+
+  order:
+    CustomerOrder | null;
+
+  message: string;
 };
 
 export type SubscriptionBillingCycle =
@@ -274,7 +423,10 @@ export type SubscriptionPlan = {
   planId: string;
   name: string;
   description: string;
-  billingCycle: SubscriptionBillingCycle;
+
+  billingCycle:
+    SubscriptionBillingCycle;
+
   bottleCount: number;
   deliveriesPerCycle: number;
   discountPercent: number;
@@ -315,24 +467,45 @@ export type CustomerSubscription = {
   plan: string;
   planId: string;
   planName: string;
-  billingCycle: SubscriptionBillingCycle;
+
+  billingCycle:
+    SubscriptionBillingCycle;
+
   bottleCount: number;
   deliveriesPerCycle: number;
-  items: SubscriptionItem[];
+
+  items:
+    SubscriptionItem[];
+
   preferredDay: string;
   preferredSlot: string;
-  deliveryAddress: SubscriptionDeliveryAddress;
+
+  deliveryAddress:
+    SubscriptionDeliveryAddress;
+
   originalTotal: number;
   discountPercent: number;
   savings: number;
   totalPerCycle: number;
-  paymentMethod: SubscriptionPaymentMethod;
-  paymentStatus: SubscriptionPaymentStatus;
+
+  paymentMethod:
+    SubscriptionPaymentMethod;
+
+  paymentStatus:
+    SubscriptionPaymentStatus;
+
   paymentReference: string;
-  status: SubscriptionStatus;
+
+  status:
+    SubscriptionStatus;
+
   startDate: string;
   nextBillingAt: string;
-  cancelledAt: string | null;
+
+  cancelledAt:
+    | string
+    | null;
+
   cancellationReason: string;
   createdAt: string;
   updatedAt: string;
@@ -358,18 +531,23 @@ export type CreateSubscriptionInput = {
     landmark: string;
   };
 
-  paymentMethod: SubscriptionPaymentMethod;
+  paymentMethod:
+    SubscriptionPaymentMethod;
 };
 
 async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const controller = new AbortController();
+  const controller =
+    new AbortController();
 
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, 10000);
+  const timeoutId = setTimeout(
+    () => {
+      controller.abort();
+    },
+    12000
+  );
 
   const {
     token,
@@ -385,8 +563,9 @@ async function apiRequest<T>(
   };
 
   if (requestOptions.body) {
-    requestHeaders["Content-Type"] =
-      "application/json";
+    requestHeaders[
+      "Content-Type"
+    ] = "application/json";
   }
 
   if (token) {
@@ -397,7 +576,11 @@ async function apiRequest<T>(
   if (headers) {
     Object.assign(
       requestHeaders,
-      headers as Record<string, string>
+
+      headers as Record<
+        string,
+        string
+      >
     );
   }
 
@@ -406,22 +589,29 @@ async function apiRequest<T>(
       `${API_BASE_URL}${path}`,
       {
         ...requestOptions,
-        headers: requestHeaders,
-        signal: controller.signal,
+
+        headers:
+          requestHeaders,
+
+        signal:
+          controller.signal,
       }
     );
 
     const responseText =
       await response.text();
 
-    let payload: ApiBaseResponse & T;
+    let payload:
+      ApiBaseResponse & T;
 
     try {
       payload = responseText
         ? JSON.parse(responseText)
         : ({
-            success: response.ok,
-          } as ApiBaseResponse & T);
+            success:
+              response.ok,
+          } as ApiBaseResponse &
+            T);
     } catch {
       throw new Error(
         "The server returned an invalid response."
@@ -442,20 +632,25 @@ async function apiRequest<T>(
   } catch (error) {
     if (
       error instanceof Error &&
-      error.name === "AbortError"
+      error.name ===
+        "AbortError"
     ) {
       throw new Error(
         "The server took too long to respond."
       );
     }
 
-    if (error instanceof TypeError) {
+    if (
+      error instanceof TypeError
+    ) {
       throw new Error(
         "Unable to connect to the backend."
       );
     }
 
-    if (error instanceof Error) {
+    if (
+      error instanceof Error
+    ) {
       throw error;
     }
 
@@ -472,17 +667,26 @@ function normaliseProduct(
 ): Product {
   return {
     id: product.productId,
-    databaseId: product._id,
+
+    databaseId:
+      product._id,
+
     name: product.name,
-    shortName: product.shortName,
-    description: product.description,
+
+    shortName:
+      product.shortName,
+
+    description:
+      product.description,
 
     ingredients:
       product.ingredients ?? [],
 
     sizeMl: product.sizeMl,
     price: product.price,
-    category: product.category,
+
+    category:
+      product.category,
 
     imageUrl:
       product.imageUrl ?? "",
@@ -506,7 +710,8 @@ function normaliseProduct(
       product.stockQuantity ?? 0,
 
     lowStockThreshold:
-      product.lowStockThreshold ?? 10,
+      product.lowStockThreshold ??
+      10,
 
     sortOrder:
       product.sortOrder ?? 0,
@@ -532,7 +737,10 @@ export async function checkServiceablePincode(
   const normalisedPincode =
     pincode.replace(/\D/g, "");
 
-  if (normalisedPincode.length !== 6) {
+  if (
+    normalisedPincode.length !==
+    6
+  ) {
     throw new Error(
       "Please enter a valid six-digit pincode."
     );
@@ -544,7 +752,8 @@ export async function checkServiceablePincode(
     );
 
   return {
-    serviceable: response.serviceable,
+    serviceable:
+      response.serviceable,
 
     message:
       response.message ??
@@ -552,7 +761,8 @@ export async function checkServiceablePincode(
         ? "Delivery is available."
         : "Delivery is not available."),
 
-    location: response.data,
+    location:
+      response.data,
   };
 }
 
@@ -564,7 +774,9 @@ export async function registerCustomer(
       "/api/auth/register",
       {
         method: "POST",
-        body: JSON.stringify(input),
+
+        body:
+          JSON.stringify(input),
       }
     );
 
@@ -579,7 +791,9 @@ export async function loginCustomer(
       "/api/auth/login",
       {
         method: "POST",
-        body: JSON.stringify(input),
+
+        body:
+          JSON.stringify(input),
       }
     );
 
@@ -610,11 +824,67 @@ export async function createCustomerOrder(
       {
         method: "POST",
         token,
-        body: JSON.stringify(input),
+
+        body:
+          JSON.stringify(input),
       }
     );
 
   return response.data.order;
+}
+
+export async function initiateRazorpayPayment(
+  token: string,
+  input:
+    InitiateRazorpayPaymentInput
+): Promise<RazorpayPaymentSession> {
+  const response =
+    await apiRequest<RazorpayInitiateResponse>(
+      "/api/payments/razorpay/initiate",
+      {
+        method: "POST",
+        token,
+
+        body:
+          JSON.stringify(input),
+      }
+    );
+
+  return response.data
+    .paymentSession;
+}
+
+export async function fetchRazorpayPaymentStatus(
+  token: string,
+  sessionToken: string
+): Promise<RazorpayPaymentStatusResult> {
+  if (!sessionToken.trim()) {
+    throw new Error(
+      "Payment session token is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<RazorpayStatusResponse>(
+      `/api/payments/razorpay/status/${encodeURIComponent(
+        sessionToken
+      )}`,
+      {
+        token,
+      }
+    );
+
+  return {
+    status:
+      response.data.status,
+
+    order:
+      response.data.order,
+
+    message:
+      response.data.message ??
+      "",
+  };
 }
 
 export async function fetchMyOrders(
@@ -651,7 +921,8 @@ export async function fetchOrderById(
 export async function cancelCustomerOrder(
   token: string,
   orderId: string,
-  reason = "Cancelled by customer"
+  reason =
+    "Cancelled by customer"
 ): Promise<CustomerOrder> {
   const response =
     await apiRequest<SingleOrderResponse>(
@@ -661,9 +932,11 @@ export async function cancelCustomerOrder(
       {
         method: "PATCH",
         token,
-        body: JSON.stringify({
-          reason,
-        }),
+
+        body:
+          JSON.stringify({
+            reason,
+          }),
       }
     );
 
@@ -691,16 +964,21 @@ export async function createCustomerSubscription(
       {
         method: "POST",
         token,
-        body: JSON.stringify(input),
+
+        body:
+          JSON.stringify(input),
       }
     );
 
-  return response.data.subscription;
+  return response.data
+    .subscription;
 }
 
 export async function fetchMySubscriptions(
   token: string
-): Promise<CustomerSubscription[]> {
+): Promise<
+  CustomerSubscription[]
+> {
   const response =
     await apiRequest<MySubscriptionsResponse>(
       "/api/subscriptions/my",
@@ -709,7 +987,8 @@ export async function fetchMySubscriptions(
       }
     );
 
-  return response.data.subscriptions;
+  return response.data
+    .subscriptions;
 }
 
 export async function fetchSubscriptionById(
@@ -726,13 +1005,15 @@ export async function fetchSubscriptionById(
       }
     );
 
-  return response.data.subscription;
+  return response.data
+    .subscription;
 }
 
 export async function cancelCustomerSubscription(
   token: string,
   subscriptionId: string,
-  reason = "Cancelled by customer"
+  reason =
+    "Cancelled by customer"
 ): Promise<CustomerSubscription> {
   const response =
     await apiRequest<SingleSubscriptionResponse>(
@@ -742,13 +1023,16 @@ export async function cancelCustomerSubscription(
       {
         method: "PATCH",
         token,
-        body: JSON.stringify({
-          reason,
-        }),
+
+        body:
+          JSON.stringify({
+            reason,
+          }),
       }
     );
 
-  return response.data.subscription;
+  return response.data
+    .subscription;
 }
 
 export { API_BASE_URL };

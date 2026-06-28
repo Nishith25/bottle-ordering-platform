@@ -14,17 +14,16 @@ import {
   cancelCustomerOrder,
   createCustomerOrder,
   fetchMyOrders,
+  fetchRazorpayPaymentStatus,
+  initiateRazorpayPayment,
   type CustomerOrder,
   type OrderPaymentMethod,
+  type RazorpayPaymentSession,
 } from "../services/api";
 
 import { useAuth } from "./AuthContext";
 import { useCart } from "./CartContext";
 
-/**
- * Compatibility type for any existing screen that
- * still imports PaymentMethod from OrderContext.
- */
 export type PaymentMethod =
   OrderPaymentMethod;
 
@@ -32,46 +31,62 @@ export type PendingCheckout = {
   fullName: string;
   phone: string;
   pincode: string;
-
   houseDetails: string;
   areaDetails: string;
   landmark: string;
-
   area: string;
   city: string;
-
   deliveryDateId: string;
   deliveryDateLabel: string;
   deliverySlot: string;
-
   deliveryFee: number;
   subtotal: number;
   total: number;
 };
 
 type OrderContextValue = {
-  pendingCheckout: PendingCheckout | null;
+  pendingCheckout:
+    PendingCheckout | null;
 
   orders: CustomerOrder[];
 
-  lastPlacedOrder: CustomerOrder | null;
+  lastPlacedOrder:
+    CustomerOrder | null;
 
   loadingOrders: boolean;
   placingOrder: boolean;
 
-  cancellingOrderId: string | null;
+  cancellingOrderId:
+    string | null;
 
   error: string | null;
 
   setPendingCheckout: (
-    checkout: PendingCheckout | null
+    checkout:
+      PendingCheckout | null
   ) => void;
 
   placeOrder: (
-    paymentMethod: OrderPaymentMethod
-  ) => Promise<CustomerOrder | null>;
+    paymentMethod:
+      OrderPaymentMethod
+  ) => Promise<
+    CustomerOrder | null
+  >;
 
-  refreshOrders: () => Promise<void>;
+  startOnlinePayment: (
+    returnUrl: string
+  ) => Promise<
+    RazorpayPaymentSession | null
+  >;
+
+  completeOnlinePayment: (
+    sessionToken: string
+  ) => Promise<
+    CustomerOrder | null
+  >;
+
+  refreshOrders: () =>
+    Promise<void>;
 
   cancelOrder: (
     orderId: string,
@@ -80,14 +95,17 @@ type OrderContextValue = {
 
   getOrderById: (
     orderId: string
-  ) => CustomerOrder | undefined;
+  ) =>
+    | CustomerOrder
+    | undefined;
 
   clearError: () => void;
 };
 
-const OrderContext = createContext<
-  OrderContextValue | undefined
->(undefined);
+const OrderContext =
+  createContext<
+    OrderContextValue | undefined
+  >(undefined);
 
 export function OrderProvider({
   children,
@@ -107,20 +125,21 @@ export function OrderProvider({
   const [
     pendingCheckout,
     setPendingCheckout,
-  ] = useState<PendingCheckout | null>(
-    null
-  );
+  ] =
+    useState<PendingCheckout | null>(
+      null
+    );
 
-  const [orders, setOrders] = useState<
-    CustomerOrder[]
-  >([]);
+  const [orders, setOrders] =
+    useState<CustomerOrder[]>([]);
 
   const [
     lastPlacedOrder,
     setLastPlacedOrder,
-  ] = useState<CustomerOrder | null>(
-    null
-  );
+  ] =
+    useState<CustomerOrder | null>(
+      null
+    );
 
   const [
     loadingOrders,
@@ -135,14 +154,20 @@ export function OrderProvider({
   const [
     cancellingOrderId,
     setCancellingOrderId,
-  ] = useState<string | null>(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+  const clearError =
+    useCallback(() => {
+      setError(null);
+    }, []);
 
   const refreshOrders =
     useCallback(async () => {
@@ -156,16 +181,20 @@ export function OrderProvider({
 
       try {
         const latestOrders =
-          await fetchMyOrders(token);
+          await fetchMyOrders(
+            token
+          );
 
-        setOrders(latestOrders);
+        setOrders(
+          latestOrders
+        );
       } catch (requestError) {
-        const message =
-          requestError instanceof Error
+        setError(
+          requestError instanceof
+            Error
             ? requestError.message
-            : "Unable to load your orders.";
-
-        setError(message);
+            : "Unable to load your orders."
+        );
       } finally {
         setLoadingOrders(false);
       }
@@ -181,93 +210,77 @@ export function OrderProvider({
     }
 
     setOrders([]);
-    setLastPlacedOrder(null);
-    setPendingCheckout(null);
+    setLastPlacedOrder(
+      null
+    );
+
+    setPendingCheckout(
+      null
+    );
   }, [
     isAuthenticated,
     token,
     refreshOrders,
   ]);
 
-  const placeOrder = useCallback(
-    async (
-      paymentMethod: OrderPaymentMethod
-    ): Promise<CustomerOrder | null> => {
-      if (!token) {
-        setError(
-          "Please log in before placing your order."
-        );
-
-        return null;
-      }
-
+  const buildCheckoutInput =
+    useCallback(() => {
       if (!pendingCheckout) {
-        setError(
-          "Your delivery details are missing."
-        );
-
         return null;
       }
 
-      if (items.length === 0) {
-        setError("Your cart is empty.");
+      return {
+        items: items.map(
+          (item) => ({
+            productId:
+              item.product.id,
 
-        return null;
-      }
+            quantity:
+              item.quantity,
+          })
+        ),
 
-      setPlacingOrder(true);
-      setError(null);
+        deliveryAddress: {
+          fullName:
+            pendingCheckout.fullName,
 
-      try {
-        const order =
-          await createCustomerOrder(
-            token,
-            {
-              items: items.map(
-                (item) => ({
-                  productId:
-                    item.product.id,
+          phone:
+            pendingCheckout.phone,
 
-                  quantity:
-                    item.quantity,
-                })
-              ),
+          pincode:
+            pendingCheckout.pincode,
 
-              deliveryAddress: {
-                fullName:
-                  pendingCheckout.fullName,
+          houseDetails:
+            pendingCheckout.houseDetails,
 
-                phone:
-                  pendingCheckout.phone,
+          areaDetails:
+            pendingCheckout.areaDetails,
 
-                pincode:
-                  pendingCheckout.pincode,
+          landmark:
+            pendingCheckout.landmark,
+        },
 
-                houseDetails:
-                  pendingCheckout.houseDetails,
+        deliverySchedule: {
+          deliveryDateId:
+            pendingCheckout.deliveryDateId,
 
-                areaDetails:
-                  pendingCheckout.areaDetails,
+          deliveryDateLabel:
+            pendingCheckout.deliveryDateLabel,
 
-                landmark:
-                  pendingCheckout.landmark,
-              },
+          deliverySlot:
+            pendingCheckout.deliverySlot,
+        },
+      };
+    }, [
+      items,
+      pendingCheckout,
+    ]);
 
-              deliverySchedule: {
-                deliveryDateId:
-                  pendingCheckout.deliveryDateId,
-
-                deliveryDateLabel:
-                  pendingCheckout.deliveryDateLabel,
-
-                deliverySlot:
-                  pendingCheckout.deliverySlot,
-              },
-
-              paymentMethod,
-            }
-          );
-
+  const acceptCompletedOrder =
+    useCallback(
+      (
+        order: CustomerOrder
+      ) => {
         setOrders(
           (currentOrders) => [
             order,
@@ -280,120 +293,332 @@ export function OrderProvider({
           ]
         );
 
-        setLastPlacedOrder(order);
+        setLastPlacedOrder(
+          order
+        );
 
-        setPendingCheckout(null);
+        setPendingCheckout(
+          null
+        );
 
         clearCart();
+      },
+      [clearCart]
+    );
 
-        return order;
-      } catch (requestError) {
-        const message =
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to place your order.";
-
-        setError(message);
-
-        return null;
-      } finally {
-        setPlacingOrder(false);
-      }
-    },
-    [
-      token,
-      pendingCheckout,
-      items,
-      clearCart,
-    ]
-  );
-
-  const cancelOrder = useCallback(
-    async (
-      orderId: string,
-      reason =
-        "Cancelled by customer"
-    ): Promise<boolean> => {
-      if (!token) {
-        setError(
-          "Please log in to cancel an order."
-        );
-
-        return false;
-      }
-
-      setCancellingOrderId(orderId);
-      setError(null);
-
-      try {
-        const updatedOrder =
-          await cancelCustomerOrder(
-            token,
-            orderId,
-            reason
+  const placeOrder =
+    useCallback(
+      async (
+        paymentMethod:
+          OrderPaymentMethod
+      ): Promise<
+        CustomerOrder | null
+      > => {
+        if (!token) {
+          setError(
+            "Please log in before placing your order."
           );
 
-        setOrders(
-          (currentOrders) =>
-            currentOrders.map(
-              (order) =>
-                order._id ===
-                updatedOrder._id
-                  ? updatedOrder
-                  : order
+          return null;
+        }
+
+        if (
+          paymentMethod !== "cod"
+        ) {
+          setError(
+            "Use Razorpay Checkout for online payment."
+          );
+
+          return null;
+        }
+
+        const checkoutInput =
+          buildCheckoutInput();
+
+        if (!checkoutInput) {
+          setError(
+            "Your delivery details are missing."
+          );
+
+          return null;
+        }
+
+        if (
+          items.length === 0
+        ) {
+          setError(
+            "Your cart is empty."
+          );
+
+          return null;
+        }
+
+        setPlacingOrder(true);
+        setError(null);
+
+        try {
+          const order =
+            await createCustomerOrder(
+              token,
+              {
+                ...checkoutInput,
+                paymentMethod:
+                  "cod",
+              }
+            );
+
+          acceptCompletedOrder(
+            order
+          );
+
+          return order;
+        } catch (requestError) {
+          setError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to place your order."
+          );
+
+          return null;
+        } finally {
+          setPlacingOrder(false);
+        }
+      },
+      [
+        token,
+        items.length,
+        buildCheckoutInput,
+        acceptCompletedOrder,
+      ]
+    );
+
+  const startOnlinePayment =
+    useCallback(
+      async (
+        returnUrl: string
+      ): Promise<
+        RazorpayPaymentSession | null
+      > => {
+        if (!token) {
+          setError(
+            "Please log in before making payment."
+          );
+
+          return null;
+        }
+
+        const checkoutInput =
+          buildCheckoutInput();
+
+        if (
+          !checkoutInput ||
+          items.length === 0
+        ) {
+          setError(
+            "Your cart or delivery details are missing."
+          );
+
+          return null;
+        }
+
+        setPlacingOrder(true);
+        setError(null);
+
+        try {
+          return await initiateRazorpayPayment(
+            token,
+            {
+              ...checkoutInput,
+              returnUrl,
+            }
+          );
+        } catch (requestError) {
+          setError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to start Razorpay Checkout."
+          );
+
+          return null;
+        } finally {
+          setPlacingOrder(false);
+        }
+      },
+      [
+        token,
+        items.length,
+        buildCheckoutInput,
+      ]
+    );
+
+  const completeOnlinePayment =
+    useCallback(
+      async (
+        sessionToken: string
+      ): Promise<
+        CustomerOrder | null
+      > => {
+        if (!token) {
+          setError(
+            "Please log in to verify your payment."
+          );
+
+          return null;
+        }
+
+        setPlacingOrder(true);
+        setError(null);
+
+        try {
+          const result =
+            await fetchRazorpayPaymentStatus(
+              token,
+              sessionToken
+            );
+
+          if (
+            result.status ===
+              "paid" &&
+            result.order
+          ) {
+            acceptCompletedOrder(
+              result.order
+            );
+
+            return result.order;
+          }
+
+          if (
+            [
+              "failed",
+              "expired",
+            ].includes(
+              result.status
             )
+          ) {
+            setError(
+              result.message ||
+                "The online payment was not completed."
+            );
+
+            return null;
+          }
+
+          setError(
+            "Payment confirmation is still processing. Please check your orders again shortly."
+          );
+
+          return null;
+        } catch (requestError) {
+          setError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to confirm the payment."
+          );
+
+          return null;
+        } finally {
+          setPlacingOrder(false);
+        }
+      },
+      [
+        token,
+        acceptCompletedOrder,
+      ]
+    );
+
+  const cancelOrder =
+    useCallback(
+      async (
+        orderId: string,
+        reason =
+          "Cancelled by customer"
+      ): Promise<boolean> => {
+        if (!token) {
+          setError(
+            "Please log in to cancel an order."
+          );
+
+          return false;
+        }
+
+        setCancellingOrderId(
+          orderId
         );
 
-        setLastPlacedOrder(
-          (currentOrder) =>
-            currentOrder?._id ===
-            updatedOrder._id
-              ? updatedOrder
-              : currentOrder
+        setError(null);
+
+        try {
+          const updatedOrder =
+            await cancelCustomerOrder(
+              token,
+              orderId,
+              reason
+            );
+
+          setOrders(
+            (currentOrders) =>
+              currentOrders.map(
+                (order) =>
+                  order._id ===
+                  updatedOrder._id
+                    ? updatedOrder
+                    : order
+              )
+          );
+
+          setLastPlacedOrder(
+            (currentOrder) =>
+              currentOrder?._id ===
+              updatedOrder._id
+                ? updatedOrder
+                : currentOrder
+          );
+
+          return true;
+        } catch (requestError) {
+          setError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to cancel this order."
+          );
+
+          return false;
+        } finally {
+          setCancellingOrderId(
+            null
+          );
+        }
+      },
+      [token]
+    );
+
+  const getOrderById =
+    useCallback(
+      (
+        orderId: string
+      ) => {
+        return (
+          orders.find(
+            (order) =>
+              order._id ===
+              orderId
+          ) ??
+          (lastPlacedOrder?._id ===
+          orderId
+            ? lastPlacedOrder
+            : undefined)
         );
-
-        return true;
-      } catch (requestError) {
-        const message =
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to cancel this order.";
-
-        setError(message);
-
-        return false;
-      } finally {
-        setCancellingOrderId(null);
-      }
-    },
-    [token]
-  );
-
-  const getOrderById = useCallback(
-    (
-      orderId: string
-    ): CustomerOrder | undefined => {
-      const matchingOrder =
-        orders.find(
-          (order) =>
-            order._id === orderId
-        );
-
-      if (matchingOrder) {
-        return matchingOrder;
-      }
-
-      if (
-        lastPlacedOrder?._id ===
-        orderId
-      ) {
-        return lastPlacedOrder;
-      }
-
-      return undefined;
-    },
-    [orders, lastPlacedOrder]
-  );
+      },
+      [
+        orders,
+        lastPlacedOrder,
+      ]
+    );
 
   const value =
     useMemo<OrderContextValue>(
@@ -407,6 +632,8 @@ export function OrderProvider({
         error,
         setPendingCheckout,
         placeOrder,
+        startOnlinePayment,
+        completeOnlinePayment,
         refreshOrders,
         cancelOrder,
         getOrderById,
@@ -421,6 +648,8 @@ export function OrderProvider({
         cancellingOrderId,
         error,
         placeOrder,
+        startOnlinePayment,
+        completeOnlinePayment,
         refreshOrders,
         cancelOrder,
         getOrderById,
@@ -429,13 +658,15 @@ export function OrderProvider({
     );
 
   return (
-    <OrderContext.Provider value={value}>
+    <OrderContext.Provider
+      value={value}
+    >
       {children}
     </OrderContext.Provider>
   );
 }
 
-export function useOrders(): OrderContextValue {
+export function useOrders() {
   const context =
     useContext(OrderContext);
 

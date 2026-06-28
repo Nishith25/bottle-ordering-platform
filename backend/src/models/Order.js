@@ -2,61 +2,62 @@
 
 const mongoose = require("mongoose");
 
-const orderItemSchema = new mongoose.Schema(
-  {
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      required: true,
-    },
+const orderItemSchema =
+  new mongoose.Schema(
+    {
+      product: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+        required: true,
+      },
 
-    productId: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+      productId: {
+        type: String,
+        required: true,
+        trim: true,
+      },
 
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+      },
 
-    shortName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+      shortName: {
+        type: String,
+        required: true,
+        trim: true,
+      },
 
-    sizeMl: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
+      sizeMl: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
 
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+      price: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
 
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 50,
-    },
+      quantity: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 50,
+      },
 
-    lineTotal: {
-      type: Number,
-      required: true,
-      min: 0,
+      lineTotal: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
     },
-  },
-  {
-    _id: false,
-  }
-);
+    {
+      _id: false,
+    }
+  );
 
 const deliveryAddressSchema =
   new mongoose.Schema(
@@ -140,143 +141,161 @@ const deliveryScheduleSchema =
     }
   );
 
-const orderSchema = new mongoose.Schema(
-  {
-    orderNumber: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      uppercase: true,
-    },
+const orderSchema =
+  new mongoose.Schema(
+    {
+      orderNumber: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+        uppercase: true,
+      },
 
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true,
+      },
 
-    items: {
-      type: [orderItemSchema],
-      required: true,
+      items: {
+        type: [orderItemSchema],
+        required: true,
 
-      validate: {
-        validator(items) {
-          return (
-            Array.isArray(items) &&
-            items.length > 0
-          );
+        validate: {
+          validator(items) {
+            return (
+              Array.isArray(items) &&
+              items.length > 0
+            );
+          },
+
+          message:
+            "An order must contain at least one bottle.",
         },
+      },
 
-        message:
-          "An order must contain at least one bottle.",
+      deliveryAddress: {
+        type: deliveryAddressSchema,
+        required: true,
+      },
+
+      deliverySchedule: {
+        type: deliveryScheduleSchema,
+        required: true,
+      },
+
+      subtotal: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      deliveryFee: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      total: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      paymentMethod: {
+        type: String,
+        enum: ["cod", "online"],
+        required: true,
+      },
+
+      paymentGateway: {
+        type: String,
+        enum: ["", "razorpay"],
+        default: "",
+      },
+
+      paymentGatewayOrderId: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      paymentStatus: {
+        type: String,
+
+        enum: [
+          "pending",
+          "paid",
+          "failed",
+          "refunded",
+        ],
+
+        default: "pending",
+      },
+
+      paymentReference: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      paidAt: {
+        type: Date,
+        default: null,
+      },
+
+      orderStatus: {
+        type: String,
+
+        enum: [
+          "placed",
+          "confirmed",
+          "preparing",
+          "out_for_delivery",
+          "delivered",
+          "cancelled",
+        ],
+
+        default: "placed",
+      },
+
+      cancellationReason: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      cancelledAt: {
+        type: Date,
+        default: null,
+      },
+
+      deliveredAt: {
+        type: Date,
+        default: null,
+      },
+
+      inventoryReserved: {
+        type: Boolean,
+        default: false,
+      },
+
+      inventoryRestored: {
+        type: Boolean,
+        default: false,
+      },
+
+      inventoryRestoredAt: {
+        type: Date,
+        default: null,
       },
     },
-
-    deliveryAddress: {
-      type: deliveryAddressSchema,
-      required: true,
-    },
-
-    deliverySchedule: {
-      type: deliveryScheduleSchema,
-      required: true,
-    },
-
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    deliveryFee: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    total: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    paymentMethod: {
-      type: String,
-      enum: ["cod", "online"],
-      required: true,
-    },
-
-    paymentStatus: {
-      type: String,
-
-      enum: [
-        "pending",
-        "paid",
-        "failed",
-        "refunded",
-      ],
-
-      default: "pending",
-    },
-
-    paymentReference: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    orderStatus: {
-      type: String,
-
-      enum: [
-        "placed",
-        "confirmed",
-        "preparing",
-        "out_for_delivery",
-        "delivered",
-        "cancelled",
-      ],
-
-      default: "placed",
-    },
-
-    cancellationReason: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    cancelledAt: {
-      type: Date,
-      default: null,
-    },
-
-    deliveredAt: {
-      type: Date,
-      default: null,
-    },
-
-    inventoryReserved: {
-      type: Boolean,
-      default: false,
-    },
-
-    inventoryRestored: {
-      type: Boolean,
-      default: false,
-    },
-
-    inventoryRestoredAt: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+    {
+      timestamps: true,
+    }
+  );
 
 orderSchema.index({
   user: 1,
@@ -286,6 +305,10 @@ orderSchema.index({
 orderSchema.index({
   orderStatus: 1,
   createdAt: -1,
+});
+
+orderSchema.index({
+  paymentGatewayOrderId: 1,
 });
 
 module.exports = mongoose.model(
