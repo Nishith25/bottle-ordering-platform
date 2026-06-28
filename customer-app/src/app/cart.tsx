@@ -242,7 +242,16 @@ export default function CartScreen() {
               </Text>
             </View>
 
-            <Pressable style={styles.continueButton}>
+            <Pressable
+  onPress={() => router.push("/checkout")}
+  style={({ pressed }) => [
+    styles.continueButton,
+    pressed && {
+      opacity: 0.84,
+      transform: [{ scale: 0.98 }],
+    },
+  ]}
+>
               <Text style={styles.continueButtonText}>
                 Continue
               </Text>
