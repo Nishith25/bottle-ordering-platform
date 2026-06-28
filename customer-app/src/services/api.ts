@@ -58,6 +58,25 @@ type CurrentUserResponse = ApiBaseResponse & {
   };
 };
 
+type CreateOrderResponse = ApiBaseResponse & {
+  data: {
+    order: CustomerOrder;
+  };
+};
+
+type MyOrdersResponse = ApiBaseResponse & {
+  count: number;
+  data: {
+    orders: CustomerOrder[];
+  };
+};
+
+type SingleOrderResponse = ApiBaseResponse & {
+  data: {
+    order: CustomerOrder;
+  };
+};
+
 export type ServiceableLocation = {
   _id?: string;
   pincode: string;
@@ -106,6 +125,97 @@ export type LoginInput = {
   password: string;
 };
 
+export type OrderPaymentMethod =
+  | "cod"
+  | "online";
+
+export type OrderPaymentStatus =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded";
+
+export type OrderStatus =
+  | "placed"
+  | "confirmed"
+  | "preparing"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled";
+
+export type CustomerOrderItem = {
+  product: string;
+  productId: string;
+  name: string;
+  shortName: string;
+  sizeMl: number;
+  price: number;
+  quantity: number;
+  lineTotal: number;
+};
+
+export type OrderDeliveryAddress = {
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+};
+
+export type OrderDeliverySchedule = {
+  deliveryDateId: string;
+  deliveryDateLabel: string;
+  deliverySlot: string;
+};
+
+export type CustomerOrder = {
+  _id: string;
+  orderNumber: string;
+  user: string;
+  items: CustomerOrderItem[];
+  deliveryAddress: OrderDeliveryAddress;
+  deliverySchedule: OrderDeliverySchedule;
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  paymentMethod: OrderPaymentMethod;
+  paymentStatus: OrderPaymentStatus;
+  paymentReference: string;
+  orderStatus: OrderStatus;
+  cancellationReason: string;
+  cancelledAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateOrderInput = {
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+
+  deliveryAddress: {
+    fullName: string;
+    phone: string;
+    pincode: string;
+    houseDetails: string;
+    areaDetails: string;
+    landmark: string;
+  };
+
+  deliverySchedule: {
+    deliveryDateId: string;
+    deliveryDateLabel: string;
+    deliverySlot: string;
+  };
+
+  paymentMethod: OrderPaymentMethod;
+};
+
 async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
@@ -122,7 +232,10 @@ async function apiRequest<T>(
     ...requestOptions
   } = options;
 
-  const requestHeaders: Record<string, string> = {
+  const requestHeaders: Record<
+    string,
+    string
+  > = {
     Accept: "application/json",
   };
 
@@ -218,7 +331,8 @@ function normaliseProduct(
     name: product.name,
     shortName: product.shortName,
     description: product.description,
-    ingredients: product.ingredients ?? [],
+    ingredients:
+      product.ingredients ?? [],
     sizeMl: product.sizeMl,
     price: product.price,
     category: product.category,
@@ -316,6 +430,76 @@ export async function fetchCurrentUser(
     );
 
   return response.data.user;
+}
+
+export async function createCustomerOrder(
+  token: string,
+  input: CreateOrderInput
+): Promise<CustomerOrder> {
+  const response =
+    await apiRequest<CreateOrderResponse>(
+      "/api/orders",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data.order;
+}
+
+export async function fetchMyOrders(
+  token: string
+): Promise<CustomerOrder[]> {
+  const response =
+    await apiRequest<MyOrdersResponse>(
+      "/api/orders/my",
+      {
+        token,
+      }
+    );
+
+  return response.data.orders;
+}
+
+export async function fetchOrderById(
+  token: string,
+  orderId: string
+): Promise<CustomerOrder> {
+  const response =
+    await apiRequest<SingleOrderResponse>(
+      `/api/orders/${encodeURIComponent(
+        orderId
+      )}`,
+      {
+        token,
+      }
+    );
+
+  return response.data.order;
+}
+
+export async function cancelCustomerOrder(
+  token: string,
+  orderId: string,
+  reason = "Cancelled by customer"
+): Promise<CustomerOrder> {
+  const response =
+    await apiRequest<SingleOrderResponse>(
+      `/api/orders/${encodeURIComponent(
+        orderId
+      )}/cancel`,
+      {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          reason,
+        }),
+      }
+    );
+
+  return response.data.order;
 }
 
 export { API_BASE_URL };

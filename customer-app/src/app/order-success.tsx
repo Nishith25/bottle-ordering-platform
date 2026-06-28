@@ -5,8 +5,11 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
+import { useEffect } from "react";
 import {
+  ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -18,88 +21,233 @@ import { useOrders } from "../context/OrderContext";
 export default function OrderSuccessScreen() {
   const router = useRouter();
 
-  const { orderId } =
-    useLocalSearchParams<{ orderId?: string }>();
+  const params = useLocalSearchParams<{
+    orderId?: string | string[];
+  }>();
 
-  const { getOrderById } = useOrders();
+  const orderId = Array.isArray(
+    params.orderId
+  )
+    ? params.orderId[0]
+    : params.orderId;
 
-  const order = orderId
-    ? getOrderById(orderId)
-    : undefined;
+  const {
+    lastPlacedOrder,
+    loadingOrders,
+    getOrderById,
+    refreshOrders,
+  } = useOrders();
+
+  const order =
+    (orderId
+      ? getOrderById(orderId)
+      : undefined) ??
+    lastPlacedOrder;
+
+  useEffect(() => {
+    if (
+      orderId &&
+      !order &&
+      !loadingOrders
+    ) {
+      void refreshOrders();
+    }
+  }, [
+    orderId,
+    order,
+    loadingOrders,
+    refreshOrders,
+  ]);
+
+  if (
+    loadingOrders &&
+    !order
+  ) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <ActivityIndicator
+            size="large"
+            color="#245C42"
+          />
+
+          <Text style={styles.loadingText}>
+            Loading order details
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <View style={styles.errorIcon}>
+            <Ionicons
+              name="receipt-outline"
+              size={36}
+              color="#35694E"
+            />
+          </View>
+
+          <Text style={styles.errorTitle}>
+            Order details unavailable
+          </Text>
+
+          <Text
+            style={styles.errorDescription}
+          >
+            Open your order history to view
+            your latest orders.
+          </Text>
+
+          <Pressable
+            onPress={() =>
+              router.replace(
+                "/(tabs)/orders"
+              )
+            }
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              View orders
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.successCircle}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          styles.scrollContent
+        }
+      >
+        <View style={styles.successIcon}>
           <Ionicons
             name="checkmark"
-            size={48}
+            size={43}
             color="#FFFFFF"
           />
         </View>
 
-        <Text style={styles.eyebrow}>ORDER CONFIRMED</Text>
-
         <Text style={styles.title}>
-          Your fresh bottles are on their way.
+          Order placed
         </Text>
 
-        <Text style={styles.description}>
-          Your order has been received and will be prepared
-          for the selected delivery schedule.
+        <Text style={styles.subtitle}>
+          Your fresh bottles have been
+          ordered successfully.
         </Text>
 
-        {order ? (
-          <View style={styles.orderCard}>
-            <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>
-                Order number
-              </Text>
+        <View style={styles.orderNumberCard}>
+          <Text
+            style={styles.orderNumberLabel}
+          >
+            Order number
+          </Text>
 
-              <Text style={styles.orderValue}>
-                {order.displayId}
-              </Text>
-            </View>
+          <Text
+            style={styles.orderNumber}
+          >
+            {order.orderNumber}
+          </Text>
+        </View>
 
-            <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>
-                Delivery date
-              </Text>
+        <View style={styles.detailsCard}>
+          <DetailRow
+            icon="bag-handle-outline"
+            label="Bottles"
+            value={`${order.items.reduce(
+              (sum, item) =>
+                sum + item.quantity,
+              0
+            )}`}
+          />
 
-              <Text style={styles.orderValue}>
-                {order.delivery.deliveryDateLabel}
-              </Text>
-            </View>
+          <DetailRow
+            icon="calendar-outline"
+            label="Delivery date"
+            value={
+              order.deliverySchedule
+                .deliveryDateLabel
+            }
+          />
 
-            <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>
-                Delivery slot
-              </Text>
+          <DetailRow
+            icon="time-outline"
+            label="Delivery slot"
+            value={
+              order.deliverySchedule
+                .deliverySlot
+            }
+          />
 
-              <Text style={styles.orderValue}>
-                {order.delivery.deliverySlot}
-              </Text>
-            </View>
+          <DetailRow
+            icon="location-outline"
+            label="Delivery area"
+            value={`${order.deliveryAddress.area}, ${order.deliveryAddress.city}`}
+          />
 
-            <View style={styles.divider} />
+          <DetailRow
+            icon="card-outline"
+            label="Payment"
+            value={
+              order.paymentMethod === "cod"
+                ? "Cash on delivery"
+                : "Online payment"
+            }
+          />
 
-            <View style={styles.orderRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+          <DetailRow
+            icon="wallet-outline"
+            label="Total"
+            value={`₹${order.total}`}
+            last
+          />
+        </View>
 
-              <Text style={styles.totalValue}>
-                ₹{order.delivery.total}
-              </Text>
-            </View>
-          </View>
-        ) : null}
+        <View style={styles.noticeCard}>
+          <Ionicons
+            name="notifications-outline"
+            size={21}
+            color="#35694E"
+          />
+
+          <Text style={styles.noticeText}>
+            You can track this order from the
+            Orders tab. Order status updates
+            will appear there.
+          </Text>
+        </View>
 
         <Pressable
           onPress={() =>
-            router.replace("/(tabs)/orders")
+            router.replace(
+              "/(tabs)/orders"
+            )
           }
-          style={styles.primaryButton}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && styles.pressed,
+          ]}
         >
-          <Text style={styles.primaryButtonText}>
+          <Text
+            style={
+              styles.primaryButtonText
+            }
+          >
             View my orders
           </Text>
 
@@ -112,16 +260,64 @@ export default function OrderSuccessScreen() {
 
         <Pressable
           onPress={() =>
-            router.replace("/(tabs)/bottles")
+            router.replace(
+              "/(tabs)/bottles"
+            )
           }
-          style={styles.secondaryButton}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && styles.pressed,
+          ]}
         >
-          <Text style={styles.secondaryButtonText}>
+          <Text
+            style={
+              styles.secondaryButtonText
+            }
+          >
             Continue shopping
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function DetailRow({
+  icon,
+  label,
+  value,
+  last = false,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.detailRow,
+        last && styles.lastDetailRow,
+      ]}
+    >
+      <View style={styles.detailIcon}>
+        <Ionicons
+          name={icon}
+          size={19}
+          color="#35694E"
+        />
+      </View>
+
+      <View style={styles.detailContent}>
+        <Text style={styles.detailLabel}>
+          {label}
+        </Text>
+
+        <Text style={styles.detailValue}>
+          {value}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -130,109 +326,205 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F7F7F2",
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
+
+  scrollContent: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
+    paddingHorizontal: 22,
+    paddingTop: 42,
+    paddingBottom: 45,
     alignItems: "center",
-    justifyContent: "center",
   },
-  successCircle: {
-    width: 94,
-    height: 94,
-    borderRadius: 47,
+
+  successIcon: {
+    width: 91,
+    height: 91,
+    borderRadius: 31,
     backgroundColor: "#245C42",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 25,
   },
-  eyebrow: {
-    color: "#4D765F",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.7,
-  },
+
   title: {
-    color: "#17221C",
-    fontSize: 27,
-    lineHeight: 34,
+    color: "#18251E",
+    fontSize: 29,
     fontWeight: "900",
-    textAlign: "center",
-    marginTop: 11,
+    letterSpacing: -1,
+    marginTop: 23,
   },
-  description: {
-    color: "#6F7973",
+
+  subtitle: {
+    color: "#6E7872",
     fontSize: 12,
     lineHeight: 19,
     textAlign: "center",
-    marginTop: 10,
-    maxWidth: 340,
+    marginTop: 8,
   },
-  orderCard: {
+
+  orderNumberCard: {
     width: "100%",
-    padding: 19,
-    borderRadius: 23,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E9E3",
+    padding: 17,
+    borderRadius: 20,
+    backgroundColor: "#E4EFE7",
+    alignItems: "center",
     marginTop: 25,
   },
-  orderRow: {
-    marginVertical: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 15,
+
+  orderNumberLabel: {
+    color: "#66736B",
+    fontSize: 9,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
-  orderLabel: {
-    color: "#727C76",
-    fontSize: 10,
-  },
-  orderValue: {
-    flex: 1,
-    color: "#26372D",
-    fontSize: 10,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#E8EBE6",
-    marginVertical: 8,
-  },
-  totalLabel: {
-    color: "#1D2B23",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  totalValue: {
-    color: "#1D2B23",
-    fontSize: 17,
+
+  orderNumber: {
+    color: "#244A35",
+    fontSize: 16,
     fontWeight: "900",
+    marginTop: 6,
   },
-  primaryButton: {
+
+  detailsCard: {
     width: "100%",
-    minHeight: 55,
-    borderRadius: 18,
-    backgroundColor: "#245C42",
+    paddingHorizontal: 17,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E8E3",
+    marginTop: 14,
+  },
+
+  detailRow: {
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8EBE7",
+  },
+
+  lastDetailRow: {
+    borderBottomWidth: 0,
+  },
+
+  detailIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 13,
+    backgroundColor: "#E7F0E9",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 22,
   },
+
+  detailContent: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  detailLabel: {
+    color: "#7A847E",
+    fontSize: 9,
+  },
+
+  detailValue: {
+    color: "#28372F",
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+
+  noticeCard: {
+    width: "100%",
+    padding: 15,
+    borderRadius: 18,
+    backgroundColor: "#E8F0EA",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  noticeText: {
+    flex: 1,
+    color: "#5F6F66",
+    fontSize: 9,
+    lineHeight: 15,
+  },
+
+  primaryButton: {
+    width: "100%",
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 19,
+  },
+
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "900",
   },
+
   secondaryButton: {
-    minHeight: 48,
-    paddingHorizontal: 25,
+    width: "100%",
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: "#E8EEE8",
+    alignItems: "center",
     justifyContent: "center",
-    marginTop: 7,
+    marginTop: 10,
   },
+
   secondaryButtonText: {
-    color: "#396B51",
+    color: "#245C42",
     fontSize: 12,
     fontWeight: "800",
+  },
+
+  centerState: {
+    flex: 1,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color: "#68746D",
+    fontSize: 12,
+    marginTop: 14,
+  },
+
+  errorIcon: {
+    width: 82,
+    height: 82,
+    borderRadius: 27,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  errorTitle: {
+    color: "#1D2922",
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+    marginTop: 20,
+  },
+
+  errorDescription: {
+    color: "#727D76",
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 8,
+  },
+
+  pressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.98 }],
   },
 });
