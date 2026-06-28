@@ -1,0 +1,136 @@
+// backend/src/server.js
+
+require("dotenv").config();
+
+const cors = require("cors");
+const express = require("express");
+const helmet = require("helmet");
+const morgan = require("morgan");
+
+const connectDB = require("./config/db");
+const locationRoutes = require(
+  "./routes/locations"
+);
+const productRoutes = require(
+  "./routes/products"
+);
+
+const app = express();
+
+const PORT = Number(
+  process.env.PORT || 5001
+);
+
+const allowedOrigins = String(
+  process.env.CLIENT_ORIGINS || ""
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.disable("x-powered-by");
+
+app.use(helmet());
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Native mobile requests may not send an origin.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // During early development, an empty list allows
+      // all browser origins.
+      if (allowedOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      const error = new Error(
+        `Origin ${origin} is not permitted by CORS.`
+      );
+
+      error.statusCode = 403;
+
+      return callback(error);
+    },
+
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+if (process.env.NODE_ENV !== "test") {
+  app.use(morgan("dev"));
+}
+
+app.get("/api/health", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Backend is running.",
+    environment:
+      process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.use("/api/products", productRoutes);
+app.use("/api/locations", locationRoutes);
+
+app.use((req, res) => {
+  return res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+app.use((error, req, res, next) => {
+  console.error(error);
+
+  const statusCode =
+    error.statusCode ||
+    (error.name === "ValidationError"
+      ? 400
+      : 500);
+
+  return res.status(statusCode).json({
+    success: false,
+    message:
+      statusCode === 500
+        ? "An unexpected server error occurred."
+        : error.message,
+    ...(process.env.NODE_ENV ===
+    "development"
+      ? {
+          stack: error.stack,
+        }
+      : {}),
+  });
+});
+
+async function startServer() {
+  try {
+    await connectDB();
+
+    app.listen(PORT, () => {
+      console.log(
+        `Backend running on port ${PORT}`
+      );
+    });
+  } catch (error) {
+    console.error(
+      "Unable to start backend:",
+      error.message
+    );
+
+    process.exit(1);
+  }
+}
+
+startServer();
