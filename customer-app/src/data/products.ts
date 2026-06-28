@@ -1,9 +1,14 @@
 // customer-app/src/data/products.ts
-
-export type ProductCategory = "Hydrating" | "Fruity";
+export type ProductCategory =
+  | "Hydrating"
+  | "Fruity";
 
 export type Product = {
   id: string;
+
+  // MongoDB document ID returned by the backend
+  databaseId?: string;
+
   name: string;
   shortName: string;
   description: string;
@@ -11,11 +16,13 @@ export type Product = {
   sizeMl: number;
   price: number;
   category: ProductCategory;
+  imageUrl?: string;
   liquidColor: string;
   cardColor: string;
   accentColor: string;
   subscriptionEligible: boolean;
   available: boolean;
+  sortOrder?: number;
 };
 
 export const PRODUCTS: Product[] = [
