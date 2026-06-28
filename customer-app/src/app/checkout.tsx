@@ -17,9 +17,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useCart } from "../context/CartContext";
+import { useOrders } from "../context/OrderContext";
 import {
   getServiceableLocation,
-  ServiceableLocation,
+  type ServiceableLocation,
 } from "../data/serviceableLocations";
 
 type DeliveryDay = {
@@ -27,6 +28,16 @@ type DeliveryDay = {
   day: string;
   date: string;
   fullDate: string;
+};
+
+type FormInputProps = {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  keyboardType?: "default" | "phone-pad" | "number-pad";
+  maxLength?: number;
+  multiline?: boolean;
 };
 
 const DELIVERY_SLOTS = [
@@ -47,17 +58,21 @@ function createDateId(date: Date) {
 function createDeliveryDays(): DeliveryDay[] {
   return Array.from({ length: 4 }, (_, index) => {
     const date = new Date();
+
     date.setDate(date.getDate() + index + 1);
 
     return {
       id: createDateId(date),
+
       day: date.toLocaleDateString("en-IN", {
         weekday: "short",
       }),
+
       date: date.toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "short",
       }),
+
       fullDate: date.toLocaleDateString("en-IN", {
         weekday: "long",
         day: "numeric",
@@ -66,16 +81,6 @@ function createDeliveryDays(): DeliveryDay[] {
     };
   });
 }
-
-type FormInputProps = {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  keyboardType?: "default" | "phone-pad" | "number-pad";
-  maxLength?: number;
-  multiline?: boolean;
-};
 
 function FormInput({
   label,
@@ -110,7 +115,9 @@ function FormInput({
 
 export default function CheckoutScreen() {
   const router = useRouter();
+
   const { items, itemCount, subtotal } = useCart();
+  const { setPendingCheckout } = useOrders();
 
   const deliveryDays = useMemo(
     () => createDeliveryDays(),
@@ -145,6 +152,28 @@ export default function CheckoutScreen() {
 
   const total = subtotal + deliveryFee;
 
+  const cleanPhone = phone.replace(/\D/g, "");
+
+  const phoneIsValid = cleanPhone.length === 10;
+
+  const addressIsComplete =
+    fullName.trim().length >= 2 &&
+    phoneIsValid &&
+    houseDetails.trim().length >= 3 &&
+    areaDetails.trim().length >= 3;
+
+  const meetsMinimumOrder =
+    serviceableLocation !== null &&
+    subtotal >= serviceableLocation.minimumOrder;
+
+  const canContinue =
+    items.length > 0 &&
+    serviceableLocation !== null &&
+    addressIsComplete &&
+    selectedDate !== null &&
+    selectedSlot !== null &&
+    meetsMinimumOrder;
+
   const handlePincodeChange = (value: string) => {
     const digitsOnly = value.replace(/\D/g, "");
 
@@ -169,40 +198,42 @@ export default function CheckoutScreen() {
     setServiceableLocation(location);
   };
 
-  const phoneIsValid = phone.replace(/\D/g, "").length === 10;
-
-  const addressIsComplete =
-    fullName.trim().length >= 2 &&
-    phoneIsValid &&
-    houseDetails.trim().length >= 3 &&
-    areaDetails.trim().length >= 3;
-
-  const canContinue =
-    items.length > 0 &&
-    serviceableLocation !== null &&
-    addressIsComplete &&
-    selectedDate !== null &&
-    selectedSlot !== null &&
-    subtotal >= serviceableLocation.minimumOrder;
-
   const handleContinue = () => {
-    if (!canContinue) {
+    if (
+      !canContinue ||
+      !serviceableLocation ||
+      !selectedDate ||
+      !selectedSlot
+    ) {
       Alert.alert(
         "Complete your delivery details",
-        "Please enter a valid address, check your pincode and select a delivery date and slot."
+        "Enter a valid address, check your pincode and select a delivery date and slot."
       );
 
       return;
     }
 
-    Alert.alert(
-      "Delivery details saved",
-      `${itemCount} ${
-        itemCount === 1 ? "bottle" : "bottles"
-      } will be delivered to ${
-        serviceableLocation.area
-      } on ${selectedDate.fullDate}, between ${selectedSlot}. Payment setup is the next step.`
-    );
+    setPendingCheckout({
+      fullName: fullName.trim(),
+      phone: cleanPhone,
+      pincode,
+      houseDetails: houseDetails.trim(),
+      areaDetails: areaDetails.trim(),
+      landmark: landmark.trim(),
+
+      area: serviceableLocation.area,
+      city: serviceableLocation.city,
+
+      deliveryDateId: selectedDate.id,
+      deliveryDateLabel: selectedDate.fullDate,
+      deliverySlot: selectedSlot,
+
+      deliveryFee,
+      subtotal,
+      total,
+    });
+
+    router.push("/payment");
   };
 
   if (items.length === 0) {
@@ -226,8 +257,13 @@ export default function CheckoutScreen() {
           </Text>
 
           <Pressable
-            onPress={() => router.replace("/(tabs)/bottles")}
-            style={styles.browseButton}
+            onPress={() =>
+              router.replace("/(tabs)/bottles")
+            }
+            style={({ pressed }) => [
+              styles.browseButton,
+              pressed && styles.pressed,
+            ]}
           >
             <Text style={styles.browseButtonText}>
               Browse bottles
@@ -249,7 +285,10 @@ export default function CheckoutScreen() {
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
-            style={styles.backButton}
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.pressed,
+            ]}
           >
             <Ionicons
               name="arrow-back"
@@ -319,7 +358,9 @@ export default function CheckoutScreen() {
 
             <View style={styles.progressItem}>
               <View style={styles.progressCircle}>
-                <Text style={styles.progressNumber}>3</Text>
+                <Text style={styles.progressNumber}>
+                  3
+                </Text>
               </View>
 
               <Text style={styles.progressLabel}>
@@ -381,6 +422,11 @@ export default function CheckoutScreen() {
                     {serviceableLocation.area},{" "}
                     {serviceableLocation.city}
                   </Text>
+
+                  <Text style={styles.minimumOrderText}>
+                    Minimum order ₹
+                    {serviceableLocation.minimumOrder}
+                  </Text>
                 </View>
               </View>
             ) : null}
@@ -404,6 +450,24 @@ export default function CheckoutScreen() {
                     We are not serving this pincode yet.
                   </Text>
                 </View>
+              </View>
+            ) : null}
+
+            {serviceableLocation &&
+            !meetsMinimumOrder ? (
+              <View style={styles.minimumWarning}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color="#8A6815"
+                />
+
+                <Text style={styles.minimumWarningText}>
+                  Add ₹
+                  {serviceableLocation.minimumOrder -
+                    subtotal}{" "}
+                  more to meet the minimum order.
+                </Text>
               </View>
             ) : null}
           </View>
@@ -483,9 +547,11 @@ export default function CheckoutScreen() {
                     onPress={() =>
                       setSelectedDate(deliveryDay)
                     }
-                    style={[
+                    style={({ pressed }) => [
                       styles.dateCard,
-                      selected && styles.dateCardSelected,
+                      selected &&
+                        styles.dateCardSelected,
+                      pressed && styles.pressed,
                     ]}
                   >
                     <Text
@@ -519,8 +585,7 @@ export default function CheckoutScreen() {
             </Text>
 
             <Text style={styles.sectionDescription}>
-              Delivery slots will later be managed by the
-              admin dashboard.
+              Select your preferred delivery time.
             </Text>
 
             <View style={styles.slotContainer}>
@@ -531,16 +596,20 @@ export default function CheckoutScreen() {
                   <Pressable
                     key={slot}
                     onPress={() => setSelectedSlot(slot)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.slotButton,
-                      selected && styles.slotButtonSelected,
+                      selected &&
+                        styles.slotButtonSelected,
+                      pressed && styles.pressed,
                     ]}
                   >
                     <Ionicons
                       name="time-outline"
                       size={17}
                       color={
-                        selected ? "#FFFFFF" : "#42614F"
+                        selected
+                          ? "#FFFFFF"
+                          : "#42614F"
                       }
                     />
 
@@ -553,6 +622,15 @@ export default function CheckoutScreen() {
                     >
                       {slot}
                     </Text>
+
+                    {selected ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color="#FFFFFF"
+                        style={styles.slotCheckIcon}
+                      />
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -567,7 +645,9 @@ export default function CheckoutScreen() {
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
                 {itemCount}{" "}
-                {itemCount === 1 ? "bottle" : "bottles"}
+                {itemCount === 1
+                  ? "bottle"
+                  : "bottles"}
               </Text>
 
               <Text style={styles.summaryValue}>
@@ -590,7 +670,9 @@ export default function CheckoutScreen() {
             <View style={styles.summaryDivider} />
 
             <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>
+                Total
+              </Text>
 
               <Text style={styles.totalValue}>
                 ₹{total}
@@ -615,8 +697,11 @@ export default function CheckoutScreen() {
             onPress={handleContinue}
             style={({ pressed }) => [
               styles.continueButton,
-              !canContinue && styles.continueButtonDisabled,
-              pressed && canContinue && styles.pressed,
+              !canContinue &&
+                styles.continueButtonDisabled,
+              pressed &&
+                canContinue &&
+                styles.pressed,
             ]}
           >
             <Text style={styles.continueButtonText}>
@@ -871,6 +956,31 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  minimumOrderText: {
+    color: "#486554",
+    fontSize: 8,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+
+  minimumWarning: {
+    marginTop: 11,
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: "#FFF6DC",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  minimumWarningText: {
+    flex: 1,
+    color: "#7A601E",
+    fontSize: 9,
+    lineHeight: 14,
+    fontWeight: "600",
+  },
+
   inputGroup: {
     marginBottom: 14,
   },
@@ -964,6 +1074,10 @@ const styles = StyleSheet.create({
 
   slotTextSelected: {
     color: "#FFFFFF",
+  },
+
+  slotCheckIcon: {
+    marginLeft: "auto",
   },
 
   summaryCard: {
