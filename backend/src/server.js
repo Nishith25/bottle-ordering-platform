@@ -10,6 +10,10 @@ const morgan = require("morgan");
 
 const connectDB = require("./config/db");
 
+const adminRoutes = require(
+  "./routes/admin"
+);
+
 const authRoutes = require(
   "./routes/auth"
 );
@@ -98,9 +102,7 @@ if (
 app.get("/api/health", (req, res) => {
   return res.status(200).json({
     success: true,
-
-    message:
-      "Backend is running.",
+    message: "Backend is running.",
 
     environment:
       process.env.NODE_ENV ||
@@ -138,6 +140,11 @@ app.use(
 app.use(
   "/api/subscriptions",
   subscriptionRoutes
+);
+
+app.use(
+  "/api/admin",
+  adminRoutes
 );
 
 app.use((req, res) => {
