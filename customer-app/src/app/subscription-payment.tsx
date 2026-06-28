@@ -2,11 +2,9 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import type { ComponentProps } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Alert,
-  Platform,
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,179 +13,81 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  type SubscriptionPaymentMethod,
-  useSubscriptions,
-} from "../context/SubscriptionContext";
-import { getSubscriptionPlan } from "../data/subscriptionPlans";
-
-type PaymentOptionProps = {
-  title: string;
-  description: string;
-  icon: ComponentProps<
-    typeof Ionicons
-  >["name"];
-  selected: boolean;
-  badge?: string;
-  onPress: () => void;
-};
-
-function PaymentOption({
-  title,
-  description,
-  icon,
-  selected,
-  badge,
-  onPress,
-}: PaymentOptionProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        styles.paymentOption,
-        selected &&
-          styles.paymentOptionSelected,
-      ]}
-    >
-      <View
-        style={[
-          styles.paymentIcon,
-          selected &&
-            styles.paymentIconSelected,
-        ]}
-      >
-        <Ionicons
-          name={icon}
-          size={23}
-          color={
-            selected
-              ? "#FFFFFF"
-              : "#315F47"
-          }
-        />
-      </View>
-
-      <View
-        style={styles.paymentInformation}
-      >
-        <View style={styles.paymentTitleRow}>
-          <Text style={styles.paymentTitle}>
-            {title}
-          </Text>
-
-          {badge ? (
-            <View style={styles.badge}>
-              <Text
-                style={styles.badgeText}
-              >
-                {badge}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text
-          style={styles.paymentDescription}
-        >
-          {description}
-        </Text>
-      </View>
-
-      <View
-        style={[
-          styles.radioOuter,
-          selected &&
-            styles.radioOuterSelected,
-        ]}
-      >
-        {selected ? (
-          <View style={styles.radioInner} />
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
+import { useAuth } from "../context/AuthContext";
+import { useSubscriptions } from "../context/SubscriptionContext";
+import type {
+  SubscriptionPaymentMethod,
+} from "../services/api";
 
 export default function SubscriptionPaymentScreen() {
   const router = useRouter();
 
   const {
+    loading: authLoading,
+    isAuthenticated,
+  } = useAuth();
+
+  const {
     pendingSubscriptionDraft,
+    activatingSubscription,
+    error,
+    getPlanById,
     confirmSubscription,
+    clearError,
   } = useSubscriptions();
 
-  const plan = pendingSubscriptionDraft
-    ? getSubscriptionPlan(
-        pendingSubscriptionDraft.planId
-      )
-    : undefined;
-
-  const [selectedMethod, setSelectedMethod] =
+  const [
+    paymentMethod,
+    setPaymentMethod,
+  ] =
     useState<SubscriptionPaymentMethod>(
       "upi_autopay"
     );
 
-  const [processing, setProcessing] =
-    useState(false);
+  const plan =
+    pendingSubscriptionDraft
+      ? getPlanById(
+          pendingSubscriptionDraft.planId
+        )
+      : undefined;
 
-  const handleConfirm = () => {
-  if (
-    !pendingSubscriptionDraft ||
-    !pendingSubscriptionDraft.deliveryDetails ||
-    !plan ||
-    processing
-  ) {
-    return;
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  const handleActivate =
+    async () => {
+      const subscription =
+        await confirmSubscription(
+          paymentMethod
+        );
+
+      if (!subscription) {
+        return;
+      }
+
+      router.replace({
+        pathname:
+          "/subscription-success",
+
+        params: {
+          subscriptionId:
+            subscription._id,
+        },
+      });
+    };
+
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <ActivityIndicator
+            color="#245C42"
+          />
+        </View>
+      </SafeAreaView>
+    );
   }
-
-  // Expo web does not reliably support Alert.alert action buttons.
-  // Directly create the demo subscription in the browser.
-  if (Platform.OS === "web") {
-    createSubscription();
-    return;
-  }
-
-  Alert.alert(
-    "Demo subscription payment",
-    "The recurring payment mandate will be connected through Razorpay after the backend is ready. Continue with a local test confirmation?",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Continue",
-        onPress: createSubscription,
-      },
-    ]
-  );
-};
-
-  const createSubscription = () => {
-    setProcessing(true);
-
-    const subscription =
-      confirmSubscription(selectedMethod);
-
-    if (!subscription) {
-      setProcessing(false);
-
-      Alert.alert(
-        "Unable to activate subscription",
-        "Some subscription information is missing. Please restart the plan setup."
-      );
-
-      return;
-    }
-
-    router.replace({
-      pathname: "/subscription-success",
-      params: {
-        subscriptionId:
-          subscription.id,
-      },
-    });
-  };
 
   if (
     !pendingSubscriptionDraft ||
@@ -196,24 +96,9 @@ export default function SubscriptionPaymentScreen() {
   ) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="card-outline"
-              size={38}
-              color="#35694E"
-            />
-          </View>
-
-          <Text style={styles.emptyTitle}>
-            Payment details unavailable
-          </Text>
-
-          <Text
-            style={styles.emptyDescription}
-          >
-            Complete your plan and delivery
-            address before selecting payment.
+        <View style={styles.centerState}>
+          <Text style={styles.errorTitle}>
+            Subscription details unavailable
           </Text>
 
           <Pressable
@@ -222,12 +107,10 @@ export default function SubscriptionPaymentScreen() {
                 "/(tabs)/plans"
               )
             }
-            style={styles.returnButton}
+            style={styles.primaryButton}
           >
             <Text
-              style={
-                styles.returnButtonText
-              }
+              style={styles.primaryButtonText}
             >
               View plans
             </Text>
@@ -237,7 +120,60 @@ export default function SubscriptionPaymentScreen() {
     );
   }
 
-  const deliveryDetails =
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <Ionicons
+            name="person-outline"
+            size={40}
+            color="#35694E"
+          />
+
+          <Text style={styles.errorTitle}>
+            Log in to activate your plan
+          </Text>
+
+          <Text
+            style={styles.errorDescription}
+          >
+            Your selected bottles and delivery
+            details will remain available.
+          </Text>
+
+          <Pressable
+            onPress={() =>
+              router.push("/login")
+            }
+            style={styles.primaryButton}
+          >
+            <Text
+              style={styles.primaryButtonText}
+            >
+              Log in
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              router.push("/register")
+            }
+            style={styles.secondaryButton}
+          >
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              Create account
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const delivery =
     pendingSubscriptionDraft.deliveryDetails;
 
   return (
@@ -275,327 +211,176 @@ export default function SubscriptionPaymentScreen() {
           styles.scrollContent
         }
       >
-        <View
-          style={styles.progressContainer}
-        >
-          <View style={styles.progressItem}>
-            <View
-              style={styles.progressComplete}
-            >
-              <Ionicons
-                name="checkmark"
-                size={15}
-                color="#FFFFFF"
-              />
-            </View>
-
-            <Text
-              style={styles.progressLabel}
-            >
-              Plan
-            </Text>
-          </View>
-
-          <View
-            style={styles.progressLineActive}
-          />
-
-          <View style={styles.progressItem}>
-            <View
-              style={styles.progressComplete}
-            >
-              <Ionicons
-                name="checkmark"
-                size={15}
-                color="#FFFFFF"
-              />
-            </View>
-
-            <Text
-              style={styles.progressLabel}
-            >
-              Delivery
-            </Text>
-          </View>
-
-          <View
-            style={styles.progressLineActive}
-          />
-
-          <View style={styles.progressItem}>
-            <View
-              style={styles.progressCurrent}
-            >
-              <Text
-                style={
-                  styles.progressCurrentText
-                }
-              >
-                3
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.progressLabelActive
-              }
-            >
-              Payment
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Select recurring payment
-          </Text>
-
-          <Text
-            style={styles.sectionDescription}
-          >
-            A recurring mandate will be used
-            for future subscription renewals.
-          </Text>
-
-          <PaymentOption
-            title="UPI AutoPay"
-            description="Approve recurring payments through your UPI application"
-            icon="phone-portrait-outline"
-            badge="RECOMMENDED"
-            selected={
-              selectedMethod ===
-              "upi_autopay"
-            }
-            onPress={() =>
-              setSelectedMethod(
-                "upi_autopay"
-              )
-            }
-          />
-
-          <PaymentOption
-            title="Card or eMandate"
-            description="Use an eligible card or bank mandate for recurring billing"
-            icon="card-outline"
-            selected={
-              selectedMethod ===
-              "card_mandate"
-            }
-            onPress={() =>
-              setSelectedMethod(
-                "card_mandate"
-              )
-            }
-          />
-        </View>
-
         <View style={styles.planCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardIcon}>
-              <Ionicons
-                name="repeat-outline"
-                size={21}
-                color="#35694E"
-              />
-            </View>
+          <Text style={styles.planName}>
+            {plan.name}
+          </Text>
 
-            <View
-              style={styles.cardHeaderText}
-            >
-              <Text style={styles.cardTitle}>
-                {plan.name}
-              </Text>
+          <Text style={styles.planDetails}>
+            {
+              pendingSubscriptionDraft.preferredDay
+            }{" "}
+            ·{" "}
+            {
+              pendingSubscriptionDraft.preferredSlot
+            }
+          </Text>
 
-              <Text
-                style={styles.cardSubtitle}
-              >
-                {
-                  pendingSubscriptionDraft.preferredDay
-                }{" "}
-                ·{" "}
-                {
-                  pendingSubscriptionDraft.preferredSlot
-                }
-              </Text>
-            </View>
-          </View>
+          <View style={styles.statsRow}>
+            <Stat
+              label="Bottles"
+              value={`${plan.bottleCount}`}
+            />
 
-          <View style={styles.planStats}>
-            <View>
-              <Text style={styles.statLabel}>
-                Bottles
-              </Text>
+            <Stat
+              label="Deliveries"
+              value={`${plan.deliveriesPerCycle}`}
+            />
 
-              <Text style={styles.statValue}>
-                {plan.bottleCount}
-              </Text>
-            </View>
-
-            <View>
-              <Text style={styles.statLabel}>
-                Deliveries
-              </Text>
-
-              <Text style={styles.statValue}>
-                {plan.deliveriesPerCycle}
-              </Text>
-            </View>
-
-            <View>
-              <Text style={styles.statLabel}>
-                Saving
-              </Text>
-
-              <Text style={styles.statValue}>
-                {plan.discountPercent}%
-              </Text>
-            </View>
+            <Stat
+              label="Saving"
+              value={`${plan.discountPercent}%`}
+            />
           </View>
         </View>
 
         <View style={styles.addressCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardIcon}>
-              <Ionicons
-                name="location-outline"
-                size={21}
-                color="#35694E"
-              />
-            </View>
-
-            <View
-              style={styles.cardHeaderText}
-            >
-              <Text style={styles.cardTitle}>
-                Delivery address
-              </Text>
-
-              <Text
-                style={styles.cardSubtitle}
-              >
-                {deliveryDetails.area},{" "}
-                {deliveryDetails.city}
-              </Text>
-            </View>
-          </View>
-
-          <Text style={styles.addressName}>
-            {deliveryDetails.fullName}
-          </Text>
-
-          <Text style={styles.addressText}>
-            {deliveryDetails.houseDetails},{" "}
-            {deliveryDetails.areaDetails}
-            {deliveryDetails.landmark
-              ? `, ${deliveryDetails.landmark}`
-              : ""}
-            , {deliveryDetails.city} –{" "}
-            {deliveryDetails.pincode}
-          </Text>
-
-          <Text style={styles.phoneText}>
-            +91 {deliveryDetails.phone}
-          </Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Text
-            style={styles.summaryTitle}
-          >
-            Recurring payment summary
-          </Text>
-
-          <View style={styles.summaryRow}>
-            <Text
-              style={styles.summaryLabel}
-            >
-              Bottle total
-            </Text>
-
-            <Text
-              style={styles.summaryValue}
-            >
-              ₹
-              {
-                pendingSubscriptionDraft.originalTotal
-              }
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text
-              style={styles.summaryLabel}
-            >
-              Plan saving
-            </Text>
-
-            <Text
-              style={styles.savingValue}
-            >
-              − ₹
-              {
-                pendingSubscriptionDraft.savings
-              }
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text
-              style={styles.summaryLabel}
-            >
-              Delivery
-            </Text>
-
-            <Text
-              style={styles.savingValue}
-            >
-              Free
-            </Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>
-              {plan.billingCycle ===
-              "weekly"
-                ? "Charged weekly"
-                : "Charged monthly"}
-            </Text>
-
-            <Text style={styles.totalValue}>
-              ₹
-              {
-                pendingSubscriptionDraft.total
-              }
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.secureNotice}>
           <Ionicons
-            name="shield-checkmark-outline"
-            size={21}
+            name="location-outline"
+            size={22}
             color="#35694E"
           />
 
-          <Text
-            style={styles.secureNoticeText}
-          >
-            No real payment is collected in
-            this version. Razorpay recurring
-            mandates will be connected after
-            the backend setup.
+          <View style={styles.addressContent}>
+            <Text style={styles.cardTitle}>
+              Delivery address
+            </Text>
+
+            <Text
+              style={styles.cardDescription}
+            >
+              {delivery.fullName}
+            </Text>
+
+            <Text
+              style={styles.cardDescription}
+            >
+              {delivery.houseDetails},{" "}
+              {delivery.areaDetails}
+            </Text>
+
+            <Text
+              style={styles.cardDescription}
+            >
+              {delivery.area},{" "}
+              {delivery.city} –{" "}
+              {delivery.pincode}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionTitle}>
+          Recurring payment method
+        </Text>
+
+        <PaymentOption
+          title="UPI AutoPay"
+          description="Demo recurring UPI mandate"
+          icon="phone-portrait-outline"
+          selected={
+            paymentMethod ===
+            "upi_autopay"
+          }
+          onPress={() =>
+            setPaymentMethod(
+              "upi_autopay"
+            )
+          }
+        />
+
+        <PaymentOption
+          title="Card mandate"
+          description="Demo recurring card mandate"
+          icon="card-outline"
+          selected={
+            paymentMethod ===
+            "card_mandate"
+          }
+          onPress={() =>
+            setPaymentMethod(
+              "card_mandate"
+            )
+          }
+        />
+
+        <View style={styles.demoNotice}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={20}
+            color="#35694E"
+          />
+
+          <Text style={styles.demoNoticeText}>
+            No real payment is collected.
+            Razorpay recurring mandates will be
+            connected later.
           </Text>
+        </View>
+
+        {error ? (
+          <View style={styles.errorCard}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={19}
+              color="#A34848"
+            />
+
+            <Text style={styles.errorText}>
+              {error}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.summaryCard}>
+          <SummaryRow
+            label="Bottle total"
+            value={`₹${pendingSubscriptionDraft.originalTotal}`}
+          />
+
+          <SummaryRow
+            label="Plan saving"
+            value={`− ₹${pendingSubscriptionDraft.savings}`}
+            saving
+          />
+
+          <SummaryRow
+            label="Delivery"
+            value="Free"
+            saving
+          />
+
+          <View style={styles.divider} />
+
+          <SummaryRow
+            label={
+              plan.billingCycle ===
+              "weekly"
+                ? "Charged weekly"
+                : "Charged monthly"
+            }
+            value={`₹${pendingSubscriptionDraft.total}`}
+            total
+          />
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <View style={styles.bottomTotal}>
+        <View>
           <Text style={styles.bottomLabel}>
+            Per{" "}
             {plan.billingCycle === "weekly"
-              ? "Per week"
-              : "Per month"}
+              ? "week"
+              : "month"}
           </Text>
 
           <Text style={styles.bottomAmount}>
@@ -607,30 +392,162 @@ export default function SubscriptionPaymentScreen() {
         </View>
 
         <Pressable
-          disabled={processing}
-          onPress={handleConfirm}
+          disabled={activatingSubscription}
+          onPress={() => {
+            void handleActivate();
+          }}
           style={[
-            styles.confirmButton,
-            processing &&
-              styles.confirmButtonDisabled,
+            styles.activateButton,
+            activatingSubscription &&
+              styles.activateDisabled,
           ]}
         >
-          <Text
-            style={styles.confirmButtonText}
-          >
-            {processing
-              ? "Activating..."
-              : "Activate subscription"}
-          </Text>
+          {activatingSubscription ? (
+            <ActivityIndicator
+              color="#FFFFFF"
+            />
+          ) : (
+            <>
+              <Text
+                style={styles.activateText}
+              >
+                Activate subscription
+              </Text>
 
-          <Ionicons
-            name="arrow-forward"
-            size={18}
-            color="#FFFFFF"
-          />
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color="#FFFFFF"
+              />
+            </>
+          )}
         </Pressable>
       </View>
     </SafeAreaView>
+  );
+}
+
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>
+        {label}
+      </Text>
+
+      <Text style={styles.statValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function PaymentOption({
+  title,
+  description,
+  icon,
+  selected,
+  onPress,
+}: {
+  title: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.paymentOption,
+        selected &&
+          styles.paymentOptionSelected,
+      ]}
+    >
+      <View
+        style={[
+          styles.paymentIcon,
+          selected &&
+            styles.paymentIconSelected,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={22}
+          color={
+            selected
+              ? "#FFFFFF"
+              : "#35694E"
+          }
+        />
+      </View>
+
+      <View style={styles.paymentContent}>
+        <Text style={styles.paymentTitle}>
+          {title}
+        </Text>
+
+        <Text
+          style={styles.paymentDescription}
+        >
+          {description}
+        </Text>
+      </View>
+
+      <Ionicons
+        name={
+          selected
+            ? "radio-button-on"
+            : "radio-button-off"
+        }
+        size={21}
+        color={
+          selected
+            ? "#245C42"
+            : "#A4AEA8"
+        }
+      />
+    </Pressable>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  saving = false,
+  total = false,
+}: {
+  label: string;
+  value: string;
+  saving?: boolean;
+  total?: boolean;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text
+        style={[
+          styles.summaryLabel,
+          total && styles.totalLabel,
+        ]}
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={[
+          styles.summaryValue,
+          saving && styles.savingValue,
+          total && styles.totalValue,
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -679,95 +596,96 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 150,
+    paddingBottom: 145,
   },
 
-  progressContainer: {
-    marginVertical: 15,
-    flexDirection: "row",
-    alignItems: "flex-start",
+  planCard: {
+    padding: 18,
+    borderRadius: 23,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E8E3",
+    marginTop: 10,
   },
 
-  progressItem: {
-    alignItems: "center",
-  },
-
-  progressComplete: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    backgroundColor: "#245C42",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  progressCurrent: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#245C42",
-    backgroundColor: "#E4EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  progressCurrentText: {
-    color: "#245C42",
-    fontSize: 11,
+  planName: {
+    color: "#203128",
+    fontSize: 15,
     fontWeight: "900",
   },
 
-  progressLabel: {
-    color: "#69766F",
+  planDetails: {
+    color: "#68746D",
     fontSize: 9,
     marginTop: 5,
   },
 
-  progressLabelActive: {
-    color: "#245C42",
-    fontSize: 9,
-    fontWeight: "800",
-    marginTop: 5,
-  },
-
-  progressLineActive: {
-    flex: 1,
-    height: 2,
+  statsRow: {
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#E8EBE7",
+    flexDirection: "row",
     marginTop: 15,
-    backgroundColor: "#245C42",
   },
 
-  section: {
-    padding: 18,
-    borderRadius: 24,
+  stat: {
+    flex: 1,
+  },
+
+  statLabel: {
+    color: "#7A847E",
+    fontSize: 8,
+  },
+
+  statValue: {
+    color: "#294534",
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+
+  addressCard: {
+    padding: 16,
+    borderRadius: 21,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E7EAE5",
-    marginBottom: 14,
+    borderColor: "#E5E8E3",
+    flexDirection: "row",
+    marginTop: 12,
+  },
+
+  addressContent: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  cardTitle: {
+    color: "#26382E",
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 5,
+  },
+
+  cardDescription: {
+    color: "#6E7972",
+    fontSize: 9,
+    lineHeight: 14,
   },
 
   sectionTitle: {
     color: "#1D2922",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-
-  sectionDescription: {
-    color: "#727B76",
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 5,
-    marginBottom: 16,
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 21,
+    marginBottom: 11,
   },
 
   paymentOption: {
-    minHeight: 82,
-    padding: 13,
+    padding: 15,
     borderRadius: 19,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E1E5DF",
-    backgroundColor: "#F5F6F2",
+    borderColor: "#E3E7E1",
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
@@ -775,14 +693,14 @@ const styles = StyleSheet.create({
 
   paymentOptionSelected: {
     borderColor: "#245C42",
-    backgroundColor: "#EAF2EC",
+    backgroundColor: "#EDF5EF",
   },
 
   paymentIcon: {
-    width: 47,
-    height: 47,
+    width: 45,
+    height: 45,
     borderRadius: 15,
-    backgroundColor: "#E1ECE4",
+    backgroundColor: "#E6EFE8",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -791,177 +709,72 @@ const styles = StyleSheet.create({
     backgroundColor: "#245C42",
   },
 
-  paymentInformation: {
+  paymentContent: {
     flex: 1,
     marginLeft: 12,
   },
 
-  paymentTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-
   paymentTitle: {
-    color: "#1E2C24",
-    fontSize: 13,
+    color: "#26352D",
+    fontSize: 11,
     fontWeight: "800",
   },
 
   paymentDescription: {
-    color: "#707A74",
+    color: "#758079",
     fontSize: 9,
-    lineHeight: 14,
     marginTop: 4,
   },
 
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: "#DCECDF",
-  },
-
-  badgeText: {
-    color: "#35694E",
-    fontSize: 6,
-    fontWeight: "900",
-  },
-
-  radioOuter: {
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#BCC4BF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  radioOuterSelected: {
-    borderColor: "#245C42",
-  },
-
-  radioInner: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: "#245C42",
-  },
-
-  planCard: {
-    padding: 17,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E7EAE5",
-    marginBottom: 13,
-  },
-
-  addressCard: {
-    padding: 17,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E7EAE5",
-    marginBottom: 13,
-  },
-
-  cardHeader: {
+  demoNotice: {
+    padding: 14,
+    borderRadius: 17,
+    backgroundColor: "#E8F0EA",
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    marginTop: 4,
   },
 
-  cardIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#E4EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  cardHeaderText: {
+  demoNoticeText: {
     flex: 1,
-    marginLeft: 11,
-  },
-
-  cardTitle: {
-    color: "#25382D",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  cardSubtitle: {
-    color: "#707B74",
+    color: "#5F6F66",
     fontSize: 9,
-    marginTop: 3,
+    lineHeight: 15,
   },
 
-  planStats: {
-    marginTop: 15,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#E8EBE6",
+  errorCard: {
+    padding: 13,
+    borderRadius: 16,
+    backgroundColor: "#FAECEC",
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 9,
+    marginTop: 12,
   },
 
-  statLabel: {
-    color: "#7A837E",
-    fontSize: 8,
-  },
-
-  statValue: {
-    color: "#25382D",
-    fontSize: 14,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-
-  addressName: {
-    color: "#1D2922",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 15,
-  },
-
-  addressText: {
-    color: "#68736D",
+  errorText: {
+    flex: 1,
+    color: "#934545",
     fontSize: 10,
-    lineHeight: 16,
-    marginTop: 5,
-  },
-
-  phoneText: {
-    color: "#3C5948",
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 7,
   },
 
   summaryCard: {
     padding: 18,
     borderRadius: 23,
     backgroundColor: "#E8F0EA",
-  },
-
-  summaryTitle: {
-    color: "#294534",
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 16,
+    marginTop: 13,
   },
 
   summaryRow: {
-    marginBottom: 11,
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 11,
   },
 
   summaryLabel: {
     color: "#607067",
-    fontSize: 11,
+    fontSize: 10,
   },
 
   summaryValue: {
@@ -972,43 +785,23 @@ const styles = StyleSheet.create({
 
   savingValue: {
     color: "#34714F",
-    fontSize: 11,
-    fontWeight: "800",
   },
 
   divider: {
     height: 1,
     backgroundColor: "#D3E0D6",
-    marginVertical: 5,
+    marginBottom: 11,
   },
 
   totalLabel: {
     color: "#233C2E",
-    fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   totalValue: {
     color: "#233C2E",
     fontSize: 17,
     fontWeight: "900",
-  },
-
-  secureNotice: {
-    marginTop: 13,
-    padding: 15,
-    borderRadius: 18,
-    backgroundColor: "#EAF1EC",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  secureNoticeText: {
-    flex: 1,
-    color: "#5E6F65",
-    fontSize: 9,
-    lineHeight: 14,
   },
 
   bottomBar: {
@@ -1026,10 +819,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  bottomTotal: {
-    width: 90,
-  },
-
   bottomLabel: {
     color: "#78817C",
     fontSize: 9,
@@ -1042,71 +831,78 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  confirmButton: {
+  activateButton: {
     flex: 1,
-    minHeight: 54,
+    minHeight: 53,
     borderRadius: 18,
     backgroundColor: "#245C42",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    marginLeft: 25,
   },
 
-  confirmButtonDisabled: {
-    backgroundColor: "#9BAAA0",
+  activateDisabled: {
+    backgroundColor: "#91A69A",
   },
 
-  confirmButtonText: {
+  activateText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "900",
   },
 
-  emptyContainer: {
+  centerState: {
     flex: 1,
-    paddingHorizontal: 35,
+    paddingHorizontal: 32,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  emptyIcon: {
-    width: 84,
-    height: 84,
-    borderRadius: 28,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 22,
-  },
-
-  emptyTitle: {
-    color: "#1C2922",
-    fontSize: 21,
-    fontWeight: "800",
+  errorTitle: {
+    color: "#203128",
+    fontSize: 19,
+    fontWeight: "900",
     textAlign: "center",
+    marginTop: 15,
   },
 
-  emptyDescription: {
-    color: "#747E78",
-    fontSize: 13,
-    lineHeight: 20,
+  errorDescription: {
+    color: "#727D76",
+    fontSize: 11,
+    lineHeight: 18,
     textAlign: "center",
-    marginTop: 9,
+    marginTop: 8,
   },
 
-  returnButton: {
-    minHeight: 51,
-    paddingHorizontal: 27,
-    borderRadius: 17,
+  primaryButton: {
+    minHeight: 50,
+    paddingHorizontal: 29,
+    borderRadius: 16,
     backgroundColor: "#245C42",
     justifyContent: "center",
-    marginTop: 23,
+    marginTop: 20,
   },
 
-  returnButtonText: {
+  primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  secondaryButton: {
+    minHeight: 50,
+    paddingHorizontal: 29,
+    borderRadius: 16,
+    backgroundColor: "#E8EEE8",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+
+  secondaryButtonText: {
+    color: "#245C42",
+    fontSize: 11,
     fontWeight: "800",
   },
 });

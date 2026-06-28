@@ -77,6 +77,36 @@ type SingleOrderResponse = ApiBaseResponse & {
   };
 };
 
+type SubscriptionPlansResponse =
+  ApiBaseResponse & {
+    count: number;
+    data: {
+      plans: SubscriptionPlan[];
+    };
+  };
+
+type CreateSubscriptionResponse =
+  ApiBaseResponse & {
+    data: {
+      subscription: CustomerSubscription;
+    };
+  };
+
+type MySubscriptionsResponse =
+  ApiBaseResponse & {
+    count: number;
+    data: {
+      subscriptions: CustomerSubscription[];
+    };
+  };
+
+type SingleSubscriptionResponse =
+  ApiBaseResponse & {
+    data: {
+      subscription: CustomerSubscription;
+    };
+  };
+
 export type ServiceableLocation = {
   _id?: string;
   pincode: string;
@@ -214,6 +244,119 @@ export type CreateOrderInput = {
   };
 
   paymentMethod: OrderPaymentMethod;
+};
+
+export type SubscriptionBillingCycle =
+  | "weekly"
+  | "monthly";
+
+export type SubscriptionPaymentMethod =
+  | "upi_autopay"
+  | "card_mandate";
+
+export type SubscriptionStatus =
+  | "active"
+  | "paused"
+  | "cancelled"
+  | "expired";
+
+export type SubscriptionPaymentStatus =
+  | "demo_confirmed"
+  | "mandate_pending"
+  | "active"
+  | "failed"
+  | "cancelled";
+
+export type SubscriptionPlan = {
+  _id: string;
+  planId: string;
+  name: string;
+  description: string;
+  billingCycle: SubscriptionBillingCycle;
+  bottleCount: number;
+  deliveriesPerCycle: number;
+  discountPercent: number;
+  badge: string;
+  features: string[];
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SubscriptionItem = {
+  product: string;
+  productId: string;
+  name: string;
+  shortName: string;
+  sizeMl: number;
+  price: number;
+  quantity: number;
+  lineTotal: number;
+};
+
+export type SubscriptionDeliveryAddress = {
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+};
+
+export type CustomerSubscription = {
+  _id: string;
+  subscriptionNumber: string;
+  user: string;
+  plan: string;
+  planId: string;
+  planName: string;
+  billingCycle: SubscriptionBillingCycle;
+  bottleCount: number;
+  deliveriesPerCycle: number;
+  items: SubscriptionItem[];
+  preferredDay: string;
+  preferredSlot: string;
+  deliveryAddress: SubscriptionDeliveryAddress;
+  originalTotal: number;
+  discountPercent: number;
+  savings: number;
+  totalPerCycle: number;
+  paymentMethod: SubscriptionPaymentMethod;
+  paymentStatus: SubscriptionPaymentStatus;
+  paymentReference: string;
+  status: SubscriptionStatus;
+  startDate: string;
+  nextBillingAt: string;
+  cancelledAt: string | null;
+  cancellationReason: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateSubscriptionInput = {
+  planId: string;
+
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+
+  preferredDay: string;
+  preferredSlot: string;
+
+  deliveryAddress: {
+    fullName: string;
+    phone: string;
+    pincode: string;
+    houseDetails: string;
+    areaDetails: string;
+    landmark: string;
+  };
+
+  paymentMethod: SubscriptionPaymentMethod;
 };
 
 async function apiRequest<T>(
@@ -355,7 +498,9 @@ export async function fetchProducts(): Promise<
       "/api/products"
     );
 
-  return response.data.map(normaliseProduct);
+  return response.data.map(
+    normaliseProduct
+  );
 }
 
 export async function checkServiceablePincode(
@@ -500,6 +645,87 @@ export async function cancelCustomerOrder(
     );
 
   return response.data.order;
+}
+
+export async function fetchSubscriptionPlans(): Promise<
+  SubscriptionPlan[]
+> {
+  const response =
+    await apiRequest<SubscriptionPlansResponse>(
+      "/api/subscriptions/plans"
+    );
+
+  return response.data.plans;
+}
+
+export async function createCustomerSubscription(
+  token: string,
+  input: CreateSubscriptionInput
+): Promise<CustomerSubscription> {
+  const response =
+    await apiRequest<CreateSubscriptionResponse>(
+      "/api/subscriptions",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data.subscription;
+}
+
+export async function fetchMySubscriptions(
+  token: string
+): Promise<CustomerSubscription[]> {
+  const response =
+    await apiRequest<MySubscriptionsResponse>(
+      "/api/subscriptions/my",
+      {
+        token,
+      }
+    );
+
+  return response.data.subscriptions;
+}
+
+export async function fetchSubscriptionById(
+  token: string,
+  subscriptionId: string
+): Promise<CustomerSubscription> {
+  const response =
+    await apiRequest<SingleSubscriptionResponse>(
+      `/api/subscriptions/${encodeURIComponent(
+        subscriptionId
+      )}`,
+      {
+        token,
+      }
+    );
+
+  return response.data.subscription;
+}
+
+export async function cancelCustomerSubscription(
+  token: string,
+  subscriptionId: string,
+  reason = "Cancelled by customer"
+): Promise<CustomerSubscription> {
+  const response =
+    await apiRequest<SingleSubscriptionResponse>(
+      `/api/subscriptions/${encodeURIComponent(
+        subscriptionId
+      )}/cancel`,
+      {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          reason,
+        }),
+      }
+    );
+
+  return response.data.subscription;
 }
 
 export { API_BASE_URL };

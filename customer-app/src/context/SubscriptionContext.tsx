@@ -2,22 +2,32 @@
 
 import {
   createContext,
-  ReactNode,
+  type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 
-import { PRODUCTS } from "../data/products";
 import {
-  getSubscriptionPlan,
-  type BillingCycle,
-} from "../data/subscriptionPlans";
+  cancelCustomerSubscription,
+  createCustomerSubscription,
+  fetchMySubscriptions,
+  fetchSubscriptionPlans,
+  type CustomerSubscription,
+  type SubscriptionPaymentMethod,
+  type SubscriptionPlan,
+} from "../services/api";
 
-export type SubscriptionPaymentMethod =
-  | "upi_autopay"
-  | "card_mandate";
+import { useAuth } from "./AuthContext";
+
+export type SubscriptionDraftItem = {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+};
 
 export type SubscriptionDeliveryDetails = {
   fullName: string;
@@ -30,291 +40,507 @@ export type SubscriptionDeliveryDetails = {
   city: string;
 };
 
-export type SubscriptionItem = {
-  productId: string;
-  name: string;
-  shortName: string;
-  quantity: number;
-  price: number;
-  sizeMl: number;
-  cardColor: string;
-  liquidColor: string;
-  accentColor: string;
-};
-
 export type PendingSubscriptionDraft = {
   planId: string;
-  quantities: Record<string, number>;
+  items: SubscriptionDraftItem[];
   preferredDay: string;
   preferredSlot: string;
   originalTotal: number;
-  total: number;
   savings: number;
+  total: number;
   deliveryDetails?: SubscriptionDeliveryDetails;
 };
 
-export type CustomerSubscription = {
-  id: string;
-  displayId: string;
-  planId: string;
-  planName: string;
-  billingCycle: BillingCycle;
-  status: "active" | "paused" | "cancelled";
-  paymentMethod: SubscriptionPaymentMethod;
-  paymentStatus: "demo_confirmed";
-  createdAt: string;
-  bottleCount: number;
-  deliveriesPerCycle: number;
-  bottlesPerDelivery: number;
-  discountPercent: number;
-  originalTotal: number;
-  total: number;
-  savings: number;
-  preferredDay: string;
-  preferredSlot: string;
-  deliveryDetails: SubscriptionDeliveryDetails;
-  items: SubscriptionItem[];
-};
-
 type SubscriptionContextValue = {
+  plans: SubscriptionPlan[];
   subscriptions: CustomerSubscription[];
-  pendingSubscriptionDraft: PendingSubscriptionDraft | null;
+
+  pendingSubscriptionDraft:
+    | PendingSubscriptionDraft
+    | null;
+
+  lastActivatedSubscription:
+    | CustomerSubscription
+    | null;
+
+  loadingPlans: boolean;
+  loadingSubscriptions: boolean;
+  activatingSubscription: boolean;
+  cancellingSubscriptionId:
+    | string
+    | null;
+
+  error: string | null;
 
   setPendingSubscriptionDraft: (
-    draft: PendingSubscriptionDraft | null
+    draft:
+      | PendingSubscriptionDraft
+      | null
   ) => void;
 
   saveSubscriptionDeliveryDetails: (
-    deliveryDetails: SubscriptionDeliveryDetails
+    details: SubscriptionDeliveryDetails
   ) => boolean;
 
   confirmSubscription: (
     paymentMethod: SubscriptionPaymentMethod
-  ) => CustomerSubscription | null;
+  ) => Promise<CustomerSubscription | null>;
+
+  refreshPlans: () => Promise<void>;
+  refreshSubscriptions: () => Promise<void>;
 
   cancelSubscription: (
-    subscriptionId: string
-  ) => void;
+    subscriptionId: string,
+    reason?: string
+  ) => Promise<boolean>;
+
+  getPlanById: (
+    planId: string
+  ) => SubscriptionPlan | undefined;
 
   getSubscriptionById: (
     subscriptionId: string
   ) => CustomerSubscription | undefined;
+
+  clearError: () => void;
 };
 
-const SubscriptionContext = createContext<
-  SubscriptionContextValue | undefined
->(undefined);
+const SubscriptionContext =
+  createContext<
+    SubscriptionContextValue | undefined
+  >(undefined);
 
 export function SubscriptionProvider({
   children,
 }: {
   children: ReactNode;
 }) {
-  const [subscriptions, setSubscriptions] = useState<
-    CustomerSubscription[]
+  const {
+    token,
+    isAuthenticated,
+  } = useAuth();
+
+  const [plans, setPlans] = useState<
+    SubscriptionPlan[]
   >([]);
+
+  const [
+    subscriptions,
+    setSubscriptions,
+  ] = useState<CustomerSubscription[]>(
+    []
+  );
 
   const [
     pendingSubscriptionDraft,
     setPendingSubscriptionDraft,
-  ] = useState<PendingSubscriptionDraft | null>(null);
+  ] =
+    useState<PendingSubscriptionDraft | null>(
+      null
+    );
+
+  const [
+    lastActivatedSubscription,
+    setLastActivatedSubscription,
+  ] =
+    useState<CustomerSubscription | null>(
+      null
+    );
+
+  const [
+    loadingPlans,
+    setLoadingPlans,
+  ] = useState(false);
+
+  const [
+    loadingSubscriptions,
+    setLoadingSubscriptions,
+  ] = useState(false);
+
+  const [
+    activatingSubscription,
+    setActivatingSubscription,
+  ] = useState(false);
+
+  const [
+    cancellingSubscriptionId,
+    setCancellingSubscriptionId,
+  ] = useState<string | null>(null);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const refreshPlans =
+    useCallback(async () => {
+      setLoadingPlans(true);
+      setError(null);
+
+      try {
+        const latestPlans =
+          await fetchSubscriptionPlans();
+
+        setPlans(latestPlans);
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load subscription plans."
+        );
+      } finally {
+        setLoadingPlans(false);
+      }
+    }, []);
+
+  const refreshSubscriptions =
+    useCallback(async () => {
+      if (!token) {
+        setSubscriptions([]);
+        return;
+      }
+
+      setLoadingSubscriptions(true);
+      setError(null);
+
+      try {
+        const latestSubscriptions =
+          await fetchMySubscriptions(token);
+
+        setSubscriptions(
+          latestSubscriptions
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load your subscriptions."
+        );
+      } finally {
+        setLoadingSubscriptions(false);
+      }
+    }, [token]);
+
+  useEffect(() => {
+    void refreshPlans();
+  }, [refreshPlans]);
+
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      token
+    ) {
+      void refreshSubscriptions();
+      return;
+    }
+
+    setSubscriptions([]);
+    setLastActivatedSubscription(null);
+  }, [
+    isAuthenticated,
+    token,
+    refreshSubscriptions,
+  ]);
 
   const saveSubscriptionDeliveryDetails =
     useCallback(
       (
-        deliveryDetails: SubscriptionDeliveryDetails
-      ) => {
+        details: SubscriptionDeliveryDetails
+      ): boolean => {
         if (!pendingSubscriptionDraft) {
+          setError(
+            "Your subscription plan details are missing."
+          );
+
           return false;
         }
 
-        setPendingSubscriptionDraft((currentDraft) => {
-          if (!currentDraft) {
-            return null;
-          }
-
-          return {
-            ...currentDraft,
-            deliveryDetails,
-          };
+        setPendingSubscriptionDraft({
+          ...pendingSubscriptionDraft,
+          deliveryDetails: details,
         });
+
+        setError(null);
 
         return true;
       },
       [pendingSubscriptionDraft]
     );
 
-  const confirmSubscription = useCallback(
-    (
-      paymentMethod: SubscriptionPaymentMethod
-    ): CustomerSubscription | null => {
-      if (
-        !pendingSubscriptionDraft ||
-        !pendingSubscriptionDraft.deliveryDetails
-      ) {
-        return null;
-      }
+  const confirmSubscription =
+    useCallback(
+      async (
+        paymentMethod: SubscriptionPaymentMethod
+      ): Promise<CustomerSubscription | null> => {
+        if (!token) {
+          setError(
+            "Please log in before activating a subscription."
+          );
 
-      const plan = getSubscriptionPlan(
-        pendingSubscriptionDraft.planId
-      );
+          return null;
+        }
 
-      if (!plan) {
-        return null;
-      }
+        if (
+          !pendingSubscriptionDraft ||
+          !pendingSubscriptionDraft.deliveryDetails
+        ) {
+          setError(
+            "Your subscription delivery details are missing."
+          );
 
-      const selectedItems = PRODUCTS.filter(
-        (product) =>
-          product.subscriptionEligible &&
-          product.available &&
-          (pendingSubscriptionDraft.quantities[
-            product.id
-          ] ?? 0) > 0
-      ).map((product) => ({
-        productId: product.id,
-        name: product.name,
-        shortName: product.shortName,
-        quantity:
-          pendingSubscriptionDraft.quantities[
-            product.id
-          ] ?? 0,
-        price: product.price,
-        sizeMl: product.sizeMl,
-        cardColor: product.cardColor,
-        liquidColor: product.liquidColor,
-        accentColor: product.accentColor,
-      }));
+          return null;
+        }
 
-      const selectedBottleCount =
-        selectedItems.reduce(
-          (total, item) =>
-            total + item.quantity,
-          0
+        setActivatingSubscription(true);
+        setError(null);
+
+        try {
+          const subscription =
+            await createCustomerSubscription(
+              token,
+              {
+                planId:
+                  pendingSubscriptionDraft.planId,
+
+                items:
+                  pendingSubscriptionDraft.items.map(
+                    (item) => ({
+                      productId:
+                        item.productId,
+                      quantity:
+                        item.quantity,
+                    })
+                  ),
+
+                preferredDay:
+                  pendingSubscriptionDraft.preferredDay,
+
+                preferredSlot:
+                  pendingSubscriptionDraft.preferredSlot,
+
+                deliveryAddress: {
+                  fullName:
+                    pendingSubscriptionDraft
+                      .deliveryDetails
+                      .fullName,
+
+                  phone:
+                    pendingSubscriptionDraft
+                      .deliveryDetails.phone,
+
+                  pincode:
+                    pendingSubscriptionDraft
+                      .deliveryDetails
+                      .pincode,
+
+                  houseDetails:
+                    pendingSubscriptionDraft
+                      .deliveryDetails
+                      .houseDetails,
+
+                  areaDetails:
+                    pendingSubscriptionDraft
+                      .deliveryDetails
+                      .areaDetails,
+
+                  landmark:
+                    pendingSubscriptionDraft
+                      .deliveryDetails
+                      .landmark,
+                },
+
+                paymentMethod,
+              }
+            );
+
+          setSubscriptions(
+            (currentSubscriptions) => [
+              subscription,
+
+              ...currentSubscriptions.filter(
+                (currentSubscription) =>
+                  currentSubscription._id !==
+                  subscription._id
+              ),
+            ]
+          );
+
+          setLastActivatedSubscription(
+            subscription
+          );
+
+          setPendingSubscriptionDraft(
+            null
+          );
+
+          return subscription;
+        } catch (requestError) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to activate this subscription."
+          );
+
+          return null;
+        } finally {
+          setActivatingSubscription(
+            false
+          );
+        }
+      },
+      [token, pendingSubscriptionDraft]
+    );
+
+  const cancelSubscription =
+    useCallback(
+      async (
+        subscriptionId: string,
+        reason =
+          "Cancelled by customer"
+      ): Promise<boolean> => {
+        if (!token) {
+          setError(
+            "Please log in to cancel a subscription."
+          );
+
+          return false;
+        }
+
+        setCancellingSubscriptionId(
+          subscriptionId
         );
 
-      if (
-        selectedBottleCount !== plan.bottleCount ||
-        selectedItems.length === 0
-      ) {
-        return null;
-      }
+        setError(null);
 
-      const timestamp = Date.now();
+        try {
+          const updatedSubscription =
+            await cancelCustomerSubscription(
+              token,
+              subscriptionId,
+              reason
+            );
 
-      const subscription: CustomerSubscription = {
-        id: `subscription-${timestamp}`,
-        displayId: `SUB${String(timestamp).slice(
-          -8
-        )}`,
+          setSubscriptions(
+            (currentSubscriptions) =>
+              currentSubscriptions.map(
+                (subscription) =>
+                  subscription._id ===
+                  updatedSubscription._id
+                    ? updatedSubscription
+                    : subscription
+              )
+          );
 
-        planId: plan.id,
-        planName: plan.name,
-        billingCycle: plan.billingCycle,
+          setLastActivatedSubscription(
+            (currentSubscription) =>
+              currentSubscription?._id ===
+              updatedSubscription._id
+                ? updatedSubscription
+                : currentSubscription
+          );
 
-        status: "active",
-        paymentMethod,
-        paymentStatus: "demo_confirmed",
+          return true;
+        } catch (requestError) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to cancel this subscription."
+          );
 
-        createdAt: new Date().toISOString(),
+          return false;
+        } finally {
+          setCancellingSubscriptionId(
+            null
+          );
+        }
+      },
+      [token]
+    );
 
-        bottleCount: plan.bottleCount,
-        deliveriesPerCycle:
-          plan.deliveriesPerCycle,
-
-        bottlesPerDelivery:
-          plan.bottleCount /
-          plan.deliveriesPerCycle,
-
-        discountPercent:
-          plan.discountPercent,
-
-        originalTotal:
-          pendingSubscriptionDraft.originalTotal,
-
-        total: pendingSubscriptionDraft.total,
-        savings:
-          pendingSubscriptionDraft.savings,
-
-        preferredDay:
-          pendingSubscriptionDraft.preferredDay,
-
-        preferredSlot:
-          pendingSubscriptionDraft.preferredSlot,
-
-        deliveryDetails:
-          pendingSubscriptionDraft.deliveryDetails,
-
-        items: selectedItems,
-      };
-
-      setSubscriptions((currentSubscriptions) => [
-        subscription,
-        ...currentSubscriptions,
-      ]);
-
-      setPendingSubscriptionDraft(null);
-
-      return subscription;
-    },
-    [pendingSubscriptionDraft]
-  );
-
-  const cancelSubscription = useCallback(
-    (subscriptionId: string) => {
-      setSubscriptions((currentSubscriptions) =>
-        currentSubscriptions.map((subscription) =>
-          subscription.id === subscriptionId
-            ? {
-                ...subscription,
-                status: "cancelled",
-              }
-            : subscription
-        )
-      );
-    },
-    []
-  );
-
-  const getSubscriptionById = useCallback(
-    (subscriptionId: string) =>
-      subscriptions.find(
-        (subscription) =>
-          subscription.id === subscriptionId
+  const getPlanById = useCallback(
+    (planId: string) =>
+      plans.find(
+        (plan) =>
+          plan.planId === planId
       ),
-    [subscriptions]
+    [plans]
   );
 
-  const value = useMemo(
-    () => ({
-      subscriptions,
-      pendingSubscriptionDraft,
-      setPendingSubscriptionDraft,
-      saveSubscriptionDeliveryDetails,
-      confirmSubscription,
-      cancelSubscription,
-      getSubscriptionById,
-    }),
-    [
-      subscriptions,
-      pendingSubscriptionDraft,
-      saveSubscriptionDeliveryDetails,
-      confirmSubscription,
-      cancelSubscription,
-      getSubscriptionById,
-    ]
-  );
+  const getSubscriptionById =
+    useCallback(
+      (subscriptionId: string) =>
+        subscriptions.find(
+          (subscription) =>
+            subscription._id ===
+            subscriptionId
+        ) ??
+        (lastActivatedSubscription?._id ===
+        subscriptionId
+          ? lastActivatedSubscription
+          : undefined),
+      [
+        subscriptions,
+        lastActivatedSubscription,
+      ]
+    );
+
+  const value =
+    useMemo<SubscriptionContextValue>(
+      () => ({
+        plans,
+        subscriptions,
+        pendingSubscriptionDraft,
+        lastActivatedSubscription,
+        loadingPlans,
+        loadingSubscriptions,
+        activatingSubscription,
+        cancellingSubscriptionId,
+        error,
+        setPendingSubscriptionDraft,
+        saveSubscriptionDeliveryDetails,
+        confirmSubscription,
+        refreshPlans,
+        refreshSubscriptions,
+        cancelSubscription,
+        getPlanById,
+        getSubscriptionById,
+        clearError,
+      }),
+      [
+        plans,
+        subscriptions,
+        pendingSubscriptionDraft,
+        lastActivatedSubscription,
+        loadingPlans,
+        loadingSubscriptions,
+        activatingSubscription,
+        cancellingSubscriptionId,
+        error,
+        saveSubscriptionDeliveryDetails,
+        confirmSubscription,
+        refreshPlans,
+        refreshSubscriptions,
+        cancelSubscription,
+        getPlanById,
+        getSubscriptionById,
+        clearError,
+      ]
+    );
 
   return (
-    <SubscriptionContext.Provider value={value}>
+    <SubscriptionContext.Provider
+      value={value}
+    >
       {children}
     </SubscriptionContext.Provider>
   );
 }
 
-export function useSubscriptions() {
-  const context = useContext(
-    SubscriptionContext
-  );
+export function useSubscriptions(): SubscriptionContextValue {
+  const context =
+    useContext(SubscriptionContext);
 
   if (!context) {
     throw new Error(

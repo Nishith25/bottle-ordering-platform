@@ -3,7 +3,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import {
+  ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,332 +14,73 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
+import { useAuth } from "../../context/AuthContext";
+import { useSubscriptions } from "../../context/SubscriptionContext";
+import type {
   CustomerSubscription,
-  useSubscriptions,
-} from "../../context/SubscriptionContext";
-import {
-  SUBSCRIPTION_PLANS,
   SubscriptionPlan,
-} from "../../data/subscriptionPlans";
-
-function PlanCard({
-  plan,
-  onPress,
-}: {
-  plan: SubscriptionPlan;
-  onPress: () => void;
-}) {
-  const bottlesPerDelivery =
-    plan.bottleCount / plan.deliveriesPerCycle;
-
-  return (
-    <View
-      style={[
-        styles.planCard,
-        {
-          backgroundColor: plan.lightColor,
-        },
-      ]}
-    >
-      <View style={styles.planTopRow}>
-        <View
-          style={[
-            styles.planIcon,
-            {
-              backgroundColor: plan.accentColor,
-            },
-          ]}
-        >
-          <Ionicons
-            name={
-              plan.billingCycle === "weekly"
-                ? "calendar-outline"
-                : "repeat-outline"
-            }
-            size={24}
-            color="#FFFFFF"
-          />
-        </View>
-
-        <View style={styles.planHeading}>
-          <View style={styles.planBadge}>
-            <Text
-              style={[
-                styles.planBadgeText,
-                {
-                  color: plan.accentColor,
-                },
-              ]}
-            >
-              {plan.badge}
-            </Text>
-          </View>
-
-          <Text style={styles.planName}>
-            {plan.name}
-          </Text>
-
-          <Text style={styles.planShortDescription}>
-            {plan.shortDescription}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.planStats}>
-        <View style={styles.planStat}>
-          <Text style={styles.planStatValue}>
-            {plan.bottleCount}
-          </Text>
-          <Text style={styles.planStatLabel}>
-            Bottles
-          </Text>
-        </View>
-
-        <View style={styles.planStatDivider} />
-
-        <View style={styles.planStat}>
-          <Text style={styles.planStatValue}>
-            {plan.deliveriesPerCycle}
-          </Text>
-          <Text style={styles.planStatLabel}>
-            Deliveries
-          </Text>
-        </View>
-
-        <View style={styles.planStatDivider} />
-
-        <View style={styles.planStat}>
-          <Text style={styles.planStatValue}>
-            {bottlesPerDelivery}
-          </Text>
-          <Text style={styles.planStatLabel}>
-            Per delivery
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.featureContainer}>
-        {plan.features.slice(0, 3).map((feature) => (
-          <View key={feature} style={styles.featureRow}>
-            <Ionicons
-              name="checkmark-circle"
-              size={16}
-              color={plan.accentColor}
-            />
-
-            <Text style={styles.featureText}>
-              {feature}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.planBottomRow}>
-        <View>
-          <Text style={styles.savingLabel}>
-            PLAN SAVING
-          </Text>
-
-          <Text
-            style={[
-              styles.savingValue,
-              {
-                color: plan.accentColor,
-              },
-            ]}
-          >
-            {plan.discountPercent}% off
-          </Text>
-        </View>
-
-        <Pressable
-          onPress={onPress}
-          style={({ pressed }) => [
-            styles.buildButton,
-            {
-              backgroundColor: plan.accentColor,
-            },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.buildButtonText}>
-            Build plan
-          </Text>
-
-          <Ionicons
-            name="arrow-forward"
-            size={17}
-            color="#FFFFFF"
-          />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function ActiveSubscriptionCard({
-  subscription,
-  onCancel,
-}: {
-  subscription: CustomerSubscription;
-  onCancel: () => void;
-}) {
-  const isCancelled =
-    subscription.status === "cancelled";
-
-  return (
-    <View style={styles.activeCard}>
-      <View style={styles.activeTopRow}>
-        <View style={styles.activeIcon}>
-          <Ionicons
-            name="refresh-outline"
-            size={22}
-            color="#2F6549"
-          />
-        </View>
-
-        <View style={styles.activeHeading}>
-          <Text style={styles.activeName}>
-            {subscription.planName}
-          </Text>
-
-          <Text style={styles.subscriptionNumber}>
-            {subscription.displayId}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.statusBadge,
-            isCancelled && styles.cancelledBadge,
-          ]}
-        >
-          <View
-            style={[
-              styles.statusDot,
-              isCancelled &&
-                styles.cancelledStatusDot,
-            ]}
-          />
-
-          <Text
-            style={[
-              styles.statusText,
-              isCancelled &&
-                styles.cancelledStatusText,
-            ]}
-          >
-            {isCancelled ? "Cancelled" : "Active"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.activeDetails}>
-        <View style={styles.activeDetailRow}>
-          <Ionicons
-            name="nutrition-outline"
-            size={16}
-            color="#52705E"
-          />
-
-          <Text style={styles.activeDetailText}>
-            {subscription.bottlesPerDelivery} bottles per
-            delivery
-          </Text>
-        </View>
-
-        <View style={styles.activeDetailRow}>
-          <Ionicons
-            name="calendar-outline"
-            size={16}
-            color="#52705E"
-          />
-
-          <Text style={styles.activeDetailText}>
-            Every {subscription.preferredDay}
-          </Text>
-        </View>
-
-        <View style={styles.activeDetailRow}>
-          <Ionicons
-            name="time-outline"
-            size={16}
-            color="#52705E"
-          />
-
-          <Text style={styles.activeDetailText}>
-            {subscription.preferredSlot}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.activeBottomRow}>
-        <View>
-          <Text style={styles.subscriptionPriceLabel}>
-            {subscription.billingCycle === "weekly"
-              ? "Weekly total"
-              : "Monthly total"}
-          </Text>
-
-          <Text style={styles.subscriptionPrice}>
-            ₹{subscription.total}
-          </Text>
-        </View>
-
-        {!isCancelled ? (
-          <Pressable
-            onPress={onCancel}
-            style={({ pressed }) => [
-              styles.cancelButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.cancelButtonText}>
-              Cancel plan
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
-  );
-}
+} from "../../services/api";
 
 export default function PlansScreen() {
   const router = useRouter();
 
   const {
+    isAuthenticated,
+  } = useAuth();
+
+  const {
+    plans,
     subscriptions,
+    loadingPlans,
+    loadingSubscriptions,
+    cancellingSubscriptionId,
+    error,
+    refreshPlans,
+    refreshSubscriptions,
     cancelSubscription,
   } = useSubscriptions();
 
-  const openPlanBuilder = (
-    plan: SubscriptionPlan
-  ) => {
-    router.push({
-      pathname: "/plan-builder",
-      params: {
-        planId: plan.id,
-      },
-    });
-  };
-
-  const handleCancel = (
+  const requestCancellation = (
     subscription: CustomerSubscription
   ) => {
+    const performCancellation =
+      async () => {
+        await cancelSubscription(
+          subscription._id,
+          "Cancelled by customer"
+        );
+      };
+
+    if (
+      Platform.OS === "web" &&
+      typeof window !== "undefined"
+    ) {
+      const confirmed =
+        window.confirm(
+          `Cancel ${subscription.subscriptionNumber}?`
+        );
+
+      if (confirmed) {
+        void performCancellation();
+      }
+
+      return;
+    }
+
     Alert.alert(
-      "Cancel subscription?",
-      `This will cancel ${subscription.planName}.`,
+      "Cancel subscription",
+      "Future recurring deliveries will stop. Continue?",
       [
         {
-          text: "Keep plan",
+          text: "Keep subscription",
           style: "cancel",
         },
         {
           text: "Cancel plan",
           style: "destructive",
-          onPress: () =>
-            cancelSubscription(subscription.id),
+          onPress: () => {
+            void performCancellation();
+          },
         },
       ]
     );
@@ -347,92 +90,427 @@ export default function PlansScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={
+          styles.scrollContent
+        }
       >
-        <View style={styles.header}>
-          <Text style={styles.eyebrow}>
-            FLEXIBLE SUBSCRIPTIONS
-          </Text>
+        <Text style={styles.eyebrow}>
+          RECURRING DELIVERY
+        </Text>
 
-          <Text style={styles.title}>
-            Freshness on repeat
-          </Text>
+        <Text style={styles.title}>
+          Freshness on repeat
+        </Text>
 
-          <Text style={styles.subtitle}>
-            Choose your bottles once and receive fresh
-            deliveries every week.
-          </Text>
-        </View>
+        <Text style={styles.subtitle}>
+          Build a weekly or monthly bottle
+          plan and save on every recurring
+          cycle.
+        </Text>
 
-        {subscriptions.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Your subscriptions
+        {error ? (
+          <View style={styles.errorCard}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color="#A34848"
+            />
+
+            <Text style={styles.errorText}>
+              {error}
             </Text>
-
-            <Text style={styles.sectionSubtitle}>
-              Manage your current bottle plans.
-            </Text>
-
-            <View style={styles.subscriptionList}>
-              {subscriptions.map((subscription) => (
-                <ActiveSubscriptionCard
-                  key={subscription.id}
-                  subscription={subscription}
-                  onCancel={() =>
-                    handleCancel(subscription)
-                  }
-                />
-              ))}
-            </View>
           </View>
         ) : null}
 
-        <View style={styles.section}>
+        <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>
             Choose a plan
           </Text>
 
-          <Text style={styles.sectionSubtitle}>
-            Select weekly or monthly delivery.
-          </Text>
-
-          <View style={styles.planList}>
-            {SUBSCRIPTION_PLANS.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                onPress={() =>
-                  openPlanBuilder(plan)
-                }
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.notice}>
-          <View style={styles.noticeIcon}>
+          <Pressable
+            onPress={() => {
+              void refreshPlans();
+            }}
+          >
             <Ionicons
-              name="information-circle-outline"
-              size={21}
+              name="refresh"
+              size={19}
               color="#35694E"
             />
-          </View>
-
-          <View style={styles.noticeContent}>
-            <Text style={styles.noticeTitle}>
-              Flexible plan management
-            </Text>
-
-            <Text style={styles.noticeText}>
-              Bottle combinations, delivery schedules and
-              plan prices will later be controlled by the
-              admin dashboard.
-            </Text>
-          </View>
+          </Pressable>
         </View>
+
+        {loadingPlans &&
+        plans.length === 0 ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator
+              color="#245C42"
+            />
+
+            <Text style={styles.loadingText}>
+              Loading plans
+            </Text>
+          </View>
+        ) : (
+          plans.map((plan) => (
+            <PlanCard
+              key={plan._id}
+              plan={plan}
+              onChoose={() =>
+                router.push({
+                  pathname:
+                    "/plan-builder",
+                  params: {
+                    planId:
+                      plan.planId,
+                  },
+                })
+              }
+            />
+          ))
+        )}
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>
+            Your subscriptions
+          </Text>
+
+          {isAuthenticated ? (
+            <Pressable
+              onPress={() => {
+                void refreshSubscriptions();
+              }}
+            >
+              <Ionicons
+                name="refresh"
+                size={19}
+                color="#35694E"
+              />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {!isAuthenticated ? (
+          <View style={styles.guestCard}>
+            <Ionicons
+              name="person-outline"
+              size={30}
+              color="#35694E"
+            />
+
+            <Text style={styles.guestTitle}>
+              Log in to view your plans
+            </Text>
+
+            <Text
+              style={styles.guestDescription}
+            >
+              Active and cancelled
+              subscriptions will appear here.
+            </Text>
+
+            <Pressable
+              onPress={() =>
+                router.push("/login")
+              }
+              style={styles.loginButton}
+            >
+              <Text
+                style={styles.loginButtonText}
+              >
+                Log in
+              </Text>
+            </Pressable>
+          </View>
+        ) : loadingSubscriptions &&
+          subscriptions.length === 0 ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator
+              color="#245C42"
+            />
+
+            <Text style={styles.loadingText}>
+              Loading subscriptions
+            </Text>
+          </View>
+        ) : subscriptions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons
+              name="repeat-outline"
+              size={31}
+              color="#35694E"
+            />
+
+            <Text style={styles.emptyTitle}>
+              No subscriptions yet
+            </Text>
+
+            <Text
+              style={styles.emptyDescription}
+            >
+              Choose a plan above to start
+              recurring deliveries.
+            </Text>
+          </View>
+        ) : (
+          subscriptions.map(
+            (subscription) => (
+              <SubscriptionCard
+                key={subscription._id}
+                subscription={
+                  subscription
+                }
+                cancelling={
+                  cancellingSubscriptionId ===
+                  subscription._id
+                }
+                onCancel={() =>
+                  requestCancellation(
+                    subscription
+                  )
+                }
+              />
+            )
+          )
+        )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function PlanCard({
+  plan,
+  onChoose,
+}: {
+  plan: SubscriptionPlan;
+  onChoose: () => void;
+}) {
+  return (
+    <View style={styles.planCard}>
+      <View style={styles.planTopRow}>
+        <View style={styles.planIcon}>
+          <Ionicons
+            name={
+              plan.billingCycle ===
+              "weekly"
+                ? "calendar-outline"
+                : "calendar-number-outline"
+            }
+            size={23}
+            color="#35694E"
+          />
+        </View>
+
+        {plan.badge ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {plan.badge}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={styles.planName}>
+        {plan.name}
+      </Text>
+
+      <Text style={styles.planDescription}>
+        {plan.description}
+      </Text>
+
+      <View style={styles.statRow}>
+        <PlanStat
+          value={`${plan.bottleCount}`}
+          label="Bottles"
+        />
+
+        <PlanStat
+          value={`${plan.deliveriesPerCycle}`}
+          label="Deliveries"
+        />
+
+        <PlanStat
+          value={`${plan.discountPercent}%`}
+          label="Saving"
+        />
+      </View>
+
+      <View style={styles.features}>
+        {plan.features.map((feature) => (
+          <View
+            key={feature}
+            style={styles.featureRow}
+          >
+            <Ionicons
+              name="checkmark-circle"
+              size={17}
+              color="#397454"
+            />
+
+            <Text
+              style={styles.featureText}
+            >
+              {feature}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <Pressable
+        onPress={onChoose}
+        style={({ pressed }) => [
+          styles.chooseButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.chooseButtonText}>
+          Build this plan
+        </Text>
+
+        <Ionicons
+          name="arrow-forward"
+          size={18}
+          color="#FFFFFF"
+        />
+      </Pressable>
+    </View>
+  );
+}
+
+function PlanStat({
+  value,
+  label,
+}: {
+  value: string;
+  label: string;
+}) {
+  return (
+    <View style={styles.statItem}>
+      <Text style={styles.statValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.statLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function SubscriptionCard({
+  subscription,
+  cancelling,
+  onCancel,
+}: {
+  subscription: CustomerSubscription;
+  cancelling: boolean;
+  onCancel: () => void;
+}) {
+  const active =
+    subscription.status === "active";
+
+  return (
+    <View style={styles.subscriptionCard}>
+      <View
+        style={styles.subscriptionTopRow}
+      >
+        <View>
+          <Text
+            style={
+              styles.subscriptionNumber
+            }
+          >
+            {subscription.subscriptionNumber}
+          </Text>
+
+          <Text
+            style={styles.subscriptionName}
+          >
+            {subscription.planName}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.statusBadge,
+            !active &&
+              styles.inactiveStatusBadge,
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              !active &&
+                styles.inactiveStatusText,
+            ]}
+          >
+            {subscription.status}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.subscriptionInfo}>
+        <Text
+          style={styles.subscriptionDetail}
+        >
+          {subscription.bottleCount} bottles ·{" "}
+          {subscription.preferredDay}
+        </Text>
+
+        <Text
+          style={styles.subscriptionDetail}
+        >
+          {subscription.preferredSlot}
+        </Text>
+
+        <Text
+          style={styles.subscriptionDetail}
+        >
+          Next billing:{" "}
+          {new Date(
+            subscription.nextBillingAt
+          ).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+        </Text>
+      </View>
+
+      <View style={styles.subscriptionTotal}>
+        <Text style={styles.totalLabel}>
+          Per{" "}
+          {subscription.billingCycle ===
+          "weekly"
+            ? "week"
+            : "month"}
+        </Text>
+
+        <Text style={styles.totalValue}>
+          ₹{subscription.totalPerCycle}
+        </Text>
+      </View>
+
+      {active ? (
+        <Pressable
+          disabled={cancelling}
+          onPress={onCancel}
+          style={[
+            styles.cancelButton,
+            cancelling &&
+              styles.disabledButton,
+          ]}
+        >
+          <Text
+            style={styles.cancelButtonText}
+          >
+            {cancelling
+              ? "Cancelling..."
+              : "Cancel subscription"}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -443,13 +521,12 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingBottom: 125,
-  },
-
-  header: {
+    width: "100%",
+    maxWidth: 680,
+    alignSelf: "center",
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 14,
+    paddingBottom: 130,
   },
 
   eyebrow: {
@@ -457,133 +534,134 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1.6,
-    marginBottom: 8,
   },
 
   title: {
     color: "#17221C",
     fontSize: 31,
-    lineHeight: 38,
     fontWeight: "900",
     letterSpacing: -1,
+    marginTop: 8,
   },
 
   subtitle: {
     color: "#717A75",
     fontSize: 12,
     lineHeight: 19,
-    marginTop: 8,
+    marginTop: 7,
   },
 
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 27,
+  errorCard: {
+    padding: 13,
+    borderRadius: 16,
+    backgroundColor: "#FAECEC",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginTop: 16,
+  },
+
+  errorText: {
+    flex: 1,
+    color: "#934545",
+    fontSize: 10,
+    lineHeight: 15,
+  },
+
+  sectionHeading: {
+    marginTop: 25,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
 
   sectionTitle: {
-    color: "#1C2922",
-    fontSize: 20,
+    color: "#1D2922",
+    fontSize: 16,
     fontWeight: "900",
   },
 
-  sectionSubtitle: {
-    color: "#76807A",
-    fontSize: 11,
-    marginTop: 5,
-    marginBottom: 14,
-  },
-
-  planList: {
-    gap: 14,
-  },
-
   planCard: {
-    padding: 18,
-    borderRadius: 27,
-    overflow: "hidden",
+    padding: 19,
+    borderRadius: 25,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E8E2",
+    marginBottom: 13,
   },
 
   planTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    justifyContent: "space-between",
   },
 
   planIcon: {
-    width: 53,
-    height: 53,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#E5EFE7",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  planHeading: {
-    flex: 1,
-    marginLeft: 13,
-  },
-
-  planBadge: {
+  badge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 11,
+    backgroundColor: "#E8F0EA",
   },
 
-  planBadgeText: {
-    fontSize: 7,
+  badgeText: {
+    color: "#35694E",
+    fontSize: 8,
     fontWeight: "900",
-    letterSpacing: 0.8,
   },
 
   planName: {
-    color: "#1D2922",
-    fontSize: 17,
+    color: "#203128",
+    fontSize: 18,
     fontWeight: "900",
-    marginTop: 8,
+    marginTop: 16,
   },
 
-  planShortDescription: {
-    color: "#68736D",
+  planDescription: {
+    color: "#707B74",
     fontSize: 10,
-    lineHeight: 15,
-    marginTop: 4,
+    lineHeight: 16,
+    marginTop: 6,
   },
 
-  planStats: {
-    marginTop: 19,
-    padding: 13,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.65)",
+  statRow: {
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#E8EBE7",
     flexDirection: "row",
-    alignItems: "center",
+    marginTop: 15,
   },
 
-  planStat: {
+  statItem: {
     flex: 1,
     alignItems: "center",
   },
 
-  planStatValue: {
-    color: "#22342A",
+  statValue: {
+    color: "#244A35",
     fontSize: 17,
     fontWeight: "900",
   },
 
-  planStatLabel: {
-    color: "#718078",
+  statLabel: {
+    color: "#7A847E",
     fontSize: 8,
-    marginTop: 3,
+    marginTop: 4,
   },
 
-  planStatDivider: {
-    width: 1,
-    height: 29,
-    backgroundColor: "rgba(74,94,82,0.18)",
-  },
-
-  featureContainer: {
-    marginTop: 16,
-    gap: 8,
+  features: {
+    gap: 9,
+    marginTop: 15,
   },
 
   featureRow: {
@@ -593,214 +671,193 @@ const styles = StyleSheet.create({
   },
 
   featureText: {
-    flex: 1,
-    color: "#53625A",
+    color: "#536159",
     fontSize: 10,
-    fontWeight: "600",
   },
 
-  planBottomRow: {
-    marginTop: 19,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(72,91,80,0.15)",
+  chooseButton: {
+    minHeight: 51,
+    borderRadius: 17,
+    backgroundColor: "#245C42",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 18,
+  },
+
+  chooseButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  loadingCard: {
+    minHeight: 120,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color: "#657269",
+    fontSize: 10,
+    marginTop: 10,
+  },
+
+  guestCard: {
+    padding: 22,
+    borderRadius: 24,
+    backgroundColor: "#E8F0EA",
+    alignItems: "center",
+  },
+
+  guestTitle: {
+    color: "#223229",
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+
+  guestDescription: {
+    color: "#68746D",
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  loginButton: {
+    minHeight: 45,
+    paddingHorizontal: 28,
+    borderRadius: 15,
+    backgroundColor: "#245C42",
+    justifyContent: "center",
+    marginTop: 16,
+  },
+
+  loginButtonText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  emptyCard: {
+    padding: 25,
+    borderRadius: 24,
+    backgroundColor: "#E8F0EA",
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    color: "#223229",
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 11,
+  },
+
+  emptyDescription: {
+    color: "#68746D",
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  subscriptionCard: {
+    padding: 17,
+    borderRadius: 23,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E8E3",
+    marginBottom: 12,
+  },
+
+  subscriptionTopRow: {
+    flexDirection: "row",
     justifyContent: "space-between",
   },
 
-  savingLabel: {
-    color: "#7B847F",
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-
-  savingValue: {
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 3,
-  },
-
-  buildButton: {
-    minHeight: 46,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-
-  buildButtonText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  subscriptionList: {
-    gap: 12,
-  },
-
-  activeCard: {
-    padding: 17,
-    borderRadius: 24,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E9E3",
-  },
-
-  activeTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  activeIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  activeHeading: {
-    flex: 1,
-    marginLeft: 11,
-  },
-
-  activeName: {
-    color: "#1E2C24",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
   subscriptionNumber: {
-    color: "#7A837E",
+    color: "#728078",
     fontSize: 8,
-    marginTop: 3,
+  },
+
+  subscriptionName: {
+    color: "#203128",
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 4,
   },
 
   statusBadge: {
     paddingHorizontal: 9,
     paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "#E4F1E7",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
+    borderRadius: 10,
+    backgroundColor: "#E5F1E7",
   },
 
-  cancelledBadge: {
-    backgroundColor: "#F5E8E8",
-  },
-
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#34714F",
-  },
-
-  cancelledStatusDot: {
-    backgroundColor: "#A84C4C",
-  },
-
-  statusText: {
-    color: "#34714F",
-    fontSize: 8,
-    fontWeight: "800",
-  },
-
-  cancelledStatusText: {
-    color: "#A84C4C",
-  },
-
-  activeDetails: {
-    marginTop: 16,
-    gap: 9,
-  },
-
-  activeDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  activeDetailText: {
-    color: "#5D6D63",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-
-  activeBottomRow: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#EAede8",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  subscriptionPriceLabel: {
-    color: "#7B847F",
-    fontSize: 8,
-  },
-
-  subscriptionPrice: {
-    color: "#1D2B23",
-    fontSize: 17,
-    fontWeight: "900",
-    marginTop: 3,
-  },
-
-  cancelButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 13,
+  inactiveStatusBadge: {
     backgroundColor: "#FAECEC",
   },
 
-  cancelButtonText: {
-    color: "#A84C4C",
+  statusText: {
+    color: "#2E714A",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "capitalize",
+  },
+
+  inactiveStatusText: {
+    color: "#A34848",
+  },
+
+  subscriptionInfo: {
+    gap: 5,
+    marginTop: 14,
+  },
+
+  subscriptionDetail: {
+    color: "#68746D",
     fontSize: 9,
-    fontWeight: "800",
   },
 
-  notice: {
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 21,
-    backgroundColor: "#E8F0EA",
+  subscriptionTotal: {
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: "#E8EBE7",
     flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 14,
   },
 
-  noticeIcon: {
-    width: 39,
-    height: 39,
+  totalLabel: {
+    color: "#657269",
+    fontSize: 10,
+  },
+
+  totalValue: {
+    color: "#203128",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  cancelButton: {
+    minHeight: 42,
     borderRadius: 14,
-    backgroundColor: "#D6E6DB",
+    backgroundColor: "#FAECEC",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 14,
   },
 
-  noticeContent: {
-    flex: 1,
-    marginLeft: 11,
-  },
-
-  noticeTitle: {
-    color: "#294534",
-    fontSize: 11,
+  cancelButtonText: {
+    color: "#994646",
+    fontSize: 10,
     fontWeight: "800",
   },
 
-  noticeText: {
-    color: "#637168",
-    fontSize: 9,
-    lineHeight: 15,
-    marginTop: 4,
+  disabledButton: {
+    opacity: 0.55,
   },
 
   pressed: {

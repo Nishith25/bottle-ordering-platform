@@ -19,185 +19,132 @@ import { useSubscriptions } from "../context/SubscriptionContext";
 export default function SubscriptionSuccessScreen() {
   const router = useRouter();
 
-  const { subscriptionId } =
-    useLocalSearchParams<{
-      subscriptionId?: string;
-    }>();
+  const params = useLocalSearchParams<{
+    subscriptionId?:
+      | string
+      | string[];
+  }>();
 
-  const { getSubscriptionById } =
-    useSubscriptions();
+  const subscriptionId = Array.isArray(
+    params.subscriptionId
+  )
+    ? params.subscriptionId[0]
+    : params.subscriptionId;
 
-  const subscription = subscriptionId
-    ? getSubscriptionById(
-        subscriptionId
-      )
-    : undefined;
+  const {
+    lastActivatedSubscription,
+    getSubscriptionById,
+  } = useSubscriptions();
 
-  const paymentMethodLabel =
-    subscription?.paymentMethod ===
-    "upi_autopay"
-      ? "UPI AutoPay"
-      : "Card or eMandate";
+  const subscription =
+    (subscriptionId
+      ? getSubscriptionById(
+          subscriptionId
+        )
+      : undefined) ??
+    lastActivatedSubscription;
+
+  if (!subscription) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <Text style={styles.errorTitle}>
+            Subscription details unavailable
+          </Text>
+
+          <Pressable
+            onPress={() =>
+              router.replace(
+                "/(tabs)/plans"
+              )
+            }
+            style={styles.primaryButton}
+          >
+            <Text
+              style={styles.primaryButtonText}
+            >
+              View subscriptions
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
-          styles.container
+          styles.scrollContent
         }
       >
         <View style={styles.successIcon}>
           <Ionicons
             name="checkmark"
-            size={48}
+            size={43}
             color="#FFFFFF"
           />
         </View>
 
-        <Text style={styles.eyebrow}>
-          SUBSCRIPTION ACTIVATED
-        </Text>
-
         <Text style={styles.title}>
-          Fresh deliveries are now part of
-          your routine.
+          Subscription active
         </Text>
 
-        <Text style={styles.description}>
-          Your bottle mix, address and
-          recurring delivery schedule have
-          been saved.
+        <Text style={styles.subtitle}>
+          Your recurring bottle plan has been
+          saved successfully.
         </Text>
 
-        {subscription ? (
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Subscription
-              </Text>
+        <View style={styles.numberCard}>
+          <Text style={styles.numberLabel}>
+            Subscription number
+          </Text>
 
-              <Text
-                style={styles.summaryValue}
-              >
-                {subscription.displayId}
-              </Text>
-            </View>
+          <Text style={styles.numberValue}>
+            {
+              subscription.subscriptionNumber
+            }
+          </Text>
+        </View>
 
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Plan
-              </Text>
+        <View style={styles.detailsCard}>
+          <DetailRow
+            label="Plan"
+            value={subscription.planName}
+          />
 
-              <Text
-                style={styles.summaryValue}
-              >
-                {subscription.planName}
-              </Text>
-            </View>
+          <DetailRow
+            label="Bottles"
+            value={`${subscription.bottleCount}`}
+          />
 
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Bottle delivery
-              </Text>
+          <DetailRow
+            label="Schedule"
+            value={`${subscription.preferredDay}, ${subscription.preferredSlot}`}
+          />
 
-              <Text
-                style={styles.summaryValue}
-              >
-                {
-                  subscription.bottlesPerDelivery
-                }{" "}
-                bottles
-              </Text>
-            </View>
+          <DetailRow
+            label="Delivery area"
+            value={`${subscription.deliveryAddress.area}, ${subscription.deliveryAddress.city}`}
+          />
 
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Schedule
-              </Text>
+          <DetailRow
+            label="Payment method"
+            value={
+              subscription.paymentMethod ===
+              "upi_autopay"
+                ? "UPI AutoPay"
+                : "Card mandate"
+            }
+          />
 
-              <Text
-                style={styles.summaryValue}
-              >
-                Every{" "}
-                {subscription.preferredDay}
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Delivery slot
-              </Text>
-
-              <Text
-                style={styles.summaryValue}
-              >
-                {subscription.preferredSlot}
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Delivery location
-              </Text>
-
-              <Text
-                style={styles.summaryValue}
-              >
-                {
-                  subscription
-                    .deliveryDetails.area
-                }
-                ,{" "}
-                {
-                  subscription
-                    .deliveryDetails.city
-                }
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Payment method
-              </Text>
-
-              <Text
-                style={styles.summaryValue}
-              >
-                {paymentMethodLabel}
-              </Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>
-                {subscription.billingCycle ===
-                "weekly"
-                  ? "Weekly total"
-                  : "Monthly total"}
-              </Text>
-
-              <Text style={styles.totalValue}>
-                ₹{subscription.total}
-              </Text>
-            </View>
-          </View>
-        ) : null}
+          <DetailRow
+            label="Total per cycle"
+            value={`₹${subscription.totalPerCycle}`}
+            last
+          />
+        </View>
 
         <Pressable
           onPress={() =>
@@ -210,14 +157,8 @@ export default function SubscriptionSuccessScreen() {
           <Text
             style={styles.primaryButtonText}
           >
-            View subscription
+            View my subscriptions
           </Text>
-
-          <Ionicons
-            name="arrow-forward"
-            size={18}
-            color="#FFFFFF"
-          />
         </Pressable>
 
         <Pressable
@@ -241,131 +182,171 @@ export default function SubscriptionSuccessScreen() {
   );
 }
 
+function DetailRow({
+  label,
+  value,
+  last = false,
+}: {
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.detailRow,
+        last && styles.lastDetailRow,
+      ]}
+    >
+      <Text style={styles.detailLabel}>
+        {label}
+      </Text>
+
+      <Text style={styles.detailValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#F7F7F2",
   },
 
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+  scrollContent: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
+    paddingHorizontal: 22,
+    paddingTop: 45,
+    paddingBottom: 45,
     alignItems: "center",
-    justifyContent: "center",
   },
 
   successIcon: {
-    width: 94,
-    height: 94,
-    borderRadius: 47,
+    width: 91,
+    height: 91,
+    borderRadius: 31,
     backgroundColor: "#245C42",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 25,
-  },
-
-  eyebrow: {
-    color: "#4D765F",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.7,
   },
 
   title: {
-    color: "#17221C",
-    fontSize: 27,
-    lineHeight: 34,
+    color: "#18251E",
+    fontSize: 28,
     fontWeight: "900",
-    textAlign: "center",
-    marginTop: 11,
+    marginTop: 22,
   },
 
-  description: {
-    color: "#6F7973",
-    fontSize: 12,
-    lineHeight: 19,
+  subtitle: {
+    color: "#6E7872",
+    fontSize: 11,
+    lineHeight: 18,
     textAlign: "center",
-    marginTop: 10,
-    maxWidth: 340,
+    marginTop: 8,
   },
 
-  summaryCard: {
+  numberCard: {
     width: "100%",
-    padding: 19,
-    borderRadius: 23,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E9E3",
+    padding: 17,
+    borderRadius: 20,
+    backgroundColor: "#E4EFE7",
+    alignItems: "center",
     marginTop: 24,
   },
 
-  summaryRow: {
-    marginVertical: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 15,
+  numberLabel: {
+    color: "#66736B",
+    fontSize: 8,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
 
-  summaryLabel: {
-    color: "#727C76",
-    fontSize: 10,
-  },
-
-  summaryValue: {
-    flex: 1,
-    color: "#26372D",
-    fontSize: 10,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#E8EBE6",
-    marginVertical: 8,
-  },
-
-  totalLabel: {
-    color: "#1D2B23",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  totalValue: {
-    color: "#1D2B23",
-    fontSize: 17,
+  numberValue: {
+    color: "#244A35",
+    fontSize: 15,
     fontWeight: "900",
+    marginTop: 6,
+  },
+
+  detailsCard: {
+    width: "100%",
+    paddingHorizontal: 17,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E8E3",
+    marginTop: 14,
+  },
+
+  detailRow: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8EBE7",
+  },
+
+  lastDetailRow: {
+    borderBottomWidth: 0,
+  },
+
+  detailLabel: {
+    color: "#7A847E",
+    fontSize: 8,
+  },
+
+  detailValue: {
+    color: "#28372F",
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 4,
   },
 
   primaryButton: {
     width: "100%",
-    minHeight: 55,
+    minHeight: 53,
     borderRadius: 18,
     backgroundColor: "#245C42",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 22,
+    marginTop: 19,
   },
 
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   secondaryButton: {
-    minHeight: 48,
-    paddingHorizontal: 25,
+    width: "100%",
+    minHeight: 51,
+    borderRadius: 18,
+    backgroundColor: "#E8EEE8",
+    alignItems: "center",
     justifyContent: "center",
-    marginTop: 7,
+    marginTop: 10,
   },
 
   secondaryButtonText: {
-    color: "#396B51",
-    fontSize: 12,
+    color: "#245C42",
+    fontSize: 11,
     fontWeight: "800",
+  },
+
+  centerState: {
+    flex: 1,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  errorTitle: {
+    color: "#203128",
+    fontSize: 19,
+    fontWeight: "900",
+    textAlign: "center",
   },
 });

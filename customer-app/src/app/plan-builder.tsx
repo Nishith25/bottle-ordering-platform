@@ -7,7 +7,7 @@ import {
 } from "expo-router";
 import { useMemo, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,12 +17,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import BottleVisual from "../components/BottleVisual";
+import { useProducts } from "../context/ProductContext";
 import { useSubscriptions } from "../context/SubscriptionContext";
-import { PRODUCTS } from "../data/products";
-import {
-  getSubscriptionPlan,
-  SUBSCRIPTION_PLANS,
-} from "../data/subscriptionPlans";
 
 const DELIVERY_DAYS = [
   "Monday",
@@ -40,171 +36,227 @@ const DELIVERY_SLOTS = [
   "6:00 PM – 8:00 PM",
 ];
 
-function createDefaultQuantities(
-  bottleCount: number
-) {
-  const eligibleProducts = PRODUCTS.filter(
-    (product) =>
-      product.subscriptionEligible &&
-      product.available
-  );
-
-  const baseQuantity = Math.floor(
-    bottleCount / eligibleProducts.length
-  );
-
-  const remainder =
-    bottleCount % eligibleProducts.length;
-
-  return eligibleProducts.reduce<
-    Record<string, number>
-  >((result, product, index) => {
-    result[product.id] =
-      baseQuantity +
-      (index < remainder ? 1 : 0);
-
-    return result;
-  }, {});
-}
-
 export default function PlanBuilderScreen() {
   const router = useRouter();
 
-  const { planId } =
-    useLocalSearchParams<{
-      planId?: string;
-    }>();
+  const params = useLocalSearchParams<{
+    planId?: string | string[];
+  }>();
 
-  const plan =
-    getSubscriptionPlan(planId ?? "") ??
-    SUBSCRIPTION_PLANS[0];
+  const planId = Array.isArray(
+    params.planId
+  )
+    ? params.planId[0]
+    : params.planId;
 
-  const eligibleProducts = useMemo(
-    () =>
-      PRODUCTS.filter(
-        (product) =>
-          product.subscriptionEligible &&
-          product.available
-      ),
-    []
+  const {
+    products,
+    loading: loadingProducts,
+  } = useProducts();
+
+  const {
+    loadingPlans,
+    getPlanById,
+    setPendingSubscriptionDraft,
+  } = useSubscriptions();
+
+  const plan = planId
+    ? getPlanById(planId)
+    : undefined;
+
+  const [
+    quantities,
+    setQuantities,
+  ] = useState<Record<string, number>>(
+    {}
   );
 
-  const [quantities, setQuantities] = useState<
-    Record<string, number>
-  >(() =>
-    createDefaultQuantities(plan.bottleCount)
+  const [
+    preferredDay,
+    setPreferredDay,
+  ] = useState("Monday");
+
+  const [
+    preferredSlot,
+    setPreferredSlot,
+  ] = useState(DELIVERY_SLOTS[0]);
+
+  const eligibleProducts =
+    useMemo(
+      () =>
+        products.filter(
+          (product) =>
+            product.available &&
+            product.subscriptionEligible
+        ),
+      [products]
+    );
+
+  const selectedCount = Object.values(
+    quantities
+  ).reduce(
+    (sum, quantity) =>
+      sum + quantity,
+    0
   );
 
-  const [preferredDay, setPreferredDay] =
-    useState("Monday");
+  const originalTotal =
+    eligibleProducts.reduce(
+      (sum, product) =>
+        sum +
+        product.price *
+          (quantities[product.id] ?? 0),
+      0
+    );
 
-  const [preferredSlot, setPreferredSlot] =
-    useState(DELIVERY_SLOTS[0]);
+  const savings = plan
+    ? Math.round(
+        originalTotal *
+          (plan.discountPercent / 100)
+      )
+    : 0;
 
-  const { setPendingSubscriptionDraft } =
-    useSubscriptions();
+  const total =
+    originalTotal - savings;
 
-  const selectedBottleCount = useMemo(
-    () =>
-      Object.values(quantities).reduce(
-        (total, quantity) =>
-          total + quantity,
-        0
-      ),
-    [quantities]
-  );
-
-  const originalTotal = useMemo(
-    () =>
-      eligibleProducts.reduce(
-        (total, product) =>
-          total +
-          product.price *
-            (quantities[product.id] ?? 0),
-        0
-      ),
-    [eligibleProducts, quantities]
-  );
-
-  const discountedTotal = Math.round(
-    originalTotal *
-      (1 - plan.discountPercent / 100)
-  );
-
-  const savings =
-    originalTotal - discountedTotal;
-
-  const canContinue =
-    selectedBottleCount ===
-      plan.bottleCount &&
-    preferredDay.length > 0 &&
-    preferredSlot.length > 0;
-
-  const increaseQuantity = (
-    productId: string
+  const updateQuantity = (
+    productId: string,
+    change: number
   ) => {
+    if (!plan) {
+      return;
+    }
+
+    setQuantities(
+      (currentQuantities) => {
+        const current =
+          currentQuantities[productId] ??
+          0;
+
+        const next = Math.max(
+          0,
+          current + change
+        );
+
+        if (
+          change > 0 &&
+          selectedCount >=
+            plan.bottleCount
+        ) {
+          return currentQuantities;
+        }
+
+        return {
+          ...currentQuantities,
+          [productId]: next,
+        };
+      }
+    );
+  };
+
+  const handleContinue = () => {
     if (
-      selectedBottleCount >=
-      plan.bottleCount
+      !plan ||
+      selectedCount !==
+        plan.bottleCount
     ) {
       return;
     }
 
-    setQuantities((current) => ({
-      ...current,
-      [productId]:
-        (current[productId] ?? 0) + 1,
-    }));
-  };
-
-  const decreaseQuantity = (
-    productId: string
-  ) => {
-    setQuantities((current) => ({
-      ...current,
-      [productId]: Math.max(
-        0,
-        (current[productId] ?? 0) - 1
-      ),
-    }));
-  };
-
-  const handleContinue = () => {
-    if (!canContinue) {
-      Alert.alert(
-        "Complete your bottle mix",
-        `Select exactly ${plan.bottleCount} bottles.`
-      );
-
-      return;
-    }
+    const selectedItems =
+      eligibleProducts
+        .filter(
+          (product) =>
+            (quantities[product.id] ??
+              0) > 0
+        )
+        .map((product) => ({
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          quantity:
+            quantities[product.id] ??
+            0,
+        }));
 
     setPendingSubscriptionDraft({
-      planId: plan.id,
-      quantities,
+      planId: plan.planId,
+      items: selectedItems,
       preferredDay,
       preferredSlot,
       originalTotal,
-      total: discountedTotal,
       savings,
+      total,
     });
 
-    router.push("/subscription-checkout");
+    router.push(
+      "/subscription-checkout"
+    );
   };
 
-  const bottlesRemaining =
+  if (
+    loadingPlans ||
+    loadingProducts
+  ) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <ActivityIndicator
+            size="large"
+            color="#245C42"
+          />
+
+          <Text style={styles.loadingText}>
+            Loading plan builder
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <Ionicons
+            name="calendar-outline"
+            size={40}
+            color="#35694E"
+          />
+
+          <Text style={styles.errorTitle}>
+            Plan unavailable
+          </Text>
+
+          <Pressable
+            onPress={() =>
+              router.replace(
+                "/(tabs)/plans"
+              )
+            }
+            style={styles.returnButton}
+          >
+            <Text
+              style={styles.returnButtonText}
+            >
+              Return to plans
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const remaining =
     plan.bottleCount -
-    selectedBottleCount;
+    selectedCount;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.pressed,
-          ]}
+          style={styles.backButton}
         >
           <Ionicons
             name="arrow-back"
@@ -218,7 +270,9 @@ export default function PlanBuilderScreen() {
             Build your plan
           </Text>
 
-          <Text style={styles.headerSubtitle}>
+          <Text
+            style={styles.headerSubtitle}
+          >
             {plan.name}
           </Text>
         </View>
@@ -232,200 +286,89 @@ export default function PlanBuilderScreen() {
           styles.scrollContent
         }
       >
-        <View
-          style={[
-            styles.planSummary,
-            {
-              backgroundColor:
-                plan.lightColor,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.planSummaryIcon,
-              {
-                backgroundColor:
-                  plan.accentColor,
-              },
-            ]}
+        <View style={styles.summaryBanner}>
+          <Text
+            style={styles.summaryBannerTitle}
           >
-            <Ionicons
-              name="repeat-outline"
-              size={25}
-              color="#FFFFFF"
-            />
-          </View>
+            Select exactly{" "}
+            {plan.bottleCount} bottles
+          </Text>
 
-          <View style={styles.planSummaryText}>
-            <Text style={styles.planSummaryName}>
-              {plan.name}
-            </Text>
-
-            <Text
-              style={
-                styles.planSummaryDescription
-              }
-            >
-              {plan.description}
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.discountBadge,
-              {
-                backgroundColor:
-                  plan.accentColor,
-              },
-            ]}
+          <Text
+            style={
+              styles.summaryBannerText
+            }
           >
-            <Text
-              style={styles.discountBadgeText}
-            >
-              {plan.discountPercent}% OFF
-            </Text>
-          </View>
-        </View>
+            {remaining > 0
+              ? `${remaining} bottles remaining`
+              : "Bottle selection complete"}
+          </Text>
 
-        <View style={styles.selectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>
-              Choose your bottle mix
-            </Text>
-
-            <Text
-              style={styles.sectionDescription}
-            >
-              Select exactly{" "}
-              {plan.bottleCount} bottles.
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.selectionCount,
-              selectedBottleCount ===
-                plan.bottleCount &&
-                styles.selectionCountComplete,
-            ]}
-          >
-            <Text
+          <View style={styles.progressTrack}>
+            <View
               style={[
-                styles.selectionCountText,
-                selectedBottleCount ===
-                  plan.bottleCount &&
-                  styles.selectionCountTextComplete,
+                styles.progressFill,
+                {
+                  width: `${Math.min(
+                    100,
+                    (selectedCount /
+                      plan.bottleCount) *
+                      100
+                  )}%`,
+                },
               ]}
-            >
-              {selectedBottleCount}/
-              {plan.bottleCount}
-            </Text>
+            />
           </View>
         </View>
 
-        {bottlesRemaining > 0 ? (
-          <View
-            style={styles.remainingNotice}
-          >
-            <Ionicons
-              name="information-circle-outline"
-              size={17}
-              color="#896917"
-            />
+        <Text style={styles.sectionTitle}>
+          Choose bottles
+        </Text>
 
-            <Text
-              style={
-                styles.remainingNoticeText
-              }
-            >
-              Select {bottlesRemaining} more{" "}
-              {bottlesRemaining === 1
-                ? "bottle"
-                : "bottles"}
-              .
-            </Text>
-          </View>
-        ) : (
-          <View
-            style={styles.completeNotice}
-          >
-            <Ionicons
-              name="checkmark-circle"
-              size={17}
-              color="#34714F"
-            />
-
-            <Text
-              style={
-                styles.completeNoticeText
-              }
-            >
-              Your bottle mix is complete.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.productList}>
+        <View style={styles.productsGrid}>
           {eligibleProducts.map(
             (product) => {
               const quantity =
-                quantities[product.id] ?? 0;
+                quantities[product.id] ??
+                0;
 
               return (
                 <View
                   key={product.id}
-                  style={styles.productCard}
+                  style={[
+                    styles.productCard,
+                    {
+                      backgroundColor:
+                        product.cardColor,
+                    },
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.productVisual,
-                      {
-                        backgroundColor:
-                          product.cardColor,
-                      },
-                    ]}
-                  >
-                    <BottleVisual
-                      label={product.shortName}
-                      liquidColor={
-                        product.liquidColor
-                      }
-                      accentColor={
-                        product.accentColor
-                      }
-                    />
-                  </View>
+                  <BottleVisual
+                    label={
+                      product.shortName
+                    }
+                    liquidColor={
+                      product.liquidColor
+                    }
+                    accentColor={
+                      product.accentColor
+                    }
+                  />
 
-                  <View
+                  <Text
+                    numberOfLines={2}
+                    style={styles.productName}
+                  >
+                    {product.name}
+                  </Text>
+
+                  <Text
                     style={
-                      styles.productInformation
+                      styles.productPrice
                     }
                   >
-                    <Text
-                      style={styles.productName}
-                    >
-                      {product.name}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.productDetails
-                      }
-                    >
-                      {product.sizeMl} ml · ₹
-                      {product.price}
-                    </Text>
-
-                    <Text
-                      numberOfLines={2}
-                      style={
-                        styles.productDescription
-                      }
-                    >
-                      {product.description}
-                    </Text>
-                  </View>
+                    ₹{product.price}
+                  </Text>
 
                   <View
                     style={
@@ -434,60 +377,45 @@ export default function PlanBuilderScreen() {
                   >
                     <Pressable
                       onPress={() =>
-                        decreaseQuantity(
-                          product.id
+                        updateQuantity(
+                          product.id,
+                          -1
                         )
                       }
-                      disabled={quantity === 0}
-                      style={[
-                        styles.quantityButton,
-                        quantity === 0 &&
-                          styles.quantityButtonDisabled,
-                      ]}
+                      style={
+                        styles.quantityButton
+                      }
                     >
                       <Ionicons
                         name="remove"
-                        size={16}
-                        color={
-                          quantity === 0
-                            ? "#A7AFAA"
-                            : "#28563E"
-                        }
+                        size={15}
+                        color="#245C42"
                       />
                     </Pressable>
 
                     <Text
-                      style={styles.quantityText}
+                      style={
+                        styles.quantityText
+                      }
                     >
                       {quantity}
                     </Text>
 
                     <Pressable
                       onPress={() =>
-                        increaseQuantity(
-                          product.id
+                        updateQuantity(
+                          product.id,
+                          1
                         )
                       }
-                      disabled={
-                        selectedBottleCount >=
-                        plan.bottleCount
+                      style={
+                        styles.quantityButton
                       }
-                      style={[
-                        styles.quantityButton,
-                        selectedBottleCount >=
-                          plan.bottleCount &&
-                          styles.quantityButtonDisabled,
-                      ]}
                     >
                       <Ionicons
                         name="add"
-                        size={16}
-                        color={
-                          selectedBottleCount >=
-                          plan.bottleCount
-                            ? "#A7AFAA"
-                            : "#28563E"
-                        }
+                        size={15}
+                        color="#245C42"
                       />
                     </Pressable>
                   </View>
@@ -497,227 +425,138 @@ export default function PlanBuilderScreen() {
           )}
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
-            Preferred delivery day
-          </Text>
+        <Text style={styles.sectionTitle}>
+          Preferred delivery day
+        </Text>
 
-          <Text
-            style={styles.sectionDescription}
-          >
-            Your recurring deliveries will
-            normally arrive on this weekday.
-          </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={
+            false
+          }
+          contentContainerStyle={
+            styles.optionRow
+          }
+        >
+          {DELIVERY_DAYS.map((day) => (
+            <Pressable
+              key={day}
+              onPress={() =>
+                setPreferredDay(day)
+              }
+              style={[
+                styles.optionChip,
+                preferredDay === day &&
+                  styles.optionChipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  preferredDay === day &&
+                    styles.optionTextActive,
+                ]}
+              >
+                {day}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={
-              false
-            }
-            contentContainerStyle={
-              styles.dayRow
-            }
-          >
-            {DELIVERY_DAYS.map((day) => {
-              const selected =
-                preferredDay === day;
+        <Text style={styles.sectionTitle}>
+          Preferred delivery slot
+        </Text>
 
-              return (
-                <Pressable
-                  key={day}
-                  onPress={() =>
-                    setPreferredDay(day)
-                  }
-                  style={[
-                    styles.dayButton,
-                    selected &&
-                      styles.dayButtonSelected,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayButtonText,
-                      selected &&
-                        styles.dayButtonTextSelected,
-                    ]}
-                  >
-                    {day.slice(0, 3)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <View style={styles.slotContainer}>
+          {DELIVERY_SLOTS.map((slot) => (
+            <Pressable
+              key={slot}
+              onPress={() =>
+                setPreferredSlot(slot)
+              }
+              style={[
+                styles.slotButton,
+                preferredSlot === slot &&
+                  styles.slotButtonActive,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={17}
+                color={
+                  preferredSlot === slot
+                    ? "#FFFFFF"
+                    : "#35694E"
+                }
+              />
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
-            Preferred delivery slot
-          </Text>
-
-          <Text
-            style={styles.sectionDescription}
-          >
-            Select your preferred time for
-            recurring deliveries.
-          </Text>
-
-          <View style={styles.slotList}>
-            {DELIVERY_SLOTS.map((slot) => {
-              const selected =
-                preferredSlot === slot;
-
-              return (
-                <Pressable
-                  key={slot}
-                  onPress={() =>
-                    setPreferredSlot(slot)
-                  }
-                  style={[
-                    styles.slotButton,
-                    selected &&
-                      styles.slotButtonSelected,
-                  ]}
-                >
-                  <Ionicons
-                    name="time-outline"
-                    size={17}
-                    color={
-                      selected
-                        ? "#FFFFFF"
-                        : "#42614F"
-                    }
-                  />
-
-                  <Text
-                    style={[
-                      styles.slotText,
-                      selected &&
-                        styles.slotTextSelected,
-                    ]}
-                  >
-                    {slot}
-                  </Text>
-
-                  {selected ? (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#FFFFFF"
-                      style={styles.slotCheck}
-                    />
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
+              <Text
+                style={[
+                  styles.slotText,
+                  preferredSlot === slot &&
+                    styles.slotTextActive,
+                ]}
+              >
+                {slot}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         <View style={styles.priceCard}>
-          <Text
-            style={styles.priceCardTitle}
-          >
-            Plan summary
-          </Text>
-
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>
-              Bottle total
-            </Text>
-
-            <Text style={styles.priceValue}>
-              ₹{originalTotal}
-            </Text>
-          </View>
-
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>
-              Plan saving (
-              {plan.discountPercent}%)
-            </Text>
-
-            <Text
-              style={styles.savingPrice}
-            >
-              − ₹{savings}
-            </Text>
-          </View>
-
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>
-              Recurring delivery
-            </Text>
-
-            <Text
-              style={styles.savingPrice}
-            >
-              Free
-            </Text>
-          </View>
-
-          <View style={styles.priceDivider} />
-
-          <View style={styles.priceRow}>
-            <Text style={styles.totalLabel}>
-              {plan.billingCycle ===
-              "weekly"
-                ? "Weekly total"
-                : "Monthly total"}
-            </Text>
-
-            <Text style={styles.totalValue}>
-              ₹{discountedTotal}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.disclaimer}>
-          <Ionicons
-            name="information-circle-outline"
-            size={19}
-            color="#35694E"
+          <PriceRow
+            label="Bottle total"
+            value={`₹${originalTotal}`}
           />
 
-          <Text
-            style={styles.disclaimerText}
-          >
-            You will enter your address and
-            verify delivery availability on
-            the next screen.
-          </Text>
+          <PriceRow
+            label={`Plan saving (${plan.discountPercent}%)`}
+            value={`− ₹${savings}`}
+            saving
+          />
+
+          <View style={styles.divider} />
+
+          <PriceRow
+            label={
+              plan.billingCycle ===
+              "weekly"
+                ? "Weekly total"
+                : "Monthly total"
+            }
+            value={`₹${total}`}
+            total
+          />
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <View style={styles.bottomPrice}>
-          <Text
-            style={styles.bottomPriceLabel}
-          >
-            {plan.billingCycle === "weekly"
-              ? "Per week"
-              : "Per month"}
+        <View>
+          <Text style={styles.bottomLabel}>
+            Selected
           </Text>
 
-          <Text
-            style={styles.bottomPriceValue}
-          >
-            ₹{discountedTotal}
+          <Text style={styles.bottomValue}>
+            {selectedCount}/
+            {plan.bottleCount}
           </Text>
         </View>
 
         <Pressable
-          disabled={!canContinue}
+          disabled={
+            selectedCount !==
+            plan.bottleCount
+          }
           onPress={handleContinue}
-          style={({ pressed }) => [
-            styles.createButton,
-            !canContinue &&
-              styles.createButtonDisabled,
-            pressed &&
-              canContinue &&
-              styles.pressed,
+          style={[
+            styles.continueButton,
+            selectedCount !==
+              plan.bottleCount &&
+              styles.continueDisabled,
           ]}
         >
           <Text
-            style={styles.createButtonText}
+            style={styles.continueText}
           >
             Continue
           </Text>
@@ -730,6 +569,41 @@ export default function PlanBuilderScreen() {
         </Pressable>
       </View>
     </SafeAreaView>
+  );
+}
+
+function PriceRow({
+  label,
+  value,
+  saving = false,
+  total = false,
+}: {
+  label: string;
+  value: string;
+  saving?: boolean;
+  total?: boolean;
+}) {
+  return (
+    <View style={styles.priceRow}>
+      <Text
+        style={[
+          styles.priceLabel,
+          total && styles.totalLabel,
+        ]}
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={[
+          styles.priceValue,
+          saving && styles.savingValue,
+          total && styles.totalValue,
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -778,255 +652,138 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 155,
+    paddingBottom: 145,
   },
 
-  planSummary: {
+  summaryBanner: {
     padding: 17,
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 22,
+    backgroundColor: "#E8F0EA",
+    marginTop: 10,
   },
 
-  planSummaryIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  planSummaryText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  planSummaryName: {
-    color: "#1D2922",
+  summaryBannerTitle: {
+    color: "#284633",
     fontSize: 14,
     fontWeight: "900",
   },
 
-  planSummaryDescription: {
-    color: "#68736D",
+  summaryBannerText: {
+    color: "#657269",
     fontSize: 9,
-    lineHeight: 14,
-    marginTop: 4,
+    marginTop: 5,
   },
 
-  discountBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 10,
+  progressTrack: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#D0DED3",
+    overflow: "hidden",
+    marginTop: 13,
   },
 
-  discountBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 7,
-    fontWeight: "900",
-  },
-
-  selectionHeader: {
-    marginTop: 25,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
+    backgroundColor: "#245C42",
   },
 
   sectionTitle: {
     color: "#1D2922",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
+    marginTop: 22,
+    marginBottom: 12,
   },
 
-  sectionDescription: {
-    color: "#727B76",
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 4,
-  },
-
-  selectionCount: {
-    minWidth: 57,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "#F3EBD0",
-    alignItems: "center",
-  },
-
-  selectionCountComplete: {
-    backgroundColor: "#E3F0E7",
-  },
-
-  selectionCountText: {
-    color: "#896917",
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  selectionCountTextComplete: {
-    color: "#34714F",
-  },
-
-  remainingNotice: {
-    marginTop: 12,
-    padding: 11,
-    borderRadius: 14,
-    backgroundColor: "#FFF5D9",
+  productsGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  remainingNoticeText: {
-    color: "#806419",
-    fontSize: 9,
-    fontWeight: "700",
-  },
-
-  completeNotice: {
-    marginTop: 12,
-    padding: 11,
-    borderRadius: 14,
-    backgroundColor: "#E7F2EA",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  completeNoticeText: {
-    color: "#34714F",
-    fontSize: 9,
-    fontWeight: "700",
-  },
-
-  productList: {
-    marginTop: 13,
+    flexWrap: "wrap",
     gap: 11,
   },
 
   productCard: {
-    padding: 12,
-    borderRadius: 21,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E9E3",
-    flexDirection: "row",
+    width: "48%",
+    minHeight: 245,
+    padding: 13,
+    borderRadius: 22,
     alignItems: "center",
-  },
-
-  productVisual: {
-    width: 78,
-    height: 103,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    transform: [{ scale: 0.82 }],
-  },
-
-  productInformation: {
-    flex: 1,
-    marginLeft: 6,
   },
 
   productName: {
-    color: "#1D2922",
-    fontSize: 12,
+    color: "#203128",
+    fontSize: 11,
     fontWeight: "900",
+    textAlign: "center",
+    minHeight: 32,
+    marginTop: 8,
   },
 
-  productDetails: {
-    color: "#557064",
-    fontSize: 9,
-    fontWeight: "700",
+  productPrice: {
+    color: "#536159",
+    fontSize: 10,
     marginTop: 4,
-  },
-
-  productDescription: {
-    color: "#7A837E",
-    fontSize: 8,
-    lineHeight: 12,
-    marginTop: 5,
   },
 
   quantityControl: {
     padding: 3,
-    borderRadius: 14,
-    backgroundColor: "#E8F0EA",
+    borderRadius: 13,
+    backgroundColor:
+      "rgba(255,255,255,0.75)",
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 11,
   },
 
   quantityButton: {
-    width: 30,
-    height: 30,
+    width: 31,
+    height: 29,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  quantityButtonDisabled: {
-    opacity: 0.45,
-  },
-
   quantityText: {
-    minWidth: 23,
+    minWidth: 25,
     textAlign: "center",
-    color: "#244C36",
+    color: "#203128",
     fontSize: 12,
     fontWeight: "900",
   },
 
-  sectionCard: {
-    marginTop: 14,
-    padding: 17,
-    borderRadius: 23,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E9E3",
-  },
-
-  dayRow: {
-    marginTop: 15,
+  optionRow: {
     gap: 8,
   },
 
-  dayButton: {
-    width: 55,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: "#F0F3EE",
-    borderWidth: 1,
-    borderColor: "#E1E5DF",
-    alignItems: "center",
-    justifyContent: "center",
+  optionChip: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "#E9ECE7",
   },
 
-  dayButtonSelected: {
+  optionChipActive: {
     backgroundColor: "#245C42",
-    borderColor: "#245C42",
   },
 
-  dayButtonText: {
-    color: "#5E6B64",
+  optionText: {
+    color: "#657269",
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
   },
 
-  dayButtonTextSelected: {
+  optionTextActive: {
     color: "#FFFFFF",
   },
 
-  slotList: {
-    marginTop: 15,
+  slotContainer: {
     gap: 9,
   },
 
   slotButton: {
-    minHeight: 49,
+    minHeight: 48,
     paddingHorizontal: 14,
     borderRadius: 15,
-    backgroundColor: "#F0F3EE",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E1E5DF",
     flexDirection: "row",
@@ -1034,43 +791,32 @@ const styles = StyleSheet.create({
     gap: 9,
   },
 
-  slotButtonSelected: {
+  slotButtonActive: {
     backgroundColor: "#245C42",
     borderColor: "#245C42",
   },
 
   slotText: {
-    color: "#4E5E55",
+    color: "#536159",
     fontSize: 10,
     fontWeight: "700",
   },
 
-  slotTextSelected: {
+  slotTextActive: {
     color: "#FFFFFF",
   },
 
-  slotCheck: {
-    marginLeft: "auto",
-  },
-
   priceCard: {
-    marginTop: 14,
     padding: 18,
     borderRadius: 23,
     backgroundColor: "#E8F0EA",
-  },
-
-  priceCardTitle: {
-    color: "#294534",
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 16,
+    marginTop: 20,
   },
 
   priceRow: {
-    marginBottom: 11,
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 11,
   },
 
   priceLabel: {
@@ -1080,49 +826,30 @@ const styles = StyleSheet.create({
 
   priceValue: {
     color: "#294534",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
   },
 
-  savingPrice: {
+  savingValue: {
     color: "#34714F",
-    fontSize: 10,
-    fontWeight: "800",
   },
 
-  priceDivider: {
+  divider: {
     height: 1,
     backgroundColor: "#D3E0D6",
-    marginVertical: 6,
+    marginBottom: 11,
   },
 
   totalLabel: {
     color: "#233C2E",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
   },
 
   totalValue: {
     color: "#233C2E",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
-  },
-
-  disclaimer: {
-    marginTop: 13,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "#EAF1EC",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-
-  disclaimerText: {
-    flex: 1,
-    color: "#5E6F65",
-    fontSize: 9,
-    lineHeight: 14,
   },
 
   bottomBar: {
@@ -1140,45 +867,72 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  bottomPrice: {
-    width: 93,
-  },
-
-  bottomPriceLabel: {
+  bottomLabel: {
     color: "#78817C",
     fontSize: 9,
   },
 
-  bottomPriceValue: {
+  bottomValue: {
     color: "#1D2922",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
     marginTop: 2,
   },
 
-  createButton: {
+  continueButton: {
     flex: 1,
-    minHeight: 54,
+    minHeight: 53,
     borderRadius: 18,
     backgroundColor: "#245C42",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    marginLeft: 25,
   },
 
-  createButtonDisabled: {
+  continueDisabled: {
     backgroundColor: "#AAB7AE",
   },
 
-  createButtonText: {
+  continueText: {
     color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
-  pressed: {
-    opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+  centerState: {
+    flex: 1,
+    paddingHorizontal: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color: "#657269",
+    fontSize: 11,
+    marginTop: 12,
+  },
+
+  errorTitle: {
+    color: "#203128",
+    fontSize: 19,
+    fontWeight: "900",
+    marginTop: 15,
+  },
+
+  returnButton: {
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: "#245C42",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+
+  returnButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
   },
 });

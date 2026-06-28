@@ -18,19 +18,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSubscriptions } from "../context/SubscriptionContext";
 import { useServiceablePincode } from "../hooks/useServiceablePincode";
-import { getSubscriptionPlan } from "../data/subscriptionPlans";
 
 type FormInputProps = {
   label: string;
   placeholder: string;
   value: string;
   onChangeText: (value: string) => void;
-
   keyboardType?:
     | "default"
     | "phone-pad"
     | "number-pad";
-
   maxLength?: number;
   multiline?: boolean;
 };
@@ -63,7 +60,8 @@ function FormInput({
         }
         style={[
           styles.input,
-          multiline && styles.multilineInput,
+          multiline &&
+            styles.multilineInput,
         ]}
       />
     </View>
@@ -75,6 +73,7 @@ export default function SubscriptionCheckoutScreen() {
 
   const {
     pendingSubscriptionDraft,
+    getPlanById,
     saveSubscriptionDeliveryDetails,
   } = useSubscriptions();
 
@@ -88,11 +87,12 @@ export default function SubscriptionCheckoutScreen() {
     resetPincodeCheck,
   } = useServiceablePincode();
 
-  const plan = pendingSubscriptionDraft
-    ? getSubscriptionPlan(
-        pendingSubscriptionDraft.planId
-      )
-    : undefined;
+  const plan =
+    pendingSubscriptionDraft
+      ? getPlanById(
+          pendingSubscriptionDraft.planId
+        )
+      : undefined;
 
   const [fullName, setFullName] =
     useState("");
@@ -119,12 +119,9 @@ export default function SubscriptionCheckoutScreen() {
   const cleanPhone =
     phone.replace(/\D/g, "");
 
-  const phoneIsValid =
-    cleanPhone.length === 10;
-
   const addressIsComplete =
     fullName.trim().length >= 2 &&
-    phoneIsValid &&
+    cleanPhone.length === 10 &&
     houseDetails.trim().length >= 3 &&
     areaDetails.trim().length >= 3;
 
@@ -147,10 +144,10 @@ export default function SubscriptionCheckoutScreen() {
   const handlePincodeChange = (
     value: string
   ) => {
-    const digitsOnly =
-      value.replace(/\D/g, "");
+    setPincode(
+      value.replace(/\D/g, "")
+    );
 
-    setPincode(digitsOnly);
     resetPincodeCheck();
   };
 
@@ -173,11 +170,6 @@ export default function SubscriptionCheckoutScreen() {
       !canContinue ||
       !serviceableLocation
     ) {
-      Alert.alert(
-        "Complete your delivery details",
-        "Enter a valid address and confirm a serviceable pincode."
-      );
-
       return;
     }
 
@@ -186,29 +178,20 @@ export default function SubscriptionCheckoutScreen() {
         fullName: fullName.trim(),
         phone: cleanPhone,
         pincode,
-
         houseDetails:
           houseDetails.trim(),
-
         areaDetails:
           areaDetails.trim(),
-
         landmark: landmark.trim(),
-
         area: serviceableLocation.area,
         city: serviceableLocation.city,
       });
 
-    if (!saved) {
-      Alert.alert(
-        "Unable to continue",
-        "Your subscription details are missing. Please rebuild the plan."
+    if (saved) {
+      router.push(
+        "/subscription-payment"
       );
-
-      return;
     }
-
-    router.push("/subscription-payment");
   };
 
   if (
@@ -218,23 +201,14 @@ export default function SubscriptionCheckoutScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="repeat-outline"
-              size={38}
-              color="#35694E"
-            />
-          </View>
+          <Ionicons
+            name="repeat-outline"
+            size={40}
+            color="#35694E"
+          />
 
           <Text style={styles.emptyTitle}>
             Plan details unavailable
-          </Text>
-
-          <Text
-            style={styles.emptyDescription}
-          >
-            Choose a weekly or monthly plan
-            before entering your address.
           </Text>
 
           <Pressable
@@ -243,15 +217,10 @@ export default function SubscriptionCheckoutScreen() {
                 "/(tabs)/plans"
               )
             }
-            style={({ pressed }) => [
-              styles.returnButton,
-              pressed && styles.pressed,
-            ]}
+            style={styles.returnButton}
           >
             <Text
-              style={
-                styles.returnButtonText
-              }
+              style={styles.returnButtonText}
             >
               View plans
             </Text>
@@ -274,10 +243,7 @@ export default function SubscriptionCheckoutScreen() {
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.pressed,
-            ]}
+            style={styles.backButton}
           >
             <Ionicons
               name="arrow-back"
@@ -302,125 +268,43 @@ export default function SubscriptionCheckoutScreen() {
         </View>
 
         <ScrollView
-          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={
             styles.scrollContent
           }
         >
-          <View
-            style={styles.progressContainer}
-          >
-            <View style={styles.progressItem}>
-              <View
-                style={styles.progressComplete}
-              >
-                <Ionicons
-                  name="checkmark"
-                  size={15}
-                  color="#FFFFFF"
-                />
-              </View>
-
-              <Text
-                style={styles.progressLabel}
-              >
-                Plan
-              </Text>
-            </View>
-
-            <View
-              style={styles.progressLineActive}
-            />
-
-            <View style={styles.progressItem}>
-              <View
-                style={styles.progressCurrent}
-              >
-                <Text
-                  style={
-                    styles.progressCurrentText
-                  }
-                >
-                  2
-                </Text>
-              </View>
-
-              <Text
-                style={
-                  styles.progressLabelActive
-                }
-              >
-                Delivery
-              </Text>
-            </View>
-
-            <View style={styles.progressLine} />
-
-            <View style={styles.progressItem}>
-              <View
-                style={styles.progressPending}
-              >
-                <Text
-                  style={
-                    styles.progressPendingText
-                  }
-                >
-                  3
-                </Text>
-              </View>
-
-              <Text
-                style={styles.progressLabel}
-              >
-                Payment
-              </Text>
-            </View>
-          </View>
-
           <View style={styles.planCard}>
-            <View style={styles.planIcon}>
-              <Ionicons
-                name="repeat-outline"
-                size={22}
-                color="#35694E"
-              />
-            </View>
+            <Ionicons
+              name="repeat-outline"
+              size={24}
+              color="#35694E"
+            />
 
             <View style={styles.planContent}>
               <Text style={styles.planName}>
                 {plan.name}
               </Text>
 
-              <Text
-                style={styles.planDetails}
-              >
+              <Text style={styles.planDetails}>
                 {plan.bottleCount} bottles ·{" "}
                 {
                   pendingSubscriptionDraft.preferredDay
-                }{" "}
-                ·{" "}
-                {
-                  pendingSubscriptionDraft.preferredSlot
                 }
               </Text>
             </View>
 
             <Text style={styles.planPrice}>
-              ₹{pendingSubscriptionDraft.total}
+              ₹
+              {
+                pendingSubscriptionDraft.total
+              }
             </Text>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               Check delivery availability
-            </Text>
-
-            <Text
-              style={styles.sectionDescription}
-            >
-              Subscriptions are available only
-              in selected delivery locations.
             </Text>
 
             <View style={styles.pincodeRow}>
@@ -433,7 +317,6 @@ export default function SubscriptionCheckoutScreen() {
                 placeholderTextColor="#A0A7A3"
                 keyboardType="number-pad"
                 maxLength={6}
-                editable={!checkingPincode}
                 style={styles.pincodeInput}
               />
 
@@ -442,19 +325,16 @@ export default function SubscriptionCheckoutScreen() {
                 onPress={() => {
                   void handleCheckPincode();
                 }}
-                style={({ pressed }) => [
+                style={[
                   styles.checkButton,
-
                   checkingPincode &&
                     styles.checkButtonDisabled,
-
-                  pressed &&
-                    !checkingPincode &&
-                    styles.pressed,
                 ]}
               >
                 <Text
-                  style={styles.checkButtonText}
+                  style={
+                    styles.checkButtonText
+                  }
                 >
                   {checkingPincode
                     ? "Checking..."
@@ -468,15 +348,11 @@ export default function SubscriptionCheckoutScreen() {
               <View
                 style={styles.availableCard}
               >
-                <View
-                  style={styles.availableIcon}
-                >
-                  <Ionicons
-                    name="checkmark"
-                    size={18}
-                    color="#FFFFFF"
-                  />
-                </View>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={22}
+                  color="#34714F"
+                />
 
                 <View
                   style={styles.statusContent}
@@ -486,8 +362,7 @@ export default function SubscriptionCheckoutScreen() {
                       styles.availableTitle
                     }
                   >
-                    Subscription delivery
-                    available
+                    Delivery available
                   </Text>
 
                   <Text
@@ -497,17 +372,6 @@ export default function SubscriptionCheckoutScreen() {
                   >
                     {serviceableLocation.area},{" "}
                     {serviceableLocation.city}
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.minimumOrderText
-                    }
-                  >
-                    Minimum order ₹
-                    {
-                      serviceableLocation.minimumOrder
-                    }
                   </Text>
                 </View>
               </View>
@@ -520,19 +384,15 @@ export default function SubscriptionCheckoutScreen() {
                   styles.unavailableCard
                 }
               >
-                <View
-                  style={styles.unavailableIcon}
-                >
-                  <Ionicons
-                    name={
-                      pincodeRequestError
-                        ? "cloud-offline-outline"
-                        : "close"
-                    }
-                    size={18}
-                    color="#FFFFFF"
-                  />
-                </View>
+                <Ionicons
+                  name={
+                    pincodeRequestError
+                      ? "cloud-offline-outline"
+                      : "close-circle-outline"
+                  }
+                  size={22}
+                  color="#A34848"
+                />
 
                 <View
                   style={styles.statusContent}
@@ -544,7 +404,7 @@ export default function SubscriptionCheckoutScreen() {
                   >
                     {pincodeRequestError
                       ? "Unable to check pincode"
-                      : "Delivery not available"}
+                      : "Delivery unavailable"}
                   </Text>
 
                   <Text
@@ -552,38 +412,9 @@ export default function SubscriptionCheckoutScreen() {
                       styles.statusDescription
                     }
                   >
-                    {pincodeMessage ??
-                      "We do not serve this pincode yet."}
+                    {pincodeMessage}
                   </Text>
                 </View>
-              </View>
-            ) : null}
-
-            {serviceableLocation &&
-            !meetsMinimumOrder ? (
-              <View
-                style={styles.minimumWarning}
-              >
-                <Ionicons
-                  name="information-circle-outline"
-                  size={18}
-                  color="#8A6815"
-                />
-
-                <Text
-                  style={
-                    styles.minimumWarningText
-                  }
-                >
-                  This plan is ₹
-                  {Math.max(
-                    0,
-                    serviceableLocation.minimumOrder -
-                      pendingSubscriptionDraft.total
-                  )}{" "}
-                  below the minimum order for
-                  this delivery location.
-                </Text>
               </View>
             ) : null}
           </View>
@@ -591,13 +422,6 @@ export default function SubscriptionCheckoutScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               Delivery address
-            </Text>
-
-            <Text
-              style={styles.sectionDescription}
-            >
-              Future recurring deliveries will
-              be sent to this address.
             </Text>
 
             <FormInput
@@ -622,14 +446,14 @@ export default function SubscriptionCheckoutScreen() {
 
             <FormInput
               label="House, flat or building"
-              placeholder="Flat number, house number or building"
+              placeholder="Flat or building details"
               value={houseDetails}
               onChangeText={setHouseDetails}
             />
 
             <FormInput
               label="Area and street"
-              placeholder="Area, street or locality"
+              placeholder="Area or street"
               value={areaDetails}
               onChangeText={setAreaDetails}
               multiline
@@ -644,121 +468,105 @@ export default function SubscriptionCheckoutScreen() {
           </View>
 
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>
-              Subscription summary
-            </Text>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Bottle total
-              </Text>
-
-              <Text
-                style={styles.summaryValue}
-              >
-                ₹
-                {
-                  pendingSubscriptionDraft.originalTotal
-                }
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Plan saving
-              </Text>
-
-              <Text
-                style={styles.savingValue}
-              >
-                − ₹
-                {
-                  pendingSubscriptionDraft.savings
-                }
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text
-                style={styles.summaryLabel}
-              >
-                Recurring delivery
-              </Text>
-
-              <Text
-                style={styles.savingValue}
-              >
-                Free
-              </Text>
-            </View>
-
-            <View
-              style={styles.summaryDivider}
+            <SummaryRow
+              label="Bottle total"
+              value={`₹${pendingSubscriptionDraft.originalTotal}`}
             />
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>
-                {plan.billingCycle ===
+            <SummaryRow
+              label="Plan saving"
+              value={`− ₹${pendingSubscriptionDraft.savings}`}
+              saving
+            />
+
+            <SummaryRow
+              label="Delivery"
+              value="Free"
+              saving
+            />
+
+            <View style={styles.divider} />
+
+            <SummaryRow
+              label={
+                plan.billingCycle ===
                 "weekly"
                   ? "Weekly total"
-                  : "Monthly total"}
-              </Text>
-
-              <Text style={styles.totalValue}>
-                ₹{pendingSubscriptionDraft.total}
-              </Text>
-            </View>
+                  : "Monthly total"
+              }
+              value={`₹${pendingSubscriptionDraft.total}`}
+              total
+            />
           </View>
         </ScrollView>
 
         <View style={styles.bottomBar}>
-          <View style={styles.bottomTotal}>
+          <View>
             <Text style={styles.bottomLabel}>
-              {plan.billingCycle === "weekly"
-                ? "Per week"
-                : "Per month"}
+              Total
             </Text>
 
             <Text style={styles.bottomAmount}>
-              ₹{pendingSubscriptionDraft.total}
+              ₹
+              {
+                pendingSubscriptionDraft.total
+              }
             </Text>
           </View>
 
           <Pressable
             disabled={!canContinue}
             onPress={handleContinue}
-            style={({ pressed }) => [
+            style={[
               styles.continueButton,
-
               !canContinue &&
-                styles.continueButtonDisabled,
-
-              pressed &&
-                canContinue &&
-                styles.pressed,
+                styles.continueDisabled,
             ]}
           >
             <Text
-              style={
-                styles.continueButtonText
-              }
+              style={styles.continueText}
             >
               Continue to payment
             </Text>
-
-            <Ionicons
-              name="arrow-forward"
-              size={18}
-              color="#FFFFFF"
-            />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  saving = false,
+  total = false,
+}: {
+  label: string;
+  value: string;
+  saving?: boolean;
+  total?: boolean;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text
+        style={[
+          styles.summaryLabel,
+          total && styles.totalLabel,
+        ]}
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={[
+          styles.summaryValue,
+          saving && styles.savingValue,
+          total && styles.totalValue,
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -811,103 +619,17 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 150,
-  },
-
-  progressContainer: {
-    marginVertical: 15,
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-
-  progressItem: {
-    alignItems: "center",
-  },
-
-  progressComplete: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    backgroundColor: "#245C42",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  progressCurrent: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#245C42",
-    backgroundColor: "#E4EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  progressPending: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    backgroundColor: "#E5E8E3",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  progressCurrentText: {
-    color: "#245C42",
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  progressPendingText: {
-    color: "#8A928D",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  progressLabel: {
-    color: "#8A928D",
-    fontSize: 9,
-    marginTop: 5,
-  },
-
-  progressLabelActive: {
-    color: "#245C42",
-    fontSize: 9,
-    fontWeight: "800",
-    marginTop: 5,
-  },
-
-  progressLine: {
-    flex: 1,
-    height: 2,
-    marginTop: 15,
-    backgroundColor: "#E2E6E0",
-  },
-
-  progressLineActive: {
-    flex: 1,
-    height: 2,
-    marginTop: 15,
-    backgroundColor: "#245C42",
+    paddingBottom: 145,
   },
 
   planCard: {
-    padding: 15,
+    padding: 16,
     borderRadius: 21,
     backgroundColor: "#E8F0EA",
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 10,
     marginBottom: 14,
-  },
-
-  planIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 14,
-    backgroundColor: "#D6E6DB",
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   planContent: {
@@ -924,7 +646,6 @@ const styles = StyleSheet.create({
   planDetails: {
     color: "#637168",
     fontSize: 9,
-    lineHeight: 14,
     marginTop: 4,
   },
 
@@ -945,16 +666,9 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     color: "#1D2922",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-
-  sectionDescription: {
-    color: "#727B76",
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 5,
-    marginBottom: 16,
+    fontSize: 15,
+    fontWeight: "900",
+    marginBottom: 15,
   },
 
   pincodeRow: {
@@ -971,8 +685,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E5DF",
     color: "#1D2922",
-    fontSize: 13,
-    fontWeight: "600",
   },
 
   checkButton: {
@@ -990,93 +702,49 @@ const styles = StyleSheet.create({
 
   checkButtonText: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
 
   availableCard: {
-    marginTop: 13,
     padding: 13,
     borderRadius: 16,
     backgroundColor: "#E8F3EA",
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 12,
   },
 
   unavailableCard: {
-    marginTop: 13,
     padding: 13,
     borderRadius: 16,
     backgroundColor: "#FAECEC",
     flexDirection: "row",
     alignItems: "center",
-  },
-
-  availableIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
-    backgroundColor: "#32714F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  unavailableIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
-    backgroundColor: "#B45151",
-    alignItems: "center",
-    justifyContent: "center",
+    marginTop: 12,
   },
 
   statusContent: {
     flex: 1,
-    marginLeft: 11,
+    marginLeft: 10,
   },
 
   availableTitle: {
     color: "#285C42",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
 
   unavailableTitle: {
     color: "#963F3F",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
   },
 
   statusDescription: {
     color: "#68736C",
     fontSize: 9,
-    lineHeight: 14,
     marginTop: 3,
-  },
-
-  minimumOrderText: {
-    color: "#486554",
-    fontSize: 8,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-
-  minimumWarning: {
-    marginTop: 11,
-    padding: 11,
-    borderRadius: 14,
-    backgroundColor: "#FFF6DC",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  minimumWarningText: {
-    flex: 1,
-    color: "#7A601E",
-    fontSize: 9,
-    lineHeight: 14,
-    fontWeight: "600",
   },
 
   inputGroup: {
@@ -1098,7 +766,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E5DF",
     color: "#1D2922",
-    fontSize: 13,
   },
 
   multilineInput: {
@@ -1110,25 +777,17 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 24,
     backgroundColor: "#E8F0EA",
-    marginBottom: 15,
-  },
-
-  summaryTitle: {
-    color: "#294534",
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 16,
   },
 
   summaryRow: {
-    marginBottom: 11,
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 11,
   },
 
   summaryLabel: {
     color: "#607067",
-    fontSize: 11,
+    fontSize: 10,
   },
 
   summaryValue: {
@@ -1139,25 +798,22 @@ const styles = StyleSheet.create({
 
   savingValue: {
     color: "#34714F",
-    fontSize: 11,
-    fontWeight: "800",
   },
 
-  summaryDivider: {
+  divider: {
     height: 1,
     backgroundColor: "#D3E0D6",
-    marginVertical: 5,
+    marginBottom: 11,
   },
 
   totalLabel: {
     color: "#233C2E",
-    fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   totalValue: {
     color: "#233C2E",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
   },
 
@@ -1176,10 +832,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  bottomTotal: {
-    width: 90,
-  },
-
   bottomLabel: {
     color: "#78817C",
     fontSize: 9,
@@ -1194,75 +846,49 @@ const styles = StyleSheet.create({
 
   continueButton: {
     flex: 1,
-    minHeight: 54,
+    minHeight: 53,
     borderRadius: 18,
     backgroundColor: "#245C42",
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    marginLeft: 25,
   },
 
-  continueButtonDisabled: {
+  continueDisabled: {
     backgroundColor: "#AAB7AE",
   },
 
-  continueButtonText: {
+  continueText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  pressed: {
-    opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   emptyContainer: {
     flex: 1,
-    paddingHorizontal: 35,
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  emptyIcon: {
-    width: 84,
-    height: 84,
-    borderRadius: 28,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 22,
   },
 
   emptyTitle: {
-    color: "#1C2922",
-    fontSize: 21,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-
-  emptyDescription: {
-    color: "#747E78",
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-    marginTop: 9,
+    color: "#203128",
+    fontSize: 19,
+    fontWeight: "900",
+    marginTop: 15,
   },
 
   returnButton: {
-    minHeight: 51,
-    paddingHorizontal: 27,
-    borderRadius: 17,
+    minHeight: 48,
+    paddingHorizontal: 25,
+    borderRadius: 16,
     backgroundColor: "#245C42",
-    alignItems: "center",
     justifyContent: "center",
-    marginTop: 23,
+    marginTop: 18,
   },
 
   returnButtonText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "800",
   },
 });
