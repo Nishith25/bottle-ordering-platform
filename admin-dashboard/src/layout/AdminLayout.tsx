@@ -20,6 +20,8 @@ const PAGE_TITLES: Record<
   "/orders": "Order management",
   "/locations":
     "Delivery location management",
+  "/plans":
+    "Subscription plan management",
 };
 
 export default function AdminLayout() {
@@ -156,6 +158,26 @@ export default function AdminLayout() {
             </span>
 
             Locations
+          </NavLink>
+
+          <NavLink
+            to="/plans"
+            onClick={closeMobileMenu}
+            className={({
+              isActive,
+            }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ↻
+            </span>
+
+            Subscription Plans
           </NavLink>
         </nav>
 

@@ -13,6 +13,7 @@ import DashboardPage from "./pages/DashboardPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
+import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
 
 export default function App() {
@@ -54,6 +55,11 @@ export default function App() {
             <Route
               path="/locations"
               element={<LocationsPage />}
+            />
+
+            <Route
+              path="/plans"
+              element={<PlansPage />}
             />
           </Route>
         </Route>
