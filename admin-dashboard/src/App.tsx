@@ -15,6 +15,7 @@ import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
+import SubscriptionsPage from "./pages/SubscriptionsPage";
 
 export default function App() {
   return (
@@ -60,6 +61,13 @@ export default function App() {
             <Route
               path="/plans"
               element={<PlansPage />}
+            />
+
+            <Route
+              path="/subscriptions"
+              element={
+                <SubscriptionsPage />
+              }
             />
           </Route>
         </Route>

@@ -18,6 +18,10 @@ const adminOrderRoutes = require(
   "./routes/adminOrders"
 );
 
+const adminSubscriptionRoutes = require(
+  "./routes/adminSubscriptions"
+);
+
 const authRoutes = require(
   "./routes/auth"
 );
@@ -62,7 +66,9 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.length === 0) {
+      if (
+        allowedOrigins.length === 0
+      ) {
         return callback(null, true);
       }
 
@@ -97,27 +103,33 @@ app.use(
   })
 );
 
-if (process.env.NODE_ENV !== "test") {
+if (
+  process.env.NODE_ENV !== "test"
+) {
   app.use(morgan("dev"));
 }
 
-app.get("/api/health", (req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: "Backend is running.",
+app.get(
+  "/api/health",
+  (req, res) => {
+    return res.status(200).json({
+      success: true,
+      message:
+        "Backend is running.",
 
-    environment:
-      process.env.NODE_ENV ||
-      "development",
+      environment:
+        process.env.NODE_ENV ||
+        "development",
 
-    database:
-      mongoose.connection.name ||
-      null,
+      database:
+        mongoose.connection.name ||
+        null,
 
-    timestamp:
-      new Date().toISOString(),
-  });
-});
+      timestamp:
+        new Date().toISOString(),
+    });
+  }
+);
 
 app.use("/api/auth", authRoutes);
 
@@ -142,12 +154,17 @@ app.use(
 );
 
 /*
- * Keep this before /api/admin because
- * adminRoutes also begins with /api/admin.
+ * Specific admin routes must remain
+ * above the general /api/admin route.
  */
 app.use(
   "/api/admin/orders",
   adminOrderRoutes
+);
+
+app.use(
+  "/api/admin/subscriptions",
+  adminSubscriptionRoutes
 );
 
 app.use(
@@ -158,6 +175,7 @@ app.use(
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
+
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
@@ -174,6 +192,7 @@ app.use(
 
       return res.status(409).json({
         success: false,
+
         message: `A record already exists with this ${duplicateField}.`,
       });
     }

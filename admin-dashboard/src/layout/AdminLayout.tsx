@@ -22,6 +22,8 @@ const PAGE_TITLES: Record<
     "Delivery location management",
   "/plans":
     "Subscription plan management",
+  "/subscriptions":
+    "Customer subscription management",
 };
 
 export default function AdminLayout() {
@@ -83,9 +85,7 @@ export default function AdminLayout() {
           <NavLink
             to="/dashboard"
             onClick={closeMobileMenu}
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -103,9 +103,7 @@ export default function AdminLayout() {
           <NavLink
             to="/products"
             onClick={closeMobileMenu}
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -123,9 +121,7 @@ export default function AdminLayout() {
           <NavLink
             to="/orders"
             onClick={closeMobileMenu}
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -143,9 +139,7 @@ export default function AdminLayout() {
           <NavLink
             to="/locations"
             onClick={closeMobileMenu}
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -163,9 +157,25 @@ export default function AdminLayout() {
           <NavLink
             to="/plans"
             onClick={closeMobileMenu}
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ◉
+            </span>
+
+            Plans
+          </NavLink>
+
+          <NavLink
+            to="/subscriptions"
+            onClick={closeMobileMenu}
+            className={({ isActive }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -177,7 +187,7 @@ export default function AdminLayout() {
               ↻
             </span>
 
-            Subscription Plans
+            Subscriptions
           </NavLink>
         </nav>
 
@@ -226,8 +236,7 @@ export default function AdminLayout() {
             className="mobile-menu-button"
             onClick={() =>
               setMobileMenuOpen(
-                (current) =>
-                  !current
+                (current) => !current
               )
             }
           >
