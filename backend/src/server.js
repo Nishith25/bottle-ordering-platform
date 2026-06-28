@@ -5,13 +5,23 @@ require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
 const helmet = require("helmet");
+const mongoose = require("mongoose");
 const morgan = require("morgan");
 
 const connectDB = require("./config/db");
-const authRoutes = require("./routes/auth");
+
+const authRoutes = require(
+  "./routes/auth"
+);
+
 const locationRoutes = require(
   "./routes/locations"
 );
+
+const orderRoutes = require(
+  "./routes/orders"
+);
+
 const productRoutes = require(
   "./routes/products"
 );
@@ -36,14 +46,10 @@ app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      // Native mobile apps may not send
-      // an Origin header.
       if (!origin) {
         return callback(null, true);
       }
 
-      // Allow all origins during local
-      // development when no list is set.
       if (allowedOrigins.length === 0) {
         return callback(null, true);
       }
@@ -89,21 +95,35 @@ app.get("/api/health", (req, res) => {
   return res.status(200).json({
     success: true,
     message: "Backend is running.",
+
     environment:
       process.env.NODE_ENV ||
       "development",
+
     database:
-      require("mongoose").connection
-        .name || null,
-    timestamp: new Date().toISOString(),
+      mongoose.connection.name ||
+      null,
+
+    timestamp:
+      new Date().toISOString(),
   });
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
+
+app.use(
+  "/api/products",
+  productRoutes
+);
+
 app.use(
   "/api/locations",
   locationRoutes
+);
+
+app.use(
+  "/api/orders",
+  orderRoutes
 );
 
 app.use((req, res) => {
@@ -117,16 +137,7 @@ app.use(
   (error, req, res, next) => {
     console.error(error);
 
-    const statusCode =
-      error.statusCode ||
-      (error.name ===
-      "ValidationError"
-        ? 400
-        : 500);
-
-    if (
-      error.code === 11000
-    ) {
+    if (error.code === 11000) {
       const duplicateField =
         Object.keys(
           error.keyPattern || {}
@@ -134,9 +145,16 @@ app.use(
 
       return res.status(409).json({
         success: false,
-        message: `An account already exists with this ${duplicateField}.`,
+        message: `A record already exists with this ${duplicateField}.`,
       });
     }
+
+    const statusCode =
+      error.statusCode ||
+      (error.name ===
+      "ValidationError"
+        ? 400
+        : 500);
 
     return res.status(statusCode).json({
       success: false,
