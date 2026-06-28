@@ -5,23 +5,38 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 
 const connectDB = require("../config/db");
-const Product = require("../models/Product");
+
+const Product = require(
+  "../models/Product"
+);
+
 const ServiceableLocation = require(
   "../models/ServiceableLocation"
 );
 
+const SubscriptionPlan = require(
+  "../models/SubscriptionPlan"
+);
+
 const products = [
   {
-    productId: "coconut-chia-refresh",
-    name: "Coconut Chia Refresh",
+    productId:
+      "coconut-chia-refresh",
+
+    name:
+      "Coconut Chia Refresh",
+
     shortName: "Coconut",
+
     description:
       "A light and refreshing coconut-water blend with fresh fruit and chia seeds.",
+
     ingredients: [
       "Coconut water",
       "Fresh fruit",
       "Chia seeds",
     ],
+
     sizeMl: 300,
     price: 99,
     category: "Hydrating",
@@ -35,16 +50,21 @@ const products = [
   },
 
   {
-    productId: "cane-chia-splash",
+    productId:
+      "cane-chia-splash",
+
     name: "Cane Chia Splash",
     shortName: "Cane Chia",
+
     description:
       "Naturally sweet sugarcane juice balanced with fruit pieces and chia seeds.",
+
     ingredients: [
       "Sugarcane juice",
       "Fresh fruit",
       "Chia seeds",
     ],
+
     sizeMl: 300,
     price: 89,
     category: "Hydrating",
@@ -58,16 +78,21 @@ const products = [
   },
 
   {
-    productId: "watermelon-splash",
+    productId:
+      "watermelon-splash",
+
     name: "Watermelon Splash",
     shortName: "Watermelon",
+
     description:
       "Fresh watermelon juice with juicy fruit pieces and soaked chia seeds.",
+
     ingredients: [
       "Watermelon juice",
       "Fruit pieces",
       "Chia seeds",
     ],
+
     sizeMl: 300,
     price: 109,
     category: "Fruity",
@@ -81,16 +106,21 @@ const products = [
   },
 
   {
-    productId: "pineapple-punch",
+    productId:
+      "pineapple-punch",
+
     name: "Pineapple Punch",
     shortName: "Pineapple",
+
     description:
       "A bright tropical pineapple drink with fruit pieces and chia seeds.",
+
     ingredients: [
       "Pineapple juice",
       "Fruit pieces",
       "Chia seeds",
     ],
+
     sizeMl: 300,
     price: 109,
     category: "Fruity",
@@ -146,22 +176,82 @@ const serviceableLocations = [
   },
 ];
 
-async function seedProducts() {
-  const operations = products.map((product) => ({
-    updateOne: {
-      filter: {
-        productId: product.productId,
-      },
-      update: {
-        $setOnInsert: product,
-      },
-      upsert: true,
-    },
-  }));
+const subscriptionPlans = [
+  {
+    planId: "weekly-fresh",
 
-  const result = await Product.bulkWrite(
-    operations
+    name: "Weekly Fresh Plan",
+
+    description:
+      "Choose four fresh bottles for one recurring delivery every week.",
+
+    billingCycle: "weekly",
+    bottleCount: 4,
+    deliveriesPerCycle: 1,
+    discountPercent: 5,
+
+    badge: "Starter plan",
+
+    features: [
+      "4 bottles per cycle",
+      "1 delivery every week",
+      "5% saving",
+      "Free subscription delivery",
+    ],
+
+    active: true,
+    sortOrder: 1,
+  },
+
+  {
+    planId: "monthly-fresh",
+
+    name: "Monthly Fresh Plan",
+
+    description:
+      "Choose sixteen bottles delivered across four recurring monthly deliveries.",
+
+    billingCycle: "monthly",
+    bottleCount: 16,
+    deliveriesPerCycle: 4,
+    discountPercent: 10,
+
+    badge: "Best value",
+
+    features: [
+      "16 bottles per cycle",
+      "4 deliveries every month",
+      "10% saving",
+      "Free subscription delivery",
+    ],
+
+    active: true,
+    sortOrder: 2,
+  },
+];
+
+async function seedProducts() {
+  const operations = products.map(
+    (product) => ({
+      updateOne: {
+        filter: {
+          productId:
+            product.productId,
+        },
+
+        update: {
+          $setOnInsert: product,
+        },
+
+        upsert: true,
+      },
+    })
   );
+
+  const result =
+    await Product.bulkWrite(
+      operations
+    );
 
   console.log(
     `Products seeded. New products: ${result.upsertedCount}`
@@ -169,19 +259,24 @@ async function seedProducts() {
 }
 
 async function seedLocations() {
-  const operations = serviceableLocations.map(
-    (location) => ({
-      updateOne: {
-        filter: {
-          pincode: location.pincode,
+  const operations =
+    serviceableLocations.map(
+      (location) => ({
+        updateOne: {
+          filter: {
+            pincode:
+              location.pincode,
+          },
+
+          update: {
+            $setOnInsert:
+              location,
+          },
+
+          upsert: true,
         },
-        update: {
-          $setOnInsert: location,
-        },
-        upsert: true,
-      },
-    })
-  );
+      })
+    );
 
   const result =
     await ServiceableLocation.bulkWrite(
@@ -193,12 +288,41 @@ async function seedLocations() {
   );
 }
 
+async function seedSubscriptionPlans() {
+  const operations =
+    subscriptionPlans.map(
+      (plan) => ({
+        updateOne: {
+          filter: {
+            planId: plan.planId,
+          },
+
+          update: {
+            $setOnInsert: plan,
+          },
+
+          upsert: true,
+        },
+      })
+    );
+
+  const result =
+    await SubscriptionPlan.bulkWrite(
+      operations
+    );
+
+  console.log(
+    `Subscription plans seeded. New plans: ${result.upsertedCount}`
+  );
+}
+
 async function seedDatabase() {
   try {
     await connectDB();
 
     await seedProducts();
     await seedLocations();
+    await seedSubscriptionPlans();
 
     console.log(
       "Initial database setup completed successfully."

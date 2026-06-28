@@ -26,6 +26,10 @@ const productRoutes = require(
   "./routes/products"
 );
 
+const subscriptionRoutes = require(
+  "./routes/subscriptions"
+);
+
 const app = express();
 
 const PORT = Number(
@@ -94,7 +98,9 @@ if (
 app.get("/api/health", (req, res) => {
   return res.status(200).json({
     success: true,
-    message: "Backend is running.",
+
+    message:
+      "Backend is running.",
 
     environment:
       process.env.NODE_ENV ||
@@ -109,7 +115,10 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
 app.use(
   "/api/products",
@@ -126,9 +135,15 @@ app.use(
   orderRoutes
 );
 
+app.use(
+  "/api/subscriptions",
+  subscriptionRoutes
+);
+
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
+
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
@@ -145,6 +160,7 @@ app.use(
 
       return res.status(409).json({
         success: false,
+
         message: `A record already exists with this ${duplicateField}.`,
       });
     }
