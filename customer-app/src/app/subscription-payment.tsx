@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -130,30 +131,37 @@ export default function SubscriptionPaymentScreen() {
     useState(false);
 
   const handleConfirm = () => {
-    if (
-      !pendingSubscriptionDraft ||
-      !pendingSubscriptionDraft.deliveryDetails ||
-      !plan ||
-      processing
-    ) {
-      return;
-    }
+  if (
+    !pendingSubscriptionDraft ||
+    !pendingSubscriptionDraft.deliveryDetails ||
+    !plan ||
+    processing
+  ) {
+    return;
+  }
 
-    Alert.alert(
-      "Demo subscription payment",
-      "The recurring payment mandate will be connected through Razorpay after the backend is ready. Continue with a local test confirmation?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Continue",
-          onPress: createSubscription,
-        },
-      ]
-    );
-  };
+  // Expo web does not reliably support Alert.alert action buttons.
+  // Directly create the demo subscription in the browser.
+  if (Platform.OS === "web") {
+    createSubscription();
+    return;
+  }
+
+  Alert.alert(
+    "Demo subscription payment",
+    "The recurring payment mandate will be connected through Razorpay after the backend is ready. Continue with a local test confirmation?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Continue",
+        onPress: createSubscription,
+      },
+    ]
+  );
+};
 
   const createSubscription = () => {
     setProcessing(true);
