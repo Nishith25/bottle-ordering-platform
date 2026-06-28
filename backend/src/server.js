@@ -8,6 +8,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const connectDB = require("./config/db");
+const authRoutes = require("./routes/auth");
 const locationRoutes = require(
   "./routes/locations"
 );
@@ -35,18 +36,21 @@ app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      // Native mobile requests may not send an origin.
+      // Native mobile apps may not send
+      // an Origin header.
       if (!origin) {
         return callback(null, true);
       }
 
-      // During early development, an empty list allows
-      // all browser origins.
+      // Allow all origins during local
+      // development when no list is set.
       if (allowedOrigins.length === 0) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (
+        allowedOrigins.includes(origin)
+      ) {
         return callback(null, true);
       }
 
@@ -63,10 +67,21 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.json({
+    limit: "1mb",
+  })
+);
 
-if (process.env.NODE_ENV !== "test") {
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
+
+if (
+  process.env.NODE_ENV !== "test"
+) {
   app.use(morgan("dev"));
 }
 
@@ -75,13 +90,21 @@ app.get("/api/health", (req, res) => {
     success: true,
     message: "Backend is running.",
     environment:
-      process.env.NODE_ENV || "development",
+      process.env.NODE_ENV ||
+      "development",
+    database:
+      require("mongoose").connection
+        .name || null,
     timestamp: new Date().toISOString(),
   });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
-app.use("/api/locations", locationRoutes);
+app.use(
+  "/api/locations",
+  locationRoutes
+);
 
 app.use((req, res) => {
   return res.status(404).json({
@@ -90,29 +113,48 @@ app.use((req, res) => {
   });
 });
 
-app.use((error, req, res, next) => {
-  console.error(error);
+app.use(
+  (error, req, res, next) => {
+    console.error(error);
 
-  const statusCode =
-    error.statusCode ||
-    (error.name === "ValidationError"
-      ? 400
-      : 500);
+    const statusCode =
+      error.statusCode ||
+      (error.name ===
+      "ValidationError"
+        ? 400
+        : 500);
 
-  return res.status(statusCode).json({
-    success: false,
-    message:
-      statusCode === 500
-        ? "An unexpected server error occurred."
-        : error.message,
-    ...(process.env.NODE_ENV ===
-    "development"
-      ? {
-          stack: error.stack,
-        }
-      : {}),
-  });
-});
+    if (
+      error.code === 11000
+    ) {
+      const duplicateField =
+        Object.keys(
+          error.keyPattern || {}
+        )[0] || "field";
+
+      return res.status(409).json({
+        success: false,
+        message: `An account already exists with this ${duplicateField}.`,
+      });
+    }
+
+    return res.status(statusCode).json({
+      success: false,
+
+      message:
+        statusCode === 500
+          ? "An unexpected server error occurred."
+          : error.message,
+
+      ...(process.env.NODE_ENV ===
+      "development"
+        ? {
+            stack: error.stack,
+          }
+        : {}),
+    });
+  }
+);
 
 async function startServer() {
   try {
