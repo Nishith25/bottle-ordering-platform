@@ -1,17 +1,21 @@
 // customer-app/src/app/payment-result.tsx
 
-import Ionicons from "@expo/vector-icons/Ionicons";
+import Ionicons from
+  "@expo/vector-icons/Ionicons";
 
 import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
 
-import * as WebBrowser from "expo-web-browser";
+import * as WebBrowser from
+  "expo-web-browser";
 
 import {
+  useCallback,
   useEffect,
   useRef,
+  useState,
 } from "react";
 
 import {
@@ -22,10 +26,14 @@ import {
   View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from
+  "react-native-safe-area-context";
 
-import { useAuth } from "../context/AuthContext";
-import { useOrders } from "../context/OrderContext";
+import { useAuth } from
+  "../context/AuthContext";
+
+import { useOrders } from
+  "../context/OrderContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -68,7 +76,7 @@ export default function PaymentResultScreen() {
   const status =
     readParameter(
       params.status
-    );
+    )?.toLowerCase();
 
   const sessionToken =
     readParameter(
@@ -86,28 +94,51 @@ export default function PaymentResultScreen() {
   } = useAuth();
 
   const {
+    checkoutReady,
     placingOrder,
     error,
     completeOnlinePayment,
+    dismissOnlinePaymentSession,
+    clearError,
   } = useOrders();
 
+  const [
+    checkingPayment,
+    setCheckingPayment,
+  ] = useState(false);
+
+  const [
+    localMessage,
+    setLocalMessage,
+  ] =
+    useState<string | null>(
+      null
+    );
+
   useEffect(() => {
-    if (
-      authLoading ||
-      !isAuthenticated ||
-      !sessionToken ||
-      startedRef.current
-    ) {
-      return;
-    }
+    clearError();
+  }, [clearError]);
 
-    startedRef.current = true;
+  const verifyPayment =
+    useCallback(async () => {
+      if (!sessionToken) {
+        setLocalMessage(
+          "Payment session information is missing."
+        );
 
-    void (async () => {
+        return;
+      }
+
+      setCheckingPayment(true);
+      setLocalMessage(null);
+      clearError();
+
       const order =
         await completeOnlinePayment(
           sessionToken
         );
+
+      setCheckingPayment(false);
 
       if (order) {
         router.replace({
@@ -119,22 +150,66 @@ export default function PaymentResultScreen() {
               order._id,
           },
         });
+
+        return;
       }
-    })();
+
+      setLocalMessage(
+        returnedMessage ||
+          "Payment confirmation is still processing. You can check again."
+      );
+    }, [
+      sessionToken,
+      returnedMessage,
+      completeOnlinePayment,
+      clearError,
+      router,
+    ]);
+
+  useEffect(() => {
+    if (
+      authLoading ||
+      !checkoutReady ||
+      !isAuthenticated ||
+      startedRef.current
+    ) {
+      return;
+    }
+
+    startedRef.current = true;
+
+    if (
+      status === "failed" ||
+      status === "cancelled"
+    ) {
+      dismissOnlinePaymentSession();
+
+      setLocalMessage(
+        returnedMessage ||
+          (status === "cancelled"
+            ? "Payment was cancelled. Your cart has been retained."
+            : "Payment failed. Please use another payment method.")
+      );
+
+      return;
+    }
+
+    void verifyPayment();
   }, [
     authLoading,
+    checkoutReady,
     isAuthenticated,
-    sessionToken,
-    completeOnlinePayment,
-    router,
+    status,
+    returnedMessage,
+    dismissOnlinePaymentSession,
+    verifyPayment,
   ]);
 
   if (
     authLoading ||
-    placingOrder ||
-    (sessionToken &&
-      status === "success" &&
-      !error)
+    !checkoutReady ||
+    checkingPayment ||
+    placingOrder
   ) {
     return (
       <SafeAreaView
@@ -158,7 +233,7 @@ export default function PaymentResultScreen() {
             style={styles.description}
           >
             Please wait while the backend
-            verifies your Razorpay payment.
+            checks your Razorpay payment.
           </Text>
         </View>
       </SafeAreaView>
@@ -202,7 +277,12 @@ export default function PaymentResultScreen() {
                 "/login"
               )
             }
-            style={styles.primaryButton}
+            style={({ pressed }) => [
+              styles.primaryButton,
+
+              pressed &&
+                styles.pressed,
+            ]}
           >
             <Text
               style={
@@ -217,6 +297,18 @@ export default function PaymentResultScreen() {
     );
   }
 
+  const paymentCancelled =
+    status === "cancelled";
+
+  const paymentFailed =
+    status === "failed";
+
+  const displayMessage =
+    returnedMessage ||
+    localMessage ||
+    error ||
+    "The payment could not be confirmed. No order has been created.";
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -228,20 +320,20 @@ export default function PaymentResultScreen() {
           style={[
             styles.icon,
 
-            status === "cancelled"
+            paymentCancelled
               ? styles.warningIcon
               : styles.errorIcon,
           ]}
         >
           <Ionicons
             name={
-              status === "cancelled"
+              paymentCancelled
                 ? "close-outline"
                 : "alert-outline"
             }
             size={36}
             color={
-              status === "cancelled"
+              paymentCancelled
                 ? "#826014"
                 : "#9A4949"
             }
@@ -249,35 +341,64 @@ export default function PaymentResultScreen() {
         </View>
 
         <Text style={styles.title}>
-          {status === "cancelled"
+          {paymentCancelled
             ? "Payment cancelled"
-            : "Payment not confirmed"}
+            : paymentFailed
+              ? "Payment failed"
+              : "Payment not confirmed"}
         </Text>
 
         <Text
           style={styles.description}
         >
-          {error ||
-            returnedMessage ||
-            "The payment could not be confirmed. No order has been created."}
+          {displayMessage}
         </Text>
 
-        <Pressable
-          onPress={() =>
-            router.replace(
-              "/payment"
-            )
-          }
-          style={styles.primaryButton}
-        >
-          <Text
-            style={
-              styles.primaryButtonText
-            }
+        {!paymentFailed &&
+        !paymentCancelled &&
+        sessionToken ? (
+          <Pressable
+            onPress={() => {
+              void verifyPayment();
+            }}
+            style={({ pressed }) => [
+              styles.primaryButton,
+
+              pressed &&
+                styles.pressed,
+            ]}
           >
-            Return to payment
-          </Text>
-        </Pressable>
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Check payment again
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() =>
+              router.replace(
+                "/payment"
+              )
+            }
+            style={({ pressed }) => [
+              styles.primaryButton,
+
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Return to payment
+            </Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={() =>
@@ -285,9 +406,12 @@ export default function PaymentResultScreen() {
               "/(tabs)/orders"
             )
           }
-          style={
-            styles.secondaryButton
-          }
+          style={({ pressed }) => [
+            styles.secondaryButton,
+
+            pressed &&
+              styles.pressed,
+          ]}
         >
           <Text
             style={
@@ -295,6 +419,34 @@ export default function PaymentResultScreen() {
             }
           >
             Check my orders
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() =>
+            router.replace(
+              "/cart"
+            )
+          }
+          style={({ pressed }) => [
+            styles.cartButton,
+
+            pressed &&
+              styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="bag-outline"
+            size={17}
+            color="#245C42"
+          />
+
+          <Text
+            style={
+              styles.cartButtonText
+            }
+          >
+            View retained cart
           </Text>
         </Pressable>
       </View>
@@ -317,7 +469,8 @@ const styles =
       alignSelf: "center",
       paddingHorizontal: 30,
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent:
+        "center",
     },
 
     icon: {
@@ -391,5 +544,33 @@ const styles =
       color: "#245C42",
       fontSize: 12,
       fontWeight: "800",
+    },
+
+    cartButton: {
+      minHeight: 45,
+      paddingHorizontal: 17,
+      borderRadius: 15,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 7,
+      marginTop: 12,
+    },
+
+    cartButtonText: {
+      color: "#245C42",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    pressed: {
+      opacity: 0.84,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
     },
   });

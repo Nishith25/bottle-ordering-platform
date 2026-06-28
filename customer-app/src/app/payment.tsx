@@ -1,9 +1,16 @@
 // customer-app/src/app/payment.tsx
 
-import Ionicons from "@expo/vector-icons/Ionicons";
-import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
+import Ionicons from
+  "@expo/vector-icons/Ionicons";
+
+import * as Linking from
+  "expo-linking";
+
+import { useRouter } from
+  "expo-router";
+
+import * as WebBrowser from
+  "expo-web-browser";
 
 import {
   useEffect,
@@ -21,10 +28,14 @@ import {
   View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from
+  "react-native-safe-area-context";
 
-import { useAuth } from "../context/AuthContext";
-import { useOrders } from "../context/OrderContext";
+import { useAuth } from
+  "../context/AuthContext";
+
+import { useOrders } from
+  "../context/OrderContext";
 
 import type {
   OrderPaymentMethod,
@@ -51,11 +62,13 @@ export default function PaymentScreen() {
 
   const {
     pendingCheckout,
+    checkoutReady,
     placingOrder,
     error,
     placeOrder,
     startOnlinePayment,
     completeOnlinePayment,
+    dismissOnlinePaymentSession,
     clearError,
   } = useOrders();
 
@@ -80,19 +93,33 @@ export default function PaymentScreen() {
     setBrowserMessage(null);
   }, [clearError]);
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace(
+      "/checkout"
+    );
+  };
+
   const handlePlaceOrder =
     async () => {
       if (
         !pendingCheckout ||
-        placingOrder
+        placingOrder ||
+        !checkoutReady
       ) {
         return;
       }
 
+      clearError();
       setBrowserMessage(null);
 
       if (
-        selectedMethod === "cod"
+        selectedMethod ===
+        "cod"
       ) {
         const order =
           await placeOrder("cod");
@@ -149,8 +176,10 @@ export default function PaymentScreen() {
           browserResult.type !==
           "success"
         ) {
+          dismissOnlinePaymentSession();
+
           setBrowserMessage(
-            "Payment window was closed. Reserved stock will be released automatically if payment was not completed."
+            "Payment window was closed. Your cart and delivery details have been retained."
           );
 
           return;
@@ -189,6 +218,25 @@ export default function PaymentScreen() {
               | undefined
           );
 
+        if (
+          returnedStatus ===
+            "failed" ||
+          returnedStatus ===
+            "cancelled"
+        ) {
+          dismissOnlinePaymentSession();
+
+          setBrowserMessage(
+            returnedMessage ||
+              (returnedStatus ===
+              "cancelled"
+                ? "Payment was cancelled."
+                : "Payment failed. Please use another payment method.")
+          );
+
+          return;
+        }
+
         const order =
           await completeOnlinePayment(
             returnedSession
@@ -210,14 +258,14 @@ export default function PaymentScreen() {
 
         setBrowserMessage(
           returnedMessage ||
-            (returnedStatus ===
-            "cancelled"
-              ? "Payment was cancelled."
-              : "Payment confirmation is still processing.")
+            "Payment confirmation is still processing. Please check again."
         );
       } catch (paymentError) {
+        dismissOnlinePaymentSession();
+
         const message =
-          paymentError instanceof Error
+          paymentError instanceof
+            Error
             ? paymentError.message
             : "Unable to open Razorpay Checkout.";
 
@@ -232,7 +280,10 @@ export default function PaymentScreen() {
       }
     };
 
-  if (authLoading) {
+  if (
+    authLoading ||
+    !checkoutReady
+  ) {
     return (
       <SafeAreaView
         style={styles.safeArea}
@@ -248,11 +299,9 @@ export default function PaymentScreen() {
           />
 
           <Text
-            style={
-              styles.loadingText
-            }
+            style={styles.loadingText}
           >
-            Checking your account
+            Restoring checkout details
           </Text>
         </View>
       </SafeAreaView>
@@ -328,9 +377,7 @@ export default function PaymentScreen() {
       >
         <View style={styles.header}>
           <Pressable
-            onPress={() =>
-              router.back()
-            }
+            onPress={handleBack}
             style={({ pressed }) => [
               styles.backButton,
 
@@ -444,9 +491,7 @@ export default function PaymentScreen() {
       <View style={styles.header}>
         <Pressable
           disabled={placingOrder}
-          onPress={() =>
-            router.back()
-          }
+          onPress={handleBack}
           style={({ pressed }) => [
             styles.backButton,
 
@@ -584,6 +629,19 @@ export default function PaymentScreen() {
               }
             </Text>
 
+            {pendingCheckout.landmark ? (
+              <Text
+                style={
+                  styles.cardDescription
+                }
+              >
+                Near{" "}
+                {
+                  pendingCheckout.landmark
+                }
+              </Text>
+            ) : null}
+
             <Text
               style={
                 styles.cardDescription
@@ -592,6 +650,14 @@ export default function PaymentScreen() {
               {pendingCheckout.area},{" "}
               {pendingCheckout.city} –{" "}
               {pendingCheckout.pincode}
+            </Text>
+
+            <Text
+              style={
+                styles.cardDescription
+              }
+            >
+              +91 {pendingCheckout.phone}
             </Text>
           </View>
         </View>
@@ -652,11 +718,13 @@ export default function PaymentScreen() {
             selectedMethod ===
             "cod"
           }
-          onPress={() =>
+          onPress={() => {
+            clearError();
+            setBrowserMessage(null);
             setSelectedMethod(
               "cod"
-            )
-          }
+            );
+          }}
         />
 
         <PaymentOption
@@ -667,11 +735,13 @@ export default function PaymentScreen() {
             selectedMethod ===
             "online"
           }
-          onPress={() =>
+          onPress={() => {
+            clearError();
+            setBrowserMessage(null);
             setSelectedMethod(
               "online"
-            )
-          }
+            );
+          }}
         />
 
         {selectedMethod ===
@@ -691,10 +761,9 @@ export default function PaymentScreen() {
               }
             >
               Razorpay Checkout opens
-              securely in your browser.
-              Payment is confirmed by the
-              backend before your order is
-              created.
+              securely. Failed or cancelled
+              payments will not clear your
+              cart.
             </Text>
           </View>
         ) : null}
@@ -713,8 +782,8 @@ export default function PaymentScreen() {
             <Text
               style={styles.errorText}
             >
-              {error ||
-                browserMessage}
+              {browserMessage ||
+                error}
             </Text>
           </View>
         ) : null}
@@ -848,8 +917,10 @@ function PaymentOption({
 }: {
   title: string;
   description: string;
+
   icon:
     keyof typeof Ionicons.glyphMap;
+
   selected: boolean;
   onPress: () => void;
 }) {
@@ -957,434 +1028,471 @@ function SummaryRow({
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F7F7F2",
-  },
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        "#F7F7F2",
+    },
 
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    header: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: "#E9ECE6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 16,
+      backgroundColor:
+        "#E9ECE6",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  disabledButton: {
-    opacity: 0.5,
-  },
+    disabledButton: {
+      opacity: 0.5,
+    },
 
-  headerText: {
-    flex: 1,
-    alignItems: "center",
-  },
+    headerText: {
+      flex: 1,
+      alignItems: "center",
+    },
 
-  headerTitle: {
-    color: "#19251E",
-    fontSize: 17,
-    fontWeight: "800",
-  },
+    headerTitle: {
+      color: "#19251E",
+      fontSize: 17,
+      fontWeight: "800",
+    },
 
-  headerSubtitle: {
-    color: "#77807B",
-    fontSize: 9,
-    marginTop: 3,
-  },
+    headerSubtitle: {
+      color: "#77807B",
+      fontSize: 9,
+      marginTop: 3,
+    },
 
-  headerSpacer: {
-    width: 44,
-  },
+    headerSpacer: {
+      width: 44,
+    },
 
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 140,
-  },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 140,
+    },
 
-  progressContainer: {
-    marginVertical: 15,
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    progressContainer: {
+      marginVertical: 15,
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  completeStep: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    backgroundColor: "#245C42",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    completeStep: {
+      width: 31,
+      height: 31,
+      borderRadius: 16,
+      backgroundColor:
+        "#245C42",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  currentStep: {
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#245C42",
-    backgroundColor: "#E4EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    currentStep: {
+      width: 31,
+      height: 31,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: "#245C42",
+      backgroundColor:
+        "#E4EFE7",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  currentStepText: {
-    color: "#245C42",
-    fontSize: 11,
-    fontWeight: "900",
-  },
+    currentStepText: {
+      color: "#245C42",
+      fontSize: 11,
+      fontWeight: "900",
+    },
 
-  progressLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: "#245C42",
-  },
+    progressLine: {
+      flex: 1,
+      height: 2,
+      backgroundColor:
+        "#245C42",
+    },
 
-  addressCard: {
-    padding: 16,
-    borderRadius: 21,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E8E3",
-    flexDirection: "row",
-    marginBottom: 11,
-  },
+    addressCard: {
+      padding: 16,
+      borderRadius: 21,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E5E8E3",
+      flexDirection: "row",
+      marginBottom: 11,
+    },
 
-  cardIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 14,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    cardIcon: {
+      width: 43,
+      height: 43,
+      borderRadius: 14,
+      backgroundColor:
+        "#E5EFE7",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  cardContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
+    cardContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
 
-  cardTitle: {
-    color: "#26382E",
-    fontSize: 12,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
+    cardTitle: {
+      color: "#26382E",
+      fontSize: 12,
+      fontWeight: "800",
+      marginBottom: 5,
+    },
 
-  cardDescription: {
-    color: "#6E7972",
-    fontSize: 10,
-    lineHeight: 15,
-  },
+    cardDescription: {
+      color: "#6E7972",
+      fontSize: 10,
+      lineHeight: 15,
+    },
 
-  sectionTitle: {
-    color: "#1D2922",
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 12,
-    marginBottom: 11,
-  },
+    sectionTitle: {
+      color: "#1D2922",
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 12,
+      marginBottom: 11,
+    },
 
-  paymentOption: {
-    padding: 15,
-    borderRadius: 19,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E7E1",
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
+    paymentOption: {
+      padding: 15,
+      borderRadius: 19,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E7E1",
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 10,
+    },
 
-  paymentOptionSelected: {
-    borderColor: "#245C42",
-    backgroundColor: "#EDF5EF",
-  },
+    paymentOptionSelected: {
+      borderColor: "#245C42",
+      backgroundColor:
+        "#EDF5EF",
+    },
 
-  paymentIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
-    backgroundColor: "#E6EFE8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    paymentIcon: {
+      width: 45,
+      height: 45,
+      borderRadius: 15,
+      backgroundColor:
+        "#E6EFE8",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  paymentIconSelected: {
-    backgroundColor: "#245C42",
-  },
+    paymentIconSelected: {
+      backgroundColor:
+        "#245C42",
+    },
 
-  paymentContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
+    paymentContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
 
-  paymentTitle: {
-    color: "#26352D",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    paymentTitle: {
+      color: "#26352D",
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
-  paymentDescription: {
-    color: "#758079",
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 4,
-  },
+    paymentDescription: {
+      color: "#758079",
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: 4,
+    },
 
-  radioOuter: {
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#AAB4AD",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    radioOuter: {
+      width: 21,
+      height: 21,
+      borderRadius: 11,
+      borderWidth: 2,
+      borderColor: "#AAB4AD",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  radioOuterSelected: {
-    borderColor: "#245C42",
-  },
+    radioOuterSelected: {
+      borderColor: "#245C42",
+    },
 
-  radioInner: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: "#245C42",
-  },
+    radioInner: {
+      width: 11,
+      height: 11,
+      borderRadius: 6,
+      backgroundColor:
+        "#245C42",
+    },
 
-  infoNotice: {
-    padding: 13,
-    borderRadius: 16,
-    backgroundColor: "#E8F0EA",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    marginBottom: 12,
-  },
+    infoNotice: {
+      padding: 13,
+      borderRadius: 16,
+      backgroundColor:
+        "#E8F0EA",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      marginBottom: 12,
+    },
 
-  infoNoticeText: {
-    flex: 1,
-    color: "#55675C",
-    fontSize: 9,
-    lineHeight: 15,
-  },
+    infoNoticeText: {
+      flex: 1,
+      color: "#55675C",
+      fontSize: 9,
+      lineHeight: 15,
+    },
 
-  errorCard: {
-    padding: 13,
-    borderRadius: 16,
-    backgroundColor: "#FAECEC",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    marginBottom: 12,
-  },
+    errorCard: {
+      padding: 13,
+      borderRadius: 16,
+      backgroundColor:
+        "#FAECEC",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      marginBottom: 12,
+    },
 
-  errorText: {
-    flex: 1,
-    color: "#934545",
-    fontSize: 10,
-    lineHeight: 15,
-  },
+    errorText: {
+      flex: 1,
+      color: "#934545",
+      fontSize: 10,
+      lineHeight: 15,
+    },
 
-  summaryCard: {
-    padding: 18,
-    borderRadius: 23,
-    backgroundColor: "#E8F0EA",
-    marginTop: 5,
-  },
+    summaryCard: {
+      padding: 18,
+      borderRadius: 23,
+      backgroundColor:
+        "#E8F0EA",
+      marginTop: 5,
+    },
 
-  summaryTitle: {
-    color: "#294534",
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 15,
-  },
+    summaryTitle: {
+      color: "#294534",
+      fontSize: 14,
+      fontWeight: "900",
+      marginBottom: 15,
+    },
 
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 11,
-  },
+    summaryRow: {
+      flexDirection: "row",
+      justifyContent:
+        "space-between",
+      marginBottom: 11,
+    },
 
-  summaryLabel: {
-    color: "#607067",
-    fontSize: 11,
-  },
+    summaryLabel: {
+      color: "#607067",
+      fontSize: 11,
+    },
 
-  summaryValue: {
-    color: "#294534",
-    fontSize: 11,
-    fontWeight: "700",
-  },
+    summaryValue: {
+      color: "#294534",
+      fontSize: 11,
+      fontWeight: "700",
+    },
 
-  summaryDivider: {
-    height: 1,
-    backgroundColor: "#D3E0D6",
-    marginBottom: 11,
-  },
+    summaryDivider: {
+      height: 1,
+      backgroundColor:
+        "#D3E0D6",
+      marginBottom: 11,
+    },
 
-  totalLabel: {
-    color: "#233C2E",
-    fontSize: 13,
-    fontWeight: "900",
-  },
+    totalLabel: {
+      color: "#233C2E",
+      fontSize: 13,
+      fontWeight: "900",
+    },
 
-  totalValue: {
-    color: "#233C2E",
-    fontSize: 17,
-    fontWeight: "900",
-  },
+    totalValue: {
+      color: "#233C2E",
+      fontSize: 17,
+      fontWeight: "900",
+    },
 
-  secureNotice: {
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 12,
-  },
+    secureNotice: {
+      padding: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 12,
+    },
 
-  secureNoticeText: {
-    flex: 1,
-    color: "#6B7770",
-    fontSize: 9,
-    lineHeight: 15,
-  },
+    secureNoticeText: {
+      flex: 1,
+      color: "#6B7770",
+      fontSize: 9,
+      lineHeight: 15,
+    },
 
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 20,
-    paddingTop: 13,
-    paddingBottom: 24,
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#E5E8E3",
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    bottomBar: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 20,
+      paddingTop: 13,
+      paddingBottom: 24,
+      backgroundColor:
+        "#FFFFFF",
+      borderTopWidth: 1,
+      borderTopColor:
+        "#E5E8E3",
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  bottomLabel: {
-    color: "#78817C",
-    fontSize: 9,
-  },
+    bottomLabel: {
+      color: "#78817C",
+      fontSize: 9,
+    },
 
-  bottomAmount: {
-    color: "#1D2922",
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 2,
-  },
+    bottomAmount: {
+      color: "#1D2922",
+      fontSize: 18,
+      fontWeight: "900",
+      marginTop: 2,
+    },
 
-  placeOrderButton: {
-    flex: 1,
-    minHeight: 54,
-    borderRadius: 18,
-    backgroundColor: "#245C42",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginLeft: 25,
-  },
+    placeOrderButton: {
+      flex: 1,
+      minHeight: 54,
+      borderRadius: 18,
+      backgroundColor:
+        "#245C42",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 8,
+      marginLeft: 25,
+    },
 
-  placeOrderDisabled: {
-    backgroundColor: "#91A69A",
-  },
+    placeOrderDisabled: {
+      backgroundColor:
+        "#91A69A",
+    },
 
-  placeOrderText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-  },
+    placeOrderText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
+    },
 
-  centerContainer: {
-    flex: 1,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    centerContainer: {
+      flex: 1,
+      paddingHorizontal: 32,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  loadingText: {
-    color: "#607067",
-    fontSize: 12,
-    marginTop: 14,
-  },
+    loadingText: {
+      color: "#607067",
+      fontSize: 12,
+      marginTop: 14,
+    },
 
-  emptyIcon: {
-    width: 82,
-    height: 82,
-    borderRadius: 27,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    emptyIcon: {
+      width: 82,
+      height: 82,
+      borderRadius: 27,
+      backgroundColor:
+        "#E5EFE7",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  emptyTitle: {
-    color: "#1D2922",
-    fontSize: 20,
-    fontWeight: "900",
-    textAlign: "center",
-    marginTop: 20,
-  },
+    emptyTitle: {
+      color: "#1D2922",
+      fontSize: 20,
+      fontWeight: "900",
+      textAlign: "center",
+      marginTop: 20,
+    },
 
-  emptyDescription: {
-    color: "#727D76",
-    fontSize: 12,
-    lineHeight: 19,
-    textAlign: "center",
-    marginTop: 8,
-  },
+    emptyDescription: {
+      color: "#727D76",
+      fontSize: 12,
+      lineHeight: 19,
+      textAlign: "center",
+      marginTop: 8,
+    },
 
-  primaryAction: {
-    width: "100%",
-    maxWidth: 340,
-    minHeight: 52,
-    borderRadius: 17,
-    backgroundColor: "#245C42",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 22,
-  },
+    primaryAction: {
+      width: "100%",
+      maxWidth: 340,
+      minHeight: 52,
+      borderRadius: 17,
+      backgroundColor:
+        "#245C42",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginTop: 22,
+    },
 
-  primaryActionText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    primaryActionText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
-  secondaryAction: {
-    width: "100%",
-    maxWidth: 340,
-    minHeight: 52,
-    borderRadius: 17,
-    backgroundColor: "#E8EEE8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 10,
-  },
+    secondaryAction: {
+      width: "100%",
+      maxWidth: 340,
+      minHeight: 52,
+      borderRadius: 17,
+      backgroundColor:
+        "#E8EEE8",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginTop: 10,
+    },
 
-  secondaryActionText: {
-    color: "#245C42",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    secondaryActionText: {
+      color: "#245C42",
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
-  pressed: {
-    opacity: 0.84,
-    transform: [
-      {
-        scale: 0.98,
-      },
-    ],
-  },
-});
+    pressed: {
+      opacity: 0.84,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+  });

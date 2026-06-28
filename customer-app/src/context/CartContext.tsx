@@ -1,10 +1,14 @@
 // customer-app/src/context/CartContext.tsx
 
+import AsyncStorage from
+  "@react-native-async-storage/async-storage";
+
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -22,6 +26,7 @@ type CartContextValue = {
   items: CartItem[];
   itemCount: number;
   subtotal: number;
+  hydrated: boolean;
 
   addItem: (
     product: Product
@@ -55,21 +60,65 @@ const CartContext =
     CartContextValue | undefined
   >(undefined);
 
+const CART_STORAGE_KEY =
+  "@sipbite/cart:v1";
+
 const MAX_ORDER_QUANTITY = 50;
+
+function getAvailableStock(
+  product: Product
+) {
+  const stock = Number(
+    product.stockQuantity
+  );
+
+  if (!Number.isFinite(stock)) {
+    return MAX_ORDER_QUANTITY;
+  }
+
+  return Math.max(
+    0,
+    Math.floor(stock)
+  );
+}
 
 function getProductLimit(
   product: Product
 ) {
-  if (
-    !product.available ||
-    product.stockQuantity <= 0
-  ) {
+  if (!product.available) {
     return 0;
   }
 
   return Math.min(
-    product.stockQuantity,
+    getAvailableStock(product),
     MAX_ORDER_QUANTITY
+  );
+}
+
+function isStoredCartItem(
+  value: unknown
+): value is CartItem {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return false;
+  }
+
+  const item =
+    value as Partial<CartItem>;
+
+  return Boolean(
+    item.product &&
+      typeof item.product ===
+        "object" &&
+      typeof item.product.id ===
+        "string" &&
+      item.product.id.length > 0 &&
+      Number.isInteger(
+        item.quantity
+      ) &&
+      Number(item.quantity) > 0
   );
 }
 
@@ -80,6 +129,109 @@ export function CartProvider({
 }) {
   const [items, setItems] =
     useState<CartItem[]>([]);
+
+  const [
+    hydrated,
+    setHydrated,
+  ] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function restoreCart() {
+      try {
+        const storedValue =
+          await AsyncStorage.getItem(
+            CART_STORAGE_KEY
+          );
+
+        if (!storedValue) {
+          return;
+        }
+
+        const parsedValue: unknown =
+          JSON.parse(storedValue);
+
+        if (
+          !Array.isArray(parsedValue)
+        ) {
+          return;
+        }
+
+        const restoredItems =
+          parsedValue
+            .filter(
+              isStoredCartItem
+            )
+            .map((item) => ({
+              product:
+                item.product,
+
+              quantity:
+                Math.min(
+                  Math.max(
+                    1,
+                    item.quantity
+                  ),
+                  MAX_ORDER_QUANTITY
+                ),
+            }));
+
+        if (mounted) {
+          setItems(restoredItems);
+        }
+      } catch (error) {
+        console.warn(
+          "Unable to restore cart:",
+          error
+        );
+
+        await AsyncStorage.removeItem(
+          CART_STORAGE_KEY
+        );
+      } finally {
+        if (mounted) {
+          setHydrated(true);
+        }
+      }
+    }
+
+    void restoreCart();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    async function persistCart() {
+      try {
+        if (items.length === 0) {
+          await AsyncStorage.removeItem(
+            CART_STORAGE_KEY
+          );
+
+          return;
+        }
+
+        await AsyncStorage.setItem(
+          CART_STORAGE_KEY,
+          JSON.stringify(items)
+        );
+      } catch (error) {
+        console.warn(
+          "Unable to save cart:",
+          error
+        );
+      }
+    }
+
+    void persistCart();
+  }, [hydrated, items]);
 
   const addItem =
     useCallback(
@@ -115,6 +267,7 @@ export function CartProvider({
                     ? {
                         ...item,
                         product,
+
                         quantity:
                           item.quantity +
                           1,
@@ -222,6 +375,10 @@ export function CartProvider({
   const clearCart =
     useCallback(() => {
       setItems([]);
+
+      void AsyncStorage.removeItem(
+        CART_STORAGE_KEY
+      );
     }, []);
 
   const getQuantity =
@@ -241,6 +398,10 @@ export function CartProvider({
         latestProducts:
           Product[]
       ) => {
+        if (!hydrated) {
+          return;
+        }
+
         const productsById =
           new Map(
             latestProducts.map(
@@ -262,9 +423,7 @@ export function CartProvider({
 
                 if (
                   !latestProduct ||
-                  !latestProduct.available ||
-                  latestProduct.stockQuantity <=
-                    0
+                  !latestProduct.available
                 ) {
                   return [];
                 }
@@ -294,7 +453,7 @@ export function CartProvider({
             )
         );
       },
-      []
+      [hydrated]
     );
 
   const itemCount =
@@ -322,32 +481,35 @@ export function CartProvider({
       [items]
     );
 
-  const value = useMemo(
-    () => ({
-      items,
-      itemCount,
-      subtotal,
-      addItem,
-      increaseItem,
-      decreaseItem,
-      removeItem,
-      clearCart,
-      getQuantity,
-      syncProducts,
-    }),
-    [
-      items,
-      itemCount,
-      subtotal,
-      addItem,
-      increaseItem,
-      decreaseItem,
-      removeItem,
-      clearCart,
-      getQuantity,
-      syncProducts,
-    ]
-  );
+  const value =
+    useMemo<CartContextValue>(
+      () => ({
+        items,
+        itemCount,
+        subtotal,
+        hydrated,
+        addItem,
+        increaseItem,
+        decreaseItem,
+        removeItem,
+        clearCart,
+        getQuantity,
+        syncProducts,
+      }),
+      [
+        items,
+        itemCount,
+        subtotal,
+        hydrated,
+        addItem,
+        increaseItem,
+        decreaseItem,
+        removeItem,
+        clearCart,
+        getQuantity,
+        syncProducts,
+      ]
+    );
 
   return (
     <CartContext.Provider

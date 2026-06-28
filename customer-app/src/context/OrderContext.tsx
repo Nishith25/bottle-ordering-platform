@@ -1,5 +1,8 @@
 // customer-app/src/context/OrderContext.tsx
 
+import AsyncStorage from
+  "@react-native-async-storage/async-storage";
+
 import {
   createContext,
   type ReactNode,
@@ -44,9 +47,22 @@ export type PendingCheckout = {
   total: number;
 };
 
+type StoredCheckoutState = {
+  pendingCheckout:
+    PendingCheckout | null;
+
+  activePaymentSession:
+    RazorpayPaymentSession | null;
+};
+
 type OrderContextValue = {
   pendingCheckout:
     PendingCheckout | null;
+
+  activePaymentSession:
+    RazorpayPaymentSession | null;
+
+  checkoutReady: boolean;
 
   orders: CustomerOrder[];
 
@@ -65,6 +81,9 @@ type OrderContextValue = {
     checkout:
       PendingCheckout | null
   ) => void;
+
+  dismissOnlinePaymentSession:
+    () => void;
 
   placeOrder: (
     paymentMethod:
@@ -102,10 +121,50 @@ type OrderContextValue = {
   clearError: () => void;
 };
 
+const CHECKOUT_STORAGE_KEY =
+  "@sipbite/checkout:v1";
+
 const OrderContext =
   createContext<
     OrderContextValue | undefined
   >(undefined);
+
+async function persistCheckoutState(
+  pendingCheckout:
+    PendingCheckout | null,
+
+  activePaymentSession:
+    RazorpayPaymentSession | null
+) {
+  try {
+    if (
+      !pendingCheckout &&
+      !activePaymentSession
+    ) {
+      await AsyncStorage.removeItem(
+        CHECKOUT_STORAGE_KEY
+      );
+
+      return;
+    }
+
+    const storedValue:
+      StoredCheckoutState = {
+        pendingCheckout,
+        activePaymentSession,
+      };
+
+    await AsyncStorage.setItem(
+      CHECKOUT_STORAGE_KEY,
+      JSON.stringify(storedValue)
+    );
+  } catch (error) {
+    console.warn(
+      "Unable to save checkout state:",
+      error
+    );
+  }
+}
 
 export function OrderProvider({
   children,
@@ -115,20 +174,35 @@ export function OrderProvider({
   const {
     token,
     isAuthenticated,
+    loading: authLoading,
   } = useAuth();
 
   const {
     items,
     clearCart,
+    hydrated: cartHydrated,
   } = useCart();
 
   const [
     pendingCheckout,
-    setPendingCheckout,
+    setPendingCheckoutState,
   ] =
     useState<PendingCheckout | null>(
       null
     );
+
+  const [
+    activePaymentSession,
+    setActivePaymentSession,
+  ] =
+    useState<RazorpayPaymentSession | null>(
+      null
+    );
+
+  const [
+    checkoutStorageReady,
+    setCheckoutStorageReady,
+  ] = useState(false);
 
   const [orders, setOrders] =
     useState<CustomerOrder[]>([]);
@@ -164,10 +238,123 @@ export function OrderProvider({
       null
     );
 
+  const checkoutReady =
+    cartHydrated &&
+    checkoutStorageReady;
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function restoreCheckout() {
+      try {
+        const storedValue =
+          await AsyncStorage.getItem(
+            CHECKOUT_STORAGE_KEY
+          );
+
+        if (!storedValue) {
+          return;
+        }
+
+        const parsedValue =
+          JSON.parse(
+            storedValue
+          ) as Partial<StoredCheckoutState>;
+
+        if (!mounted) {
+          return;
+        }
+
+        if (
+          parsedValue.pendingCheckout &&
+          typeof parsedValue
+            .pendingCheckout ===
+            "object"
+        ) {
+          setPendingCheckoutState(
+            parsedValue.pendingCheckout
+          );
+        }
+
+        if (
+          parsedValue.activePaymentSession &&
+          typeof parsedValue
+            .activePaymentSession ===
+            "object"
+        ) {
+          setActivePaymentSession(
+            parsedValue.activePaymentSession
+          );
+        }
+      } catch (restoreError) {
+        console.warn(
+          "Unable to restore checkout state:",
+          restoreError
+        );
+
+        await AsyncStorage.removeItem(
+          CHECKOUT_STORAGE_KEY
+        );
+      } finally {
+        if (mounted) {
+          setCheckoutStorageReady(
+            true
+          );
+        }
+      }
+    }
+
+    void restoreCheckout();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!checkoutStorageReady) {
+      return;
+    }
+
+    void persistCheckoutState(
+      pendingCheckout,
+      activePaymentSession
+    );
+  }, [
+    checkoutStorageReady,
+    pendingCheckout,
+    activePaymentSession,
+  ]);
+
   const clearError =
     useCallback(() => {
       setError(null);
     }, []);
+
+  const setPendingCheckout =
+    useCallback(
+      (
+        checkout:
+          PendingCheckout | null
+      ) => {
+        setPendingCheckoutState(
+          checkout
+        );
+      },
+      []
+    );
+
+  const dismissOnlinePaymentSession =
+    useCallback(() => {
+      setActivePaymentSession(
+        null
+      );
+
+      void persistCheckoutState(
+        pendingCheckout,
+        null
+      );
+    }, [pendingCheckout]);
 
   const refreshOrders =
     useCallback(async () => {
@@ -177,7 +364,6 @@ export function OrderProvider({
       }
 
       setLoadingOrders(true);
-      setError(null);
 
       try {
         const latestOrders =
@@ -201,6 +387,10 @@ export function OrderProvider({
     }, [token]);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
     if (
       isAuthenticated &&
       token
@@ -213,11 +403,8 @@ export function OrderProvider({
     setLastPlacedOrder(
       null
     );
-
-    setPendingCheckout(
-      null
-    );
   }, [
+    authLoading,
     isAuthenticated,
     token,
     refreshOrders,
@@ -297,11 +484,20 @@ export function OrderProvider({
           order
         );
 
-        setPendingCheckout(
+        setPendingCheckoutState(
+          null
+        );
+
+        setActivePaymentSession(
           null
         );
 
         clearCart();
+
+        void persistCheckoutState(
+          null,
+          null
+        );
       },
       [clearCart]
     );
@@ -314,6 +510,14 @@ export function OrderProvider({
       ): Promise<
         CustomerOrder | null
       > => {
+        if (!checkoutReady) {
+          setError(
+            "Checkout details are still loading."
+          );
+
+          return null;
+        }
+
         if (!token) {
           setError(
             "Please log in before placing your order."
@@ -362,6 +566,7 @@ export function OrderProvider({
               token,
               {
                 ...checkoutInput,
+
                 paymentMethod:
                   "cod",
               }
@@ -386,6 +591,7 @@ export function OrderProvider({
         }
       },
       [
+        checkoutReady,
         token,
         items.length,
         buildCheckoutInput,
@@ -400,6 +606,14 @@ export function OrderProvider({
       ): Promise<
         RazorpayPaymentSession | null
       > => {
+        if (!checkoutReady) {
+          setError(
+            "Checkout details are still loading."
+          );
+
+          return null;
+        }
+
         if (!token) {
           setError(
             "Please log in before making payment."
@@ -426,13 +640,29 @@ export function OrderProvider({
         setError(null);
 
         try {
-          return await initiateRazorpayPayment(
-            token,
-            {
-              ...checkoutInput,
-              returnUrl,
-            }
+          const paymentSession =
+            await initiateRazorpayPayment(
+              token,
+              {
+                ...checkoutInput,
+                returnUrl,
+              }
+            );
+
+          setActivePaymentSession(
+            paymentSession
           );
+
+          /*
+           * Store this immediately before
+           * leaving the Expo web app.
+           */
+          await persistCheckoutState(
+            pendingCheckout,
+            paymentSession
+          );
+
+          return paymentSession;
         } catch (requestError) {
           setError(
             requestError instanceof
@@ -447,8 +677,10 @@ export function OrderProvider({
         }
       },
       [
+        checkoutReady,
         token,
         items.length,
+        pendingCheckout,
         buildCheckoutInput,
       ]
     );
@@ -460,6 +692,14 @@ export function OrderProvider({
       ): Promise<
         CustomerOrder | null
       > => {
+        if (!checkoutReady) {
+          setError(
+            "Your checkout information is still loading."
+          );
+
+          return null;
+        }
+
         if (!token) {
           setError(
             "Please log in to verify your payment."
@@ -498,6 +738,15 @@ export function OrderProvider({
               result.status
             )
           ) {
+            setActivePaymentSession(
+              null
+            );
+
+            await persistCheckoutState(
+              pendingCheckout,
+              null
+            );
+
             setError(
               result.message ||
                 "The online payment was not completed."
@@ -506,8 +755,30 @@ export function OrderProvider({
             return null;
           }
 
+          if (
+            result.status ===
+            "abandoned"
+          ) {
+            setActivePaymentSession(
+              null
+            );
+
+            await persistCheckoutState(
+              pendingCheckout,
+              null
+            );
+
+            setError(
+              result.message ||
+                "Payment was not completed. You can try again."
+            );
+
+            return null;
+          }
+
           setError(
-            "Payment confirmation is still processing. Please check your orders again shortly."
+            result.message ||
+              "Payment confirmation is still processing. Please try checking again."
           );
 
           return null;
@@ -525,7 +796,9 @@ export function OrderProvider({
         }
       },
       [
+        checkoutReady,
         token,
+        pendingCheckout,
         acceptCompletedOrder,
       ]
     );
@@ -624,6 +897,8 @@ export function OrderProvider({
     useMemo<OrderContextValue>(
       () => ({
         pendingCheckout,
+        activePaymentSession,
+        checkoutReady,
         orders,
         lastPlacedOrder,
         loadingOrders,
@@ -631,6 +906,7 @@ export function OrderProvider({
         cancellingOrderId,
         error,
         setPendingCheckout,
+        dismissOnlinePaymentSession,
         placeOrder,
         startOnlinePayment,
         completeOnlinePayment,
@@ -641,12 +917,16 @@ export function OrderProvider({
       }),
       [
         pendingCheckout,
+        activePaymentSession,
+        checkoutReady,
         orders,
         lastPlacedOrder,
         loadingOrders,
         placingOrder,
         cancellingOrderId,
         error,
+        setPendingCheckout,
+        dismissOnlinePaymentSession,
         placeOrder,
         startOnlinePayment,
         completeOnlinePayment,
