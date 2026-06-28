@@ -17,10 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSubscriptions } from "../context/SubscriptionContext";
-import {
-  getServiceableLocation,
-  type ServiceableLocation,
-} from "../data/serviceableLocations";
+import { useServiceablePincode } from "../hooks/useServiceablePincode";
 import { getSubscriptionPlan } from "../data/subscriptionPlans";
 
 type FormInputProps = {
@@ -28,10 +25,12 @@ type FormInputProps = {
   placeholder: string;
   value: string;
   onChangeText: (value: string) => void;
+
   keyboardType?:
     | "default"
     | "phone-pad"
     | "number-pad";
+
   maxLength?: number;
   multiline?: boolean;
 };
@@ -64,8 +63,7 @@ function FormInput({
         }
         style={[
           styles.input,
-          multiline &&
-            styles.multilineInput,
+          multiline && styles.multilineInput,
         ]}
       />
     </View>
@@ -79,6 +77,16 @@ export default function SubscriptionCheckoutScreen() {
     pendingSubscriptionDraft,
     saveSubscriptionDeliveryDetails,
   } = useSubscriptions();
+
+  const {
+    checking: checkingPincode,
+    checked: pincodeChecked,
+    location: serviceableLocation,
+    message: pincodeMessage,
+    requestError: pincodeRequestError,
+    checkPincode,
+    resetPincodeCheck,
+  } = useServiceablePincode();
 
   const plan = pendingSubscriptionDraft
     ? getSubscriptionPlan(
@@ -95,24 +103,18 @@ export default function SubscriptionCheckoutScreen() {
   const [pincode, setPincode] =
     useState("");
 
-  const [houseDetails, setHouseDetails] =
-    useState("");
+  const [
+    houseDetails,
+    setHouseDetails,
+  ] = useState("");
 
-  const [areaDetails, setAreaDetails] =
-    useState("");
+  const [
+    areaDetails,
+    setAreaDetails,
+  ] = useState("");
 
   const [landmark, setLandmark] =
     useState("");
-
-  const [pincodeChecked, setPincodeChecked] =
-    useState(false);
-
-  const [
-    serviceableLocation,
-    setServiceableLocation,
-  ] = useState<ServiceableLocation | null>(
-    null
-  );
 
   const cleanPhone =
     phone.replace(/\D/g, "");
@@ -126,22 +128,21 @@ export default function SubscriptionCheckoutScreen() {
     houseDetails.trim().length >= 3 &&
     areaDetails.trim().length >= 3;
 
-  const meetsMinimumOrder =
-    Boolean(
-      serviceableLocation &&
-        pendingSubscriptionDraft &&
-        pendingSubscriptionDraft.total >=
-          serviceableLocation.minimumOrder
-    );
-
-  const canContinue =
-    Boolean(
+  const meetsMinimumOrder = Boolean(
+    serviceableLocation &&
       pendingSubscriptionDraft &&
-        plan &&
-        serviceableLocation &&
-        addressIsComplete &&
-        meetsMinimumOrder
-    );
+      pendingSubscriptionDraft.total >=
+        serviceableLocation.minimumOrder
+  );
+
+  const canContinue = Boolean(
+    pendingSubscriptionDraft &&
+      plan &&
+      serviceableLocation &&
+      addressIsComplete &&
+      meetsMinimumOrder &&
+      !checkingPincode
+  );
 
   const handlePincodeChange = (
     value: string
@@ -150,26 +151,22 @@ export default function SubscriptionCheckoutScreen() {
       value.replace(/\D/g, "");
 
     setPincode(digitsOnly);
-    setPincodeChecked(false);
-    setServiceableLocation(null);
+    resetPincodeCheck();
   };
 
-  const handleCheckPincode = () => {
-    if (pincode.length !== 6) {
-      Alert.alert(
-        "Enter a valid pincode",
-        "Please enter a six-digit delivery pincode."
-      );
+  const handleCheckPincode =
+    async () => {
+      if (pincode.length !== 6) {
+        Alert.alert(
+          "Enter a valid pincode",
+          "Please enter a six-digit delivery pincode."
+        );
 
-      return;
-    }
+        return;
+      }
 
-    const location =
-      getServiceableLocation(pincode);
-
-    setPincodeChecked(true);
-    setServiceableLocation(location);
-  };
+      await checkPincode(pincode);
+    };
 
   const handleContinue = () => {
     if (
@@ -189,11 +186,15 @@ export default function SubscriptionCheckoutScreen() {
         fullName: fullName.trim(),
         phone: cleanPhone,
         pincode,
+
         houseDetails:
           houseDetails.trim(),
+
         areaDetails:
           areaDetails.trim(),
+
         landmark: landmark.trim(),
+
         area: serviceableLocation.area,
         city: serviceableLocation.city,
       });
@@ -242,7 +243,10 @@ export default function SubscriptionCheckoutScreen() {
                 "/(tabs)/plans"
               )
             }
-            style={styles.returnButton}
+            style={({ pressed }) => [
+              styles.returnButton,
+              pressed && styles.pressed,
+            ]}
           >
             <Text
               style={
@@ -270,7 +274,10 @@ export default function SubscriptionCheckoutScreen() {
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
-            style={styles.backButton}
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.pressed,
+            ]}
           >
             <Ionicons
               name="arrow-back"
@@ -295,9 +302,7 @@ export default function SubscriptionCheckoutScreen() {
         </View>
 
         <ScrollView
-          showsVerticalScrollIndicator={
-            false
-          }
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={
             styles.scrollContent
@@ -308,9 +313,7 @@ export default function SubscriptionCheckoutScreen() {
           >
             <View style={styles.progressItem}>
               <View
-                style={
-                  styles.progressComplete
-                }
+                style={styles.progressComplete}
               >
                 <Ionicons
                   name="checkmark"
@@ -404,10 +407,7 @@ export default function SubscriptionCheckoutScreen() {
             </View>
 
             <Text style={styles.planPrice}>
-              ₹
-              {
-                pendingSubscriptionDraft.total
-              }
+              ₹{pendingSubscriptionDraft.total}
             </Text>
           </View>
 
@@ -433,19 +433,32 @@ export default function SubscriptionCheckoutScreen() {
                 placeholderTextColor="#A0A7A3"
                 keyboardType="number-pad"
                 maxLength={6}
+                editable={!checkingPincode}
                 style={styles.pincodeInput}
               />
 
               <Pressable
-                onPress={handleCheckPincode}
-                style={styles.checkButton}
+                disabled={checkingPincode}
+                onPress={() => {
+                  void handleCheckPincode();
+                }}
+                style={({ pressed }) => [
+                  styles.checkButton,
+
+                  checkingPincode &&
+                    styles.checkButtonDisabled,
+
+                  pressed &&
+                    !checkingPincode &&
+                    styles.pressed,
+                ]}
               >
                 <Text
-                  style={
-                    styles.checkButtonText
-                  }
+                  style={styles.checkButtonText}
                 >
-                  Check
+                  {checkingPincode
+                    ? "Checking..."
+                    : "Check"}
                 </Text>
               </Pressable>
             </View>
@@ -456,9 +469,7 @@ export default function SubscriptionCheckoutScreen() {
                 style={styles.availableCard}
               >
                 <View
-                  style={
-                    styles.availableIcon
-                  }
+                  style={styles.availableIcon}
                 >
                   <Ionicons
                     name="checkmark"
@@ -468,9 +479,7 @@ export default function SubscriptionCheckoutScreen() {
                 </View>
 
                 <View
-                  style={
-                    styles.statusContent
-                  }
+                  style={styles.statusContent}
                 >
                   <Text
                     style={
@@ -486,12 +495,18 @@ export default function SubscriptionCheckoutScreen() {
                       styles.statusDescription
                     }
                   >
-                    {
-                      serviceableLocation.area
+                    {serviceableLocation.area},{" "}
+                    {serviceableLocation.city}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.minimumOrderText
                     }
-                    ,{" "}
+                  >
+                    Minimum order ₹
                     {
-                      serviceableLocation.city
+                      serviceableLocation.minimumOrder
                     }
                   </Text>
                 </View>
@@ -506,28 +521,30 @@ export default function SubscriptionCheckoutScreen() {
                 }
               >
                 <View
-                  style={
-                    styles.unavailableIcon
-                  }
+                  style={styles.unavailableIcon}
                 >
                   <Ionicons
-                    name="close"
+                    name={
+                      pincodeRequestError
+                        ? "cloud-offline-outline"
+                        : "close"
+                    }
                     size={18}
                     color="#FFFFFF"
                   />
                 </View>
 
                 <View
-                  style={
-                    styles.statusContent
-                  }
+                  style={styles.statusContent}
                 >
                   <Text
                     style={
                       styles.unavailableTitle
                     }
                   >
-                    Delivery not available
+                    {pincodeRequestError
+                      ? "Unable to check pincode"
+                      : "Delivery not available"}
                   </Text>
 
                   <Text
@@ -535,10 +552,38 @@ export default function SubscriptionCheckoutScreen() {
                       styles.statusDescription
                     }
                   >
-                    We do not serve this
-                    pincode yet.
+                    {pincodeMessage ??
+                      "We do not serve this pincode yet."}
                   </Text>
                 </View>
+              </View>
+            ) : null}
+
+            {serviceableLocation &&
+            !meetsMinimumOrder ? (
+              <View
+                style={styles.minimumWarning}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color="#8A6815"
+                />
+
+                <Text
+                  style={
+                    styles.minimumWarningText
+                  }
+                >
+                  This plan is ₹
+                  {Math.max(
+                    0,
+                    serviceableLocation.minimumOrder -
+                      pendingSubscriptionDraft.total
+                  )}{" "}
+                  below the minimum order for
+                  this delivery location.
+                </Text>
               </View>
             ) : null}
           </View>
@@ -599,9 +644,7 @@ export default function SubscriptionCheckoutScreen() {
           </View>
 
           <View style={styles.summaryCard}>
-            <Text
-              style={styles.summaryTitle}
-            >
+            <Text style={styles.summaryTitle}>
               Subscription summary
             </Text>
 
@@ -666,10 +709,7 @@ export default function SubscriptionCheckoutScreen() {
               </Text>
 
               <Text style={styles.totalValue}>
-                ₹
-                {
-                  pendingSubscriptionDraft.total
-                }
+                ₹{pendingSubscriptionDraft.total}
               </Text>
             </View>
           </View>
@@ -677,32 +717,29 @@ export default function SubscriptionCheckoutScreen() {
 
         <View style={styles.bottomBar}>
           <View style={styles.bottomTotal}>
-            <Text
-              style={styles.bottomLabel}
-            >
-              {plan.billingCycle ===
-              "weekly"
+            <Text style={styles.bottomLabel}>
+              {plan.billingCycle === "weekly"
                 ? "Per week"
                 : "Per month"}
             </Text>
 
-            <Text
-              style={styles.bottomAmount}
-            >
-              ₹
-              {
-                pendingSubscriptionDraft.total
-              }
+            <Text style={styles.bottomAmount}>
+              ₹{pendingSubscriptionDraft.total}
             </Text>
           </View>
 
           <Pressable
             disabled={!canContinue}
             onPress={handleContinue}
-            style={[
+            style={({ pressed }) => [
               styles.continueButton,
+
               !canContinue &&
                 styles.continueButtonDisabled,
+
+              pressed &&
+                canContinue &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -939,7 +976,7 @@ const styles = StyleSheet.create({
   },
 
   checkButton: {
-    width: 84,
+    width: 96,
     height: 52,
     borderRadius: 16,
     backgroundColor: "#245C42",
@@ -947,9 +984,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  checkButtonDisabled: {
+    backgroundColor: "#91A69A",
+  },
+
   checkButtonText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
   },
 
@@ -1009,7 +1050,33 @@ const styles = StyleSheet.create({
   statusDescription: {
     color: "#68736C",
     fontSize: 9,
+    lineHeight: 14,
     marginTop: 3,
+  },
+
+  minimumOrderText: {
+    color: "#486554",
+    fontSize: 8,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+
+  minimumWarning: {
+    marginTop: 11,
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: "#FFF6DC",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  minimumWarningText: {
+    flex: 1,
+    color: "#7A601E",
+    fontSize: 9,
+    lineHeight: 14,
+    fontWeight: "600",
   },
 
   inputGroup: {
@@ -1146,6 +1213,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  pressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.98 }],
+  },
+
   emptyContainer: {
     flex: 1,
     paddingHorizontal: 35,
@@ -1183,6 +1255,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 27,
     borderRadius: 17,
     backgroundColor: "#245C42",
+    alignItems: "center",
     justifyContent: "center",
     marginTop: 23,
   },
