@@ -22,6 +22,10 @@ const adminSubscriptionRoutes = require(
   "./routes/adminSubscriptions"
 );
 
+const adminUserRoutes = require(
+  "./routes/adminUsers"
+);
+
 const authRoutes = require(
   "./routes/auth"
 );
@@ -52,7 +56,9 @@ const allowedOrigins = String(
   process.env.CLIENT_ORIGINS || ""
 )
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) =>
+    origin.trim()
+  )
   .filter(Boolean);
 
 app.disable("x-powered-by");
@@ -63,19 +69,30 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) {
-        return callback(null, true);
+        return callback(
+          null,
+          true
+        );
       }
 
       if (
         allowedOrigins.length === 0
       ) {
-        return callback(null, true);
+        return callback(
+          null,
+          true
+        );
       }
 
       if (
-        allowedOrigins.includes(origin)
+        allowedOrigins.includes(
+          origin
+        )
       ) {
-        return callback(null, true);
+        return callback(
+          null,
+          true
+        );
       }
 
       const error = new Error(
@@ -104,7 +121,8 @@ app.use(
 );
 
 if (
-  process.env.NODE_ENV !== "test"
+  process.env.NODE_ENV !==
+  "test"
 ) {
   app.use(morgan("dev"));
 }
@@ -114,6 +132,7 @@ app.get(
   (req, res) => {
     return res.status(200).json({
       success: true,
+
       message:
         "Backend is running.",
 
@@ -131,7 +150,10 @@ app.get(
   }
 );
 
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
 app.use(
   "/api/products",
@@ -154,8 +176,8 @@ app.use(
 );
 
 /*
- * Specific admin routes must remain
- * above the general /api/admin route.
+ * Specific admin routes remain above
+ * the general /api/admin router.
  */
 app.use(
   "/api/admin/orders",
@@ -165,6 +187,11 @@ app.use(
 app.use(
   "/api/admin/subscriptions",
   adminSubscriptionRoutes
+);
+
+app.use(
+  "/api/admin/users",
+  adminUserRoutes
 );
 
 app.use(
@@ -204,21 +231,25 @@ app.use(
         ? 400
         : 500);
 
-    return res.status(statusCode).json({
-      success: false,
+    return res
+      .status(statusCode)
+      .json({
+        success: false,
 
-      message:
-        statusCode === 500
-          ? "An unexpected server error occurred."
-          : error.message,
+        message:
+          statusCode === 500
+            ? "An unexpected server error occurred."
+            : error.message,
 
-      ...(process.env.NODE_ENV ===
-      "development"
-        ? {
-            stack: error.stack,
-          }
-        : {}),
-    });
+        ...(process.env
+          .NODE_ENV ===
+        "development"
+          ? {
+              stack:
+                error.stack,
+            }
+          : {}),
+      });
   }
 );
 

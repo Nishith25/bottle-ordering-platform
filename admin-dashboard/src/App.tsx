@@ -16,6 +16,7 @@ import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
+import UsersPage from "./pages/UsersPage";
 
 export default function App() {
   return (
@@ -26,8 +27,16 @@ export default function App() {
           element={<LoginPage />}
         />
 
-        <Route element={<ProtectedRoute />}>
-          <Route element={<AdminLayout />}>
+        <Route
+          element={
+            <ProtectedRoute />
+          }
+        >
+          <Route
+            element={
+              <AdminLayout />
+            }
+          >
             <Route
               index
               element={
@@ -40,33 +49,50 @@ export default function App() {
 
             <Route
               path="/dashboard"
-              element={<DashboardPage />}
+              element={
+                <DashboardPage />
+              }
             />
 
             <Route
               path="/products"
-              element={<ProductsPage />}
+              element={
+                <ProductsPage />
+              }
             />
 
             <Route
               path="/orders"
-              element={<OrdersPage />}
+              element={
+                <OrdersPage />
+              }
             />
 
             <Route
               path="/locations"
-              element={<LocationsPage />}
+              element={
+                <LocationsPage />
+              }
             />
 
             <Route
               path="/plans"
-              element={<PlansPage />}
+              element={
+                <PlansPage />
+              }
             />
 
             <Route
               path="/subscriptions"
               element={
                 <SubscriptionsPage />
+              }
+            />
+
+            <Route
+              path="/users"
+              element={
+                <UsersPage />
               }
             />
           </Route>

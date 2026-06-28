@@ -15,20 +15,34 @@ const PAGE_TITLES: Record<
   string,
   string
 > = {
-  "/dashboard": "Dashboard",
-  "/products": "Bottle management",
-  "/orders": "Order management",
+  "/dashboard":
+    "Dashboard",
+
+  "/products":
+    "Bottle management",
+
+  "/orders":
+    "Order management",
+
   "/locations":
     "Delivery location management",
+
   "/plans":
     "Subscription plan management",
+
   "/subscriptions":
     "Customer subscription management",
+
+  "/users":
+    "Customer account management",
 };
 
 export default function AdminLayout() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate =
+    useNavigate();
+
+  const location =
+    useLocation();
 
   const {
     user,
@@ -41,8 +55,9 @@ export default function AdminLayout() {
   ] = useState(false);
 
   const pageTitle =
-    PAGE_TITLES[location.pathname] ??
-    "Administration";
+    PAGE_TITLES[
+      location.pathname
+    ] ?? "Administration";
 
   const closeMobileMenu = () => {
     setMobileMenuOpen(false);
@@ -82,113 +97,68 @@ export default function AdminLayout() {
         </div>
 
         <nav className="sidebar-navigation">
-          <NavLink
+          <NavigationLink
             to="/dashboard"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="▦"
+            label="Dashboard"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ▦
-            </span>
+          />
 
-            Dashboard
-          </NavLink>
-
-          <NavLink
+          <NavigationLink
             to="/products"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="◫"
+            label="Bottles"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ◫
-            </span>
+          />
 
-            Bottles
-          </NavLink>
-
-          <NavLink
+          <NavigationLink
             to="/orders"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="▤"
+            label="Orders"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ▤
-            </span>
+          />
 
-            Orders
-          </NavLink>
-
-          <NavLink
+          <NavigationLink
             to="/locations"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="⌖"
+            label="Locations"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ⌖
-            </span>
+          />
 
-            Locations
-          </NavLink>
-
-          <NavLink
+          <NavigationLink
             to="/plans"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="◉"
+            label="Plans"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ◉
-            </span>
+          />
 
-            Plans
-          </NavLink>
-
-          <NavLink
+          <NavigationLink
             to="/subscriptions"
-            onClick={closeMobileMenu}
-            className={({ isActive }) =>
-              `navigation-link ${
-                isActive
-                  ? "navigation-link-active"
-                  : ""
-              }`
+            icon="↻"
+            label="Subscriptions"
+            onClick={
+              closeMobileMenu
             }
-          >
-            <span className="navigation-icon">
-              ↻
-            </span>
+          />
 
-            Subscriptions
-          </NavLink>
+          <NavigationLink
+            to="/users"
+            icon="◎"
+            label="Customers"
+            onClick={
+              closeMobileMenu
+            }
+          />
         </nav>
 
         <div className="sidebar-footer">
@@ -196,7 +166,8 @@ export default function AdminLayout() {
             <div className="administrator-avatar">
               {user?.fullName
                 .charAt(0)
-                .toUpperCase() ?? "A"}
+                .toUpperCase() ??
+                "A"}
             </div>
 
             <div className="administrator-details">
@@ -213,7 +184,9 @@ export default function AdminLayout() {
           <button
             type="button"
             className="logout-button"
-            onClick={handleLogout}
+            onClick={
+              handleLogout
+            }
           >
             Log out
           </button>
@@ -225,7 +198,9 @@ export default function AdminLayout() {
           type="button"
           aria-label="Close navigation"
           className="mobile-overlay"
-          onClick={closeMobileMenu}
+          onClick={
+            closeMobileMenu
+          }
         />
       ) : null}
 
@@ -236,7 +211,8 @@ export default function AdminLayout() {
             className="mobile-menu-button"
             onClick={() =>
               setMobileMenuOpen(
-                (current) => !current
+                (current) =>
+                  !current
               )
             }
           >
@@ -248,7 +224,9 @@ export default function AdminLayout() {
               ADMINISTRATION
             </span>
 
-            <h1>{pageTitle}</h1>
+            <h1>
+              {pageTitle}
+            </h1>
           </div>
 
           <div className="topbar-role">
@@ -261,5 +239,39 @@ export default function AdminLayout() {
         </main>
       </div>
     </div>
+  );
+}
+
+function NavigationLink({
+  to,
+  icon,
+  label,
+  onClick,
+}: {
+  to: string;
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({
+        isActive,
+      }) =>
+        `navigation-link ${
+          isActive
+            ? "navigation-link-active"
+            : ""
+        }`
+      }
+    >
+      <span className="navigation-icon">
+        {icon}
+      </span>
+
+      {label}
+    </NavLink>
   );
 }
