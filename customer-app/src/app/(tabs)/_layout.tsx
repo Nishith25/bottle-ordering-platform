@@ -1,6 +1,6 @@
 // customer-app/src/app/(tabs)/_layout.tsx
 
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
 import { Platform } from "react-native";
 
