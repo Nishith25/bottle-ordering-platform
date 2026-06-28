@@ -15,14 +15,8 @@ type ApiBaseResponse = {
   message?: string;
 };
 
-type ProductsResponse = ApiBaseResponse & {
-  count: number;
-  data: BackendProduct[];
-};
-
-type LocationCheckResponse = ApiBaseResponse & {
-  serviceable: boolean;
-  data: ServiceableLocation | null;
+type ApiRequestOptions = RequestInit & {
+  token?: string | null;
 };
 
 type BackendProduct = {
@@ -44,6 +38,26 @@ type BackendProduct = {
   sortOrder?: number;
 };
 
+type ProductsResponse = ApiBaseResponse & {
+  count: number;
+  data: BackendProduct[];
+};
+
+type LocationCheckResponse = ApiBaseResponse & {
+  serviceable: boolean;
+  data: ServiceableLocation | null;
+};
+
+type AuthResponse = ApiBaseResponse & {
+  data: AuthSession;
+};
+
+type CurrentUserResponse = ApiBaseResponse & {
+  data: {
+    user: AuthUser;
+  };
+};
+
 export type ServiceableLocation = {
   _id?: string;
   pincode: string;
@@ -61,9 +75,40 @@ export type PincodeCheckResult = {
   location: ServiceableLocation | null;
 };
 
+export type AuthUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: "customer" | "admin";
+  active: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuthSession = {
+  token: string;
+  user: AuthUser;
+};
+
+export type RegisterInput = {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export type LoginInput = {
+  identifier: string;
+  password: string;
+};
+
 async function apiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T> {
   const controller = new AbortController();
 
@@ -71,30 +116,64 @@ async function apiRequest<T>(
     controller.abort();
   }, 10000);
 
+  const {
+    token,
+    headers,
+    ...requestOptions
+  } = options;
+
+  const requestHeaders: Record<string, string> = {
+    Accept: "application/json",
+  };
+
+  if (requestOptions.body) {
+    requestHeaders["Content-Type"] =
+      "application/json";
+  }
+
+  if (token) {
+    requestHeaders.Authorization =
+      `Bearer ${token}`;
+  }
+
+  if (headers) {
+    Object.assign(
+      requestHeaders,
+      headers as Record<string, string>
+    );
+  }
+
   try {
     const response = await fetch(
       `${API_BASE_URL}${path}`,
       {
-        ...options,
-        headers: {
-          Accept: "application/json",
-          ...(options.body
-            ? {
-                "Content-Type": "application/json",
-              }
-            : {}),
-          ...(options.headers as
-            | Record<string, string>
-            | undefined),
-        },
+        ...requestOptions,
+        headers: requestHeaders,
         signal: controller.signal,
       }
     );
 
-    const payload = (await response.json()) as T &
-      ApiBaseResponse;
+    const responseText =
+      await response.text();
 
-    if (!response.ok || payload.success === false) {
+    let payload: ApiBaseResponse & T;
+
+    try {
+      payload = responseText
+        ? JSON.parse(responseText)
+        : ({
+            success: response.ok,
+          } as ApiBaseResponse & T);
+    } catch {
+      throw new Error(
+        "The server returned an invalid response."
+      );
+    }
+
+    if (
+      !response.ok ||
+      payload.success === false
+    ) {
       throw new Error(
         payload.message ??
           "Unable to complete the request."
@@ -112,12 +191,18 @@ async function apiRequest<T>(
       );
     }
 
+    if (error instanceof TypeError) {
+      throw new Error(
+        "Unable to connect to the backend."
+      );
+    }
+
     if (error instanceof Error) {
       throw error;
     }
 
     throw new Error(
-      "Unable to connect to the backend."
+      "Unable to complete the request."
     );
   } finally {
     clearTimeout(timeoutId);
@@ -178,13 +263,59 @@ export async function checkServiceablePincode(
 
   return {
     serviceable: response.serviceable,
+
     message:
       response.message ??
       (response.serviceable
         ? "Delivery is available."
         : "Delivery is not available."),
+
     location: response.data,
   };
+}
+
+export async function registerCustomer(
+  input: RegisterInput
+): Promise<AuthSession> {
+  const response =
+    await apiRequest<AuthResponse>(
+      "/api/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data;
+}
+
+export async function loginCustomer(
+  input: LoginInput
+): Promise<AuthSession> {
+  const response =
+    await apiRequest<AuthResponse>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data;
+}
+
+export async function fetchCurrentUser(
+  token: string
+): Promise<AuthUser> {
+  const response =
+    await apiRequest<CurrentUserResponse>(
+      "/api/auth/me",
+      {
+        token,
+      }
+    );
+
+  return response.data.user;
 }
 
 export { API_BASE_URL };
