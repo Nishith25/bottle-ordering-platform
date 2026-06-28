@@ -1,6 +1,7 @@
 // admin-dashboard/src/layout/AdminLayout.tsx
 
 import { useState } from "react";
+
 import {
   NavLink,
   Outlet,
@@ -16,6 +17,7 @@ const PAGE_TITLES: Record<
 > = {
   "/dashboard": "Dashboard",
   "/products": "Bottle management",
+  "/orders": "Order management",
 };
 
 export default function AdminLayout() {
@@ -38,9 +40,14 @@ export default function AdminLayout() {
 
   const handleLogout = () => {
     logout();
+
     navigate("/login", {
       replace: true,
     });
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
   };
 
   return (
@@ -66,9 +73,7 @@ export default function AdminLayout() {
         <nav className="sidebar-navigation">
           <NavLink
             to="/dashboard"
-            onClick={() =>
-              setMobileMenuOpen(false)
-            }
+            onClick={closeMobileMenu}
             className={({ isActive }) =>
               `navigation-link ${
                 isActive
@@ -86,9 +91,7 @@ export default function AdminLayout() {
 
           <NavLink
             to="/products"
-            onClick={() =>
-              setMobileMenuOpen(false)
-            }
+            onClick={closeMobileMenu}
             className={({ isActive }) =>
               `navigation-link ${
                 isActive
@@ -102,6 +105,24 @@ export default function AdminLayout() {
             </span>
 
             Bottles
+          </NavLink>
+
+          <NavLink
+            to="/orders"
+            onClick={closeMobileMenu}
+            className={({ isActive }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ▤
+            </span>
+
+            Orders
           </NavLink>
         </nav>
 
@@ -118,7 +139,9 @@ export default function AdminLayout() {
                 {user?.fullName}
               </strong>
 
-              <span>{user?.email}</span>
+              <span>
+                {user?.email}
+              </span>
             </div>
           </div>
 
@@ -137,9 +160,7 @@ export default function AdminLayout() {
           type="button"
           aria-label="Close navigation"
           className="mobile-overlay"
-          onClick={() =>
-            setMobileMenuOpen(false)
-          }
+          onClick={closeMobileMenu}
         />
       ) : null}
 

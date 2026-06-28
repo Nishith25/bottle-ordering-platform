@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
+import OrdersPage from "./pages/OrdersPage";
 import ProductsPage from "./pages/ProductsPage";
 
 export default function App() {
@@ -23,9 +24,7 @@ export default function App() {
         />
 
         <Route element={<ProtectedRoute />}>
-          <Route
-            element={<AdminLayout />}
-          >
+          <Route element={<AdminLayout />}>
             <Route
               index
               element={
@@ -44,6 +43,11 @@ export default function App() {
             <Route
               path="/products"
               element={<ProductsPage />}
+            />
+
+            <Route
+              path="/orders"
+              element={<OrdersPage />}
             />
           </Route>
         </Route>

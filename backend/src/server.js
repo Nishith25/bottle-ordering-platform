@@ -14,6 +14,10 @@ const adminRoutes = require(
   "./routes/admin"
 );
 
+const adminOrderRoutes = require(
+  "./routes/adminOrders"
+);
+
 const authRoutes = require(
   "./routes/auth"
 );
@@ -93,9 +97,7 @@ app.use(
   })
 );
 
-if (
-  process.env.NODE_ENV !== "test"
-) {
+if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 
@@ -117,10 +119,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
 app.use(
   "/api/products",
@@ -142,6 +141,15 @@ app.use(
   subscriptionRoutes
 );
 
+/*
+ * Keep this before /api/admin because
+ * adminRoutes also begins with /api/admin.
+ */
+app.use(
+  "/api/admin/orders",
+  adminOrderRoutes
+);
+
 app.use(
   "/api/admin",
   adminRoutes
@@ -150,7 +158,6 @@ app.use(
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
-
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
@@ -167,7 +174,6 @@ app.use(
 
       return res.status(409).json({
         success: false,
-
         message: `A record already exists with this ${duplicateField}.`,
       });
     }
