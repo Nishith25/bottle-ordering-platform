@@ -18,6 +18,8 @@ const PAGE_TITLES: Record<
   "/dashboard": "Dashboard",
   "/products": "Bottle management",
   "/orders": "Order management",
+  "/locations":
+    "Delivery location management",
 };
 
 export default function AdminLayout() {
@@ -38,16 +40,16 @@ export default function AdminLayout() {
     PAGE_TITLES[location.pathname] ??
     "Administration";
 
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
   const handleLogout = () => {
     logout();
 
     navigate("/login", {
       replace: true,
     });
-  };
-
-  const closeMobileMenu = () => {
-    setMobileMenuOpen(false);
   };
 
   return (
@@ -65,8 +67,13 @@ export default function AdminLayout() {
           </div>
 
           <div>
-            <strong>Bottle Admin</strong>
-            <span>Operations panel</span>
+            <strong>
+              Bottle Admin
+            </strong>
+
+            <span>
+              Operations panel
+            </span>
           </div>
         </div>
 
@@ -74,7 +81,9 @@ export default function AdminLayout() {
           <NavLink
             to="/dashboard"
             onClick={closeMobileMenu}
-            className={({ isActive }) =>
+            className={({
+              isActive,
+            }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -92,7 +101,9 @@ export default function AdminLayout() {
           <NavLink
             to="/products"
             onClick={closeMobileMenu}
-            className={({ isActive }) =>
+            className={({
+              isActive,
+            }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -110,7 +121,9 @@ export default function AdminLayout() {
           <NavLink
             to="/orders"
             onClick={closeMobileMenu}
-            className={({ isActive }) =>
+            className={({
+              isActive,
+            }) =>
               `navigation-link ${
                 isActive
                   ? "navigation-link-active"
@@ -123,6 +136,26 @@ export default function AdminLayout() {
             </span>
 
             Orders
+          </NavLink>
+
+          <NavLink
+            to="/locations"
+            onClick={closeMobileMenu}
+            className={({
+              isActive,
+            }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ⌖
+            </span>
+
+            Locations
           </NavLink>
         </nav>
 
@@ -171,7 +204,8 @@ export default function AdminLayout() {
             className="mobile-menu-button"
             onClick={() =>
               setMobileMenuOpen(
-                (current) => !current
+                (current) =>
+                  !current
               )
             }
           >

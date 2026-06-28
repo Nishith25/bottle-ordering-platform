@@ -10,6 +10,7 @@ import {
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
 import DashboardPage from "./pages/DashboardPage";
+import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -48,6 +49,11 @@ export default function App() {
             <Route
               path="/orders"
               element={<OrdersPage />}
+            />
+
+            <Route
+              path="/locations"
+              element={<LocationsPage />}
             />
           </Route>
         </Route>
