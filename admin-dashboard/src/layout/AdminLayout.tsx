@@ -1,0 +1,179 @@
+// admin-dashboard/src/layout/AdminLayout.tsx
+
+import { useState } from "react";
+import {
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+
+import { useAdminAuth } from "../context/AuthContext";
+
+const PAGE_TITLES: Record<
+  string,
+  string
+> = {
+  "/dashboard": "Dashboard",
+  "/products": "Bottle management",
+};
+
+export default function AdminLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const {
+    user,
+    logout,
+  } = useAdminAuth();
+
+  const [
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  ] = useState(false);
+
+  const pageTitle =
+    PAGE_TITLES[location.pathname] ??
+    "Administration";
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", {
+      replace: true,
+    });
+  };
+
+  return (
+    <div className="admin-shell">
+      <aside
+        className={`sidebar ${
+          mobileMenuOpen
+            ? "sidebar-open"
+            : ""
+        }`}
+      >
+        <div className="sidebar-brand">
+          <div className="brand-mark">
+            B
+          </div>
+
+          <div>
+            <strong>Bottle Admin</strong>
+            <span>Operations panel</span>
+          </div>
+        </div>
+
+        <nav className="sidebar-navigation">
+          <NavLink
+            to="/dashboard"
+            onClick={() =>
+              setMobileMenuOpen(false)
+            }
+            className={({ isActive }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ▦
+            </span>
+
+            Dashboard
+          </NavLink>
+
+          <NavLink
+            to="/products"
+            onClick={() =>
+              setMobileMenuOpen(false)
+            }
+            className={({ isActive }) =>
+              `navigation-link ${
+                isActive
+                  ? "navigation-link-active"
+                  : ""
+              }`
+            }
+          >
+            <span className="navigation-icon">
+              ◫
+            </span>
+
+            Bottles
+          </NavLink>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="administrator-card">
+            <div className="administrator-avatar">
+              {user?.fullName
+                .charAt(0)
+                .toUpperCase() ?? "A"}
+            </div>
+
+            <div className="administrator-details">
+              <strong>
+                {user?.fullName}
+              </strong>
+
+              <span>{user?.email}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            Log out
+          </button>
+        </div>
+      </aside>
+
+      {mobileMenuOpen ? (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="mobile-overlay"
+          onClick={() =>
+            setMobileMenuOpen(false)
+          }
+        />
+      ) : null}
+
+      <div className="admin-main">
+        <header className="topbar">
+          <button
+            type="button"
+            className="mobile-menu-button"
+            onClick={() =>
+              setMobileMenuOpen(
+                (current) => !current
+              )
+            }
+          >
+            ☰
+          </button>
+
+          <div>
+            <span className="topbar-eyebrow">
+              ADMINISTRATION
+            </span>
+
+            <h1>{pageTitle}</h1>
+          </div>
+
+          <div className="topbar-role">
+            Administrator
+          </div>
+        </header>
+
+        <main className="page-container">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
