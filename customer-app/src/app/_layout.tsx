@@ -28,21 +28,24 @@ export default function RootLayout() {
               name="cart"
               options={{
                 presentation: "modal",
-                animation: "slide_from_bottom",
+                animation:
+                  "slide_from_bottom",
               }}
             />
 
             <Stack.Screen
               name="checkout"
               options={{
-                animation: "slide_from_right",
+                animation:
+                  "slide_from_right",
               }}
             />
 
             <Stack.Screen
               name="payment"
               options={{
-                animation: "slide_from_right",
+                animation:
+                  "slide_from_right",
               }}
             />
 
@@ -57,7 +60,24 @@ export default function RootLayout() {
             <Stack.Screen
               name="plan-builder"
               options={{
-                animation: "slide_from_right",
+                animation:
+                  "slide_from_right",
+              }}
+            />
+
+            <Stack.Screen
+              name="subscription-checkout"
+              options={{
+                animation:
+                  "slide_from_right",
+              }}
+            />
+
+            <Stack.Screen
+              name="subscription-payment"
+              options={{
+                animation:
+                  "slide_from_right",
               }}
             />
 

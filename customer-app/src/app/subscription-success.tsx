@@ -7,6 +7,7 @@ import {
 } from "expo-router";
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -27,12 +28,25 @@ export default function SubscriptionSuccessScreen() {
     useSubscriptions();
 
   const subscription = subscriptionId
-    ? getSubscriptionById(subscriptionId)
+    ? getSubscriptionById(
+        subscriptionId
+      )
     : undefined;
+
+  const paymentMethodLabel =
+    subscription?.paymentMethod ===
+    "upi_autopay"
+      ? "UPI AutoPay"
+      : "Card or eMandate";
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          styles.container
+        }
+      >
         <View style={styles.successIcon}>
           <Ionicons
             name="checkmark"
@@ -42,67 +56,129 @@ export default function SubscriptionSuccessScreen() {
         </View>
 
         <Text style={styles.eyebrow}>
-          SUBSCRIPTION CREATED
+          SUBSCRIPTION ACTIVATED
         </Text>
 
         <Text style={styles.title}>
-          Fresh deliveries are now part of your routine.
+          Fresh deliveries are now part of
+          your routine.
         </Text>
 
         <Text style={styles.description}>
-          Your selected bottle mix and preferred delivery
-          schedule have been saved.
+          Your bottle mix, address and
+          recurring delivery schedule have
+          been saved.
         </Text>
 
         {subscription ? (
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
+              <Text
+                style={styles.summaryLabel}
+              >
                 Subscription
               </Text>
 
-              <Text style={styles.summaryValue}>
+              <Text
+                style={styles.summaryValue}
+              >
                 {subscription.displayId}
               </Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
+              <Text
+                style={styles.summaryLabel}
+              >
                 Plan
               </Text>
 
-              <Text style={styles.summaryValue}>
+              <Text
+                style={styles.summaryValue}
+              >
                 {subscription.planName}
               </Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
+              <Text
+                style={styles.summaryLabel}
+              >
                 Bottle delivery
               </Text>
 
-              <Text style={styles.summaryValue}>
-                {subscription.bottlesPerDelivery} bottles
+              <Text
+                style={styles.summaryValue}
+              >
+                {
+                  subscription.bottlesPerDelivery
+                }{" "}
+                bottles
               </Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
+              <Text
+                style={styles.summaryLabel}
+              >
                 Schedule
               </Text>
 
-              <Text style={styles.summaryValue}>
-                Every {subscription.preferredDay}
+              <Text
+                style={styles.summaryValue}
+              >
+                Every{" "}
+                {subscription.preferredDay}
               </Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
+              <Text
+                style={styles.summaryLabel}
+              >
                 Delivery slot
               </Text>
 
-              <Text style={styles.summaryValue}>
+              <Text
+                style={styles.summaryValue}
+              >
                 {subscription.preferredSlot}
+              </Text>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <Text
+                style={styles.summaryLabel}
+              >
+                Delivery location
+              </Text>
+
+              <Text
+                style={styles.summaryValue}
+              >
+                {
+                  subscription
+                    .deliveryDetails.area
+                }
+                ,{" "}
+                {
+                  subscription
+                    .deliveryDetails.city
+                }
+              </Text>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <Text
+                style={styles.summaryLabel}
+              >
+                Payment method
+              </Text>
+
+              <Text
+                style={styles.summaryValue}
+              >
+                {paymentMethodLabel}
               </Text>
             </View>
 
@@ -110,7 +186,8 @@ export default function SubscriptionSuccessScreen() {
 
             <View style={styles.summaryRow}>
               <Text style={styles.totalLabel}>
-                {subscription.billingCycle === "weekly"
+                {subscription.billingCycle ===
+                "weekly"
                   ? "Weekly total"
                   : "Monthly total"}
               </Text>
@@ -124,11 +201,15 @@ export default function SubscriptionSuccessScreen() {
 
         <Pressable
           onPress={() =>
-            router.replace("/(tabs)/plans")
+            router.replace(
+              "/(tabs)/plans"
+            )
           }
           style={styles.primaryButton}
         >
-          <Text style={styles.primaryButtonText}>
+          <Text
+            style={styles.primaryButtonText}
+          >
             View subscription
           </Text>
 
@@ -141,15 +222,21 @@ export default function SubscriptionSuccessScreen() {
 
         <Pressable
           onPress={() =>
-            router.replace("/(tabs)/bottles")
+            router.replace(
+              "/(tabs)/bottles"
+            )
           }
           style={styles.secondaryButton}
         >
-          <Text style={styles.secondaryButtonText}>
+          <Text
+            style={
+              styles.secondaryButtonText
+            }
+          >
             Browse bottles
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -161,8 +248,9 @@ const styles = StyleSheet.create({
   },
 
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
+    paddingVertical: 40,
     alignItems: "center",
     justifyContent: "center",
   },

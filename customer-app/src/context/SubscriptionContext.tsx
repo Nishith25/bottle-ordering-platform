@@ -10,10 +10,25 @@ import {
 } from "react";
 
 import { PRODUCTS } from "../data/products";
-import type {
-  BillingCycle,
-  SubscriptionPlan,
+import {
+  getSubscriptionPlan,
+  type BillingCycle,
 } from "../data/subscriptionPlans";
+
+export type SubscriptionPaymentMethod =
+  | "upi_autopay"
+  | "card_mandate";
+
+export type SubscriptionDeliveryDetails = {
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+};
 
 export type SubscriptionItem = {
   productId: string;
@@ -27,6 +42,17 @@ export type SubscriptionItem = {
   accentColor: string;
 };
 
+export type PendingSubscriptionDraft = {
+  planId: string;
+  quantities: Record<string, number>;
+  preferredDay: string;
+  preferredSlot: string;
+  originalTotal: number;
+  total: number;
+  savings: number;
+  deliveryDetails?: SubscriptionDeliveryDetails;
+};
+
 export type CustomerSubscription = {
   id: string;
   displayId: string;
@@ -34,6 +60,8 @@ export type CustomerSubscription = {
   planName: string;
   billingCycle: BillingCycle;
   status: "active" | "paused" | "cancelled";
+  paymentMethod: SubscriptionPaymentMethod;
+  paymentStatus: "demo_confirmed";
   createdAt: string;
   bottleCount: number;
   deliveriesPerCycle: number;
@@ -41,24 +69,33 @@ export type CustomerSubscription = {
   discountPercent: number;
   originalTotal: number;
   total: number;
+  savings: number;
   preferredDay: string;
   preferredSlot: string;
+  deliveryDetails: SubscriptionDeliveryDetails;
   items: SubscriptionItem[];
-};
-
-type CreateSubscriptionInput = {
-  plan: SubscriptionPlan;
-  quantities: Record<string, number>;
-  preferredDay: string;
-  preferredSlot: string;
 };
 
 type SubscriptionContextValue = {
   subscriptions: CustomerSubscription[];
-  createSubscription: (
-    input: CreateSubscriptionInput
+  pendingSubscriptionDraft: PendingSubscriptionDraft | null;
+
+  setPendingSubscriptionDraft: (
+    draft: PendingSubscriptionDraft | null
+  ) => void;
+
+  saveSubscriptionDeliveryDetails: (
+    deliveryDetails: SubscriptionDeliveryDetails
+  ) => boolean;
+
+  confirmSubscription: (
+    paymentMethod: SubscriptionPaymentMethod
   ) => CustomerSubscription | null;
-  cancelSubscription: (subscriptionId: string) => void;
+
+  cancelSubscription: (
+    subscriptionId: string
+  ) => void;
+
   getSubscriptionById: (
     subscriptionId: string
   ) => CustomerSubscription | undefined;
@@ -77,23 +114,70 @@ export function SubscriptionProvider({
     CustomerSubscription[]
   >([]);
 
-  const createSubscription = useCallback(
-    ({
-      plan,
-      quantities,
-      preferredDay,
-      preferredSlot,
-    }: CreateSubscriptionInput) => {
+  const [
+    pendingSubscriptionDraft,
+    setPendingSubscriptionDraft,
+  ] = useState<PendingSubscriptionDraft | null>(null);
+
+  const saveSubscriptionDeliveryDetails =
+    useCallback(
+      (
+        deliveryDetails: SubscriptionDeliveryDetails
+      ) => {
+        if (!pendingSubscriptionDraft) {
+          return false;
+        }
+
+        setPendingSubscriptionDraft((currentDraft) => {
+          if (!currentDraft) {
+            return null;
+          }
+
+          return {
+            ...currentDraft,
+            deliveryDetails,
+          };
+        });
+
+        return true;
+      },
+      [pendingSubscriptionDraft]
+    );
+
+  const confirmSubscription = useCallback(
+    (
+      paymentMethod: SubscriptionPaymentMethod
+    ): CustomerSubscription | null => {
+      if (
+        !pendingSubscriptionDraft ||
+        !pendingSubscriptionDraft.deliveryDetails
+      ) {
+        return null;
+      }
+
+      const plan = getSubscriptionPlan(
+        pendingSubscriptionDraft.planId
+      );
+
+      if (!plan) {
+        return null;
+      }
+
       const selectedItems = PRODUCTS.filter(
         (product) =>
           product.subscriptionEligible &&
           product.available &&
-          (quantities[product.id] ?? 0) > 0
+          (pendingSubscriptionDraft.quantities[
+            product.id
+          ] ?? 0) > 0
       ).map((product) => ({
         productId: product.id,
         name: product.name,
         shortName: product.shortName,
-        quantity: quantities[product.id] ?? 0,
+        quantity:
+          pendingSubscriptionDraft.quantities[
+            product.id
+          ] ?? 0,
         price: product.price,
         sizeMl: product.sizeMl,
         cardColor: product.cardColor,
@@ -101,10 +185,12 @@ export function SubscriptionProvider({
         accentColor: product.accentColor,
       }));
 
-      const selectedBottleCount = selectedItems.reduce(
-        (total, item) => total + item.quantity,
-        0
-      );
+      const selectedBottleCount =
+        selectedItems.reduce(
+          (total, item) =>
+            total + item.quantity,
+          0
+        );
 
       if (
         selectedBottleCount !== plan.bottleCount ||
@@ -113,36 +199,51 @@ export function SubscriptionProvider({
         return null;
       }
 
-      const originalTotal = selectedItems.reduce(
-        (total, item) =>
-          total + item.price * item.quantity,
-        0
-      );
-
-      const total = Math.round(
-        originalTotal *
-          (1 - plan.discountPercent / 100)
-      );
-
       const timestamp = Date.now();
 
       const subscription: CustomerSubscription = {
         id: `subscription-${timestamp}`,
-        displayId: `SUB${String(timestamp).slice(-8)}`,
+        displayId: `SUB${String(timestamp).slice(
+          -8
+        )}`,
+
         planId: plan.id,
         planName: plan.name,
         billingCycle: plan.billingCycle,
+
         status: "active",
+        paymentMethod,
+        paymentStatus: "demo_confirmed",
+
         createdAt: new Date().toISOString(),
+
         bottleCount: plan.bottleCount,
-        deliveriesPerCycle: plan.deliveriesPerCycle,
+        deliveriesPerCycle:
+          plan.deliveriesPerCycle,
+
         bottlesPerDelivery:
-          plan.bottleCount / plan.deliveriesPerCycle,
-        discountPercent: plan.discountPercent,
-        originalTotal,
-        total,
-        preferredDay,
-        preferredSlot,
+          plan.bottleCount /
+          plan.deliveriesPerCycle,
+
+        discountPercent:
+          plan.discountPercent,
+
+        originalTotal:
+          pendingSubscriptionDraft.originalTotal,
+
+        total: pendingSubscriptionDraft.total,
+        savings:
+          pendingSubscriptionDraft.savings,
+
+        preferredDay:
+          pendingSubscriptionDraft.preferredDay,
+
+        preferredSlot:
+          pendingSubscriptionDraft.preferredSlot,
+
+        deliveryDetails:
+          pendingSubscriptionDraft.deliveryDetails,
+
         items: selectedItems,
       };
 
@@ -151,9 +252,11 @@ export function SubscriptionProvider({
         ...currentSubscriptions,
       ]);
 
+      setPendingSubscriptionDraft(null);
+
       return subscription;
     },
-    []
+    [pendingSubscriptionDraft]
   );
 
   const cancelSubscription = useCallback(
@@ -184,13 +287,18 @@ export function SubscriptionProvider({
   const value = useMemo(
     () => ({
       subscriptions,
-      createSubscription,
+      pendingSubscriptionDraft,
+      setPendingSubscriptionDraft,
+      saveSubscriptionDeliveryDetails,
+      confirmSubscription,
       cancelSubscription,
       getSubscriptionById,
     }),
     [
       subscriptions,
-      createSubscription,
+      pendingSubscriptionDraft,
+      saveSubscriptionDeliveryDetails,
+      confirmSubscription,
       cancelSubscription,
       getSubscriptionById,
     ]
@@ -204,7 +312,9 @@ export function SubscriptionProvider({
 }
 
 export function useSubscriptions() {
-  const context = useContext(SubscriptionContext);
+  const context = useContext(
+    SubscriptionContext
+  );
 
   if (!context) {
     throw new Error(

@@ -5,10 +5,7 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import {
-  useMemo,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -63,7 +60,8 @@ function createDefaultQuantities(
     Record<string, number>
   >((result, product, index) => {
     result[product.id] =
-      baseQuantity + (index < remainder ? 1 : 0);
+      baseQuantity +
+      (index < remainder ? 1 : 0);
 
     return result;
   }, {});
@@ -73,7 +71,9 @@ export default function PlanBuilderScreen() {
   const router = useRouter();
 
   const { planId } =
-    useLocalSearchParams<{ planId?: string }>();
+    useLocalSearchParams<{
+      planId?: string;
+    }>();
 
   const plan =
     getSubscriptionPlan(planId ?? "") ??
@@ -91,7 +91,9 @@ export default function PlanBuilderScreen() {
 
   const [quantities, setQuantities] = useState<
     Record<string, number>
-  >(() => createDefaultQuantities(plan.bottleCount));
+  >(() =>
+    createDefaultQuantities(plan.bottleCount)
+  );
 
   const [preferredDay, setPreferredDay] =
     useState("Monday");
@@ -99,14 +101,14 @@ export default function PlanBuilderScreen() {
   const [preferredSlot, setPreferredSlot] =
     useState(DELIVERY_SLOTS[0]);
 
-  const [creating, setCreating] = useState(false);
-
-  const { createSubscription } = useSubscriptions();
+  const { setPendingSubscriptionDraft } =
+    useSubscriptions();
 
   const selectedBottleCount = useMemo(
     () =>
       Object.values(quantities).reduce(
-        (total, quantity) => total + quantity,
+        (total, quantity) =>
+          total + quantity,
         0
       ),
     [quantities]
@@ -132,15 +134,18 @@ export default function PlanBuilderScreen() {
   const savings =
     originalTotal - discountedTotal;
 
-  const canCreate =
-    selectedBottleCount === plan.bottleCount &&
+  const canContinue =
+    selectedBottleCount ===
+      plan.bottleCount &&
     preferredDay.length > 0 &&
-    preferredSlot.length > 0 &&
-    !creating;
+    preferredSlot.length > 0;
 
-  const increaseQuantity = (productId: string) => {
+  const increaseQuantity = (
+    productId: string
+  ) => {
     if (
-      selectedBottleCount >= plan.bottleCount
+      selectedBottleCount >=
+      plan.bottleCount
     ) {
       return;
     }
@@ -152,7 +157,9 @@ export default function PlanBuilderScreen() {
     }));
   };
 
-  const decreaseQuantity = (productId: string) => {
+  const decreaseQuantity = (
+    productId: string
+  ) => {
     setQuantities((current) => ({
       ...current,
       [productId]: Math.max(
@@ -162,8 +169,8 @@ export default function PlanBuilderScreen() {
     }));
   };
 
-  const handleCreateSubscription = () => {
-    if (!canCreate) {
+  const handleContinue = () => {
+    if (!canContinue) {
       Alert.alert(
         "Complete your bottle mix",
         `Select exactly ${plan.bottleCount} bottles.`
@@ -172,36 +179,22 @@ export default function PlanBuilderScreen() {
       return;
     }
 
-    setCreating(true);
-
-    const subscription = createSubscription({
-      plan,
+    setPendingSubscriptionDraft({
+      planId: plan.id,
       quantities,
       preferredDay,
       preferredSlot,
+      originalTotal,
+      total: discountedTotal,
+      savings,
     });
 
-    if (!subscription) {
-      setCreating(false);
-
-      Alert.alert(
-        "Unable to create plan",
-        "Please verify your bottle quantities."
-      );
-
-      return;
-    }
-
-    router.replace({
-      pathname: "/subscription-success",
-      params: {
-        subscriptionId: subscription.id,
-      },
-    });
+    router.push("/subscription-checkout");
   };
 
   const bottlesRemaining =
-    plan.bottleCount - selectedBottleCount;
+    plan.bottleCount -
+    selectedBottleCount;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -235,13 +228,16 @@ export default function PlanBuilderScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={
+          styles.scrollContent
+        }
       >
         <View
           style={[
             styles.planSummary,
             {
-              backgroundColor: plan.lightColor,
+              backgroundColor:
+                plan.lightColor,
             },
           ]}
         >
@@ -249,7 +245,8 @@ export default function PlanBuilderScreen() {
             style={[
               styles.planSummaryIcon,
               {
-                backgroundColor: plan.accentColor,
+                backgroundColor:
+                  plan.accentColor,
               },
             ]}
           >
@@ -265,7 +262,11 @@ export default function PlanBuilderScreen() {
               {plan.name}
             </Text>
 
-            <Text style={styles.planSummaryDescription}>
+            <Text
+              style={
+                styles.planSummaryDescription
+              }
+            >
               {plan.description}
             </Text>
           </View>
@@ -274,11 +275,14 @@ export default function PlanBuilderScreen() {
             style={[
               styles.discountBadge,
               {
-                backgroundColor: plan.accentColor,
+                backgroundColor:
+                  plan.accentColor,
               },
             ]}
           >
-            <Text style={styles.discountBadgeText}>
+            <Text
+              style={styles.discountBadgeText}
+            >
               {plan.discountPercent}% OFF
             </Text>
           </View>
@@ -290,8 +294,11 @@ export default function PlanBuilderScreen() {
               Choose your bottle mix
             </Text>
 
-            <Text style={styles.sectionDescription}>
-              Select exactly {plan.bottleCount} bottles.
+            <Text
+              style={styles.sectionDescription}
+            >
+              Select exactly{" "}
+              {plan.bottleCount} bottles.
             </Text>
           </View>
 
@@ -311,141 +318,183 @@ export default function PlanBuilderScreen() {
                   styles.selectionCountTextComplete,
               ]}
             >
-              {selectedBottleCount}/{plan.bottleCount}
+              {selectedBottleCount}/
+              {plan.bottleCount}
             </Text>
           </View>
         </View>
 
         {bottlesRemaining > 0 ? (
-          <View style={styles.remainingNotice}>
+          <View
+            style={styles.remainingNotice}
+          >
             <Ionicons
               name="information-circle-outline"
               size={17}
               color="#896917"
             />
 
-            <Text style={styles.remainingNoticeText}>
+            <Text
+              style={
+                styles.remainingNoticeText
+              }
+            >
               Select {bottlesRemaining} more{" "}
               {bottlesRemaining === 1
                 ? "bottle"
-                : "bottles"}.
+                : "bottles"}
+              .
             </Text>
           </View>
         ) : (
-          <View style={styles.completeNotice}>
+          <View
+            style={styles.completeNotice}
+          >
             <Ionicons
               name="checkmark-circle"
               size={17}
               color="#34714F"
             />
 
-            <Text style={styles.completeNoticeText}>
+            <Text
+              style={
+                styles.completeNoticeText
+              }
+            >
               Your bottle mix is complete.
             </Text>
           </View>
         )}
 
         <View style={styles.productList}>
-          {eligibleProducts.map((product) => {
-            const quantity =
-              quantities[product.id] ?? 0;
+          {eligibleProducts.map(
+            (product) => {
+              const quantity =
+                quantities[product.id] ?? 0;
 
-            return (
-              <View
-                key={product.id}
-                style={styles.productCard}
-              >
+              return (
                 <View
-                  style={[
-                    styles.productVisual,
-                    {
-                      backgroundColor:
-                        product.cardColor,
-                    },
-                  ]}
+                  key={product.id}
+                  style={styles.productCard}
                 >
-                  <BottleVisual
-                    label={product.shortName}
-                    liquidColor={product.liquidColor}
-                    accentColor={product.accentColor}
-                  />
-                </View>
-
-                <View style={styles.productInformation}>
-                  <Text style={styles.productName}>
-                    {product.name}
-                  </Text>
-
-                  <Text style={styles.productDetails}>
-                    {product.sizeMl} ml · ₹
-                    {product.price}
-                  </Text>
-
-                  <Text
-                    numberOfLines={2}
-                    style={styles.productDescription}
-                  >
-                    {product.description}
-                  </Text>
-                </View>
-
-                <View style={styles.quantityControl}>
-                  <Pressable
-                    onPress={() =>
-                      decreaseQuantity(product.id)
-                    }
-                    disabled={quantity === 0}
+                  <View
                     style={[
-                      styles.quantityButton,
-                      quantity === 0 &&
-                        styles.quantityButtonDisabled,
+                      styles.productVisual,
+                      {
+                        backgroundColor:
+                          product.cardColor,
+                      },
                     ]}
                   >
-                    <Ionicons
-                      name="remove"
-                      size={16}
-                      color={
-                        quantity === 0
-                          ? "#A7AFAA"
-                          : "#28563E"
+                    <BottleVisual
+                      label={product.shortName}
+                      liquidColor={
+                        product.liquidColor
+                      }
+                      accentColor={
+                        product.accentColor
                       }
                     />
-                  </Pressable>
+                  </View>
 
-                  <Text style={styles.quantityText}>
-                    {quantity}
-                  </Text>
-
-                  <Pressable
-                    onPress={() =>
-                      increaseQuantity(product.id)
+                  <View
+                    style={
+                      styles.productInformation
                     }
-                    disabled={
-                      selectedBottleCount >=
-                      plan.bottleCount
-                    }
-                    style={[
-                      styles.quantityButton,
-                      selectedBottleCount >=
-                        plan.bottleCount &&
-                        styles.quantityButtonDisabled,
-                    ]}
                   >
-                    <Ionicons
-                      name="add"
-                      size={16}
-                      color={
+                    <Text
+                      style={styles.productName}
+                    >
+                      {product.name}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.productDetails
+                      }
+                    >
+                      {product.sizeMl} ml · ₹
+                      {product.price}
+                    </Text>
+
+                    <Text
+                      numberOfLines={2}
+                      style={
+                        styles.productDescription
+                      }
+                    >
+                      {product.description}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.quantityControl
+                    }
+                  >
+                    <Pressable
+                      onPress={() =>
+                        decreaseQuantity(
+                          product.id
+                        )
+                      }
+                      disabled={quantity === 0}
+                      style={[
+                        styles.quantityButton,
+                        quantity === 0 &&
+                          styles.quantityButtonDisabled,
+                      ]}
+                    >
+                      <Ionicons
+                        name="remove"
+                        size={16}
+                        color={
+                          quantity === 0
+                            ? "#A7AFAA"
+                            : "#28563E"
+                        }
+                      />
+                    </Pressable>
+
+                    <Text
+                      style={styles.quantityText}
+                    >
+                      {quantity}
+                    </Text>
+
+                    <Pressable
+                      onPress={() =>
+                        increaseQuantity(
+                          product.id
+                        )
+                      }
+                      disabled={
                         selectedBottleCount >=
                         plan.bottleCount
-                          ? "#A7AFAA"
-                          : "#28563E"
                       }
-                    />
-                  </Pressable>
+                      style={[
+                        styles.quantityButton,
+                        selectedBottleCount >=
+                          plan.bottleCount &&
+                          styles.quantityButtonDisabled,
+                      ]}
+                    >
+                      <Ionicons
+                        name="add"
+                        size={16}
+                        color={
+                          selectedBottleCount >=
+                          plan.bottleCount
+                            ? "#A7AFAA"
+                            : "#28563E"
+                        }
+                      />
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            );
-          })}
+              );
+            }
+          )}
         </View>
 
         <View style={styles.sectionCard}>
@@ -453,15 +502,21 @@ export default function PlanBuilderScreen() {
             Preferred delivery day
           </Text>
 
-          <Text style={styles.sectionDescription}>
-            Your deliveries will normally arrive on this
-            weekday.
+          <Text
+            style={styles.sectionDescription}
+          >
+            Your recurring deliveries will
+            normally arrive on this weekday.
           </Text>
 
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dayRow}
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={
+              styles.dayRow
+            }
           >
             {DELIVERY_DAYS.map((day) => {
               const selected =
@@ -499,9 +554,11 @@ export default function PlanBuilderScreen() {
             Preferred delivery slot
           </Text>
 
-          <Text style={styles.sectionDescription}>
-            Select your preferred time for recurring
-            deliveries.
+          <Text
+            style={styles.sectionDescription}
+          >
+            Select your preferred time for
+            recurring deliveries.
           </Text>
 
           <View style={styles.slotList}>
@@ -556,7 +613,9 @@ export default function PlanBuilderScreen() {
         </View>
 
         <View style={styles.priceCard}>
-          <Text style={styles.priceCardTitle}>
+          <Text
+            style={styles.priceCardTitle}
+          >
             Plan summary
           </Text>
 
@@ -572,20 +631,25 @@ export default function PlanBuilderScreen() {
 
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>
-              Plan saving ({plan.discountPercent}%)
+              Plan saving (
+              {plan.discountPercent}%)
             </Text>
 
-            <Text style={styles.savingPrice}>
+            <Text
+              style={styles.savingPrice}
+            >
               − ₹{savings}
             </Text>
           </View>
 
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>
-              Delivery
+              Recurring delivery
             </Text>
 
-            <Text style={styles.savingPrice}>
+            <Text
+              style={styles.savingPrice}
+            >
               Free
             </Text>
           </View>
@@ -594,7 +658,8 @@ export default function PlanBuilderScreen() {
 
           <View style={styles.priceRow}>
             <Text style={styles.totalLabel}>
-              {plan.billingCycle === "weekly"
+              {plan.billingCycle ===
+              "weekly"
                 ? "Weekly total"
                 : "Monthly total"}
             </Text>
@@ -612,43 +677,49 @@ export default function PlanBuilderScreen() {
             color="#35694E"
           />
 
-          <Text style={styles.disclaimerText}>
-            This currently creates a local test
-            subscription. Address and recurring payment
-            setup will be connected next.
+          <Text
+            style={styles.disclaimerText}
+          >
+            You will enter your address and
+            verify delivery availability on
+            the next screen.
           </Text>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         <View style={styles.bottomPrice}>
-          <Text style={styles.bottomPriceLabel}>
+          <Text
+            style={styles.bottomPriceLabel}
+          >
             {plan.billingCycle === "weekly"
               ? "Per week"
               : "Per month"}
           </Text>
 
-          <Text style={styles.bottomPriceValue}>
+          <Text
+            style={styles.bottomPriceValue}
+          >
             ₹{discountedTotal}
           </Text>
         </View>
 
         <Pressable
-          disabled={!canCreate}
-          onPress={handleCreateSubscription}
+          disabled={!canContinue}
+          onPress={handleContinue}
           style={({ pressed }) => [
             styles.createButton,
-            !canCreate &&
+            !canContinue &&
               styles.createButtonDisabled,
             pressed &&
-              canCreate &&
+              canContinue &&
               styles.pressed,
           ]}
         >
-          <Text style={styles.createButtonText}>
-            {creating
-              ? "Creating plan..."
-              : "Start subscription"}
+          <Text
+            style={styles.createButtonText}
+          >
+            Continue
           </Text>
 
           <Ionicons
