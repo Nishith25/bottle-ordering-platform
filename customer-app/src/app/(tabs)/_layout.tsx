@@ -2,19 +2,10 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
+import type { ComponentProps } from "react";
 import { Platform } from "react-native";
 
-type TabIconName =
-  | "home"
-  | "home-outline"
-  | "nutrition"
-  | "nutrition-outline"
-  | "calendar"
-  | "calendar-outline"
-  | "receipt"
-  | "receipt-outline"
-  | "person"
-  | "person-outline";
+type TabIconName = ComponentProps<typeof Ionicons>["name"];
 
 function getTabIcon(
   routeName: string,
@@ -46,7 +37,6 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-
         tabBarActiveTintColor: "#245C42",
         tabBarInactiveTintColor: "#929A95",
 
@@ -71,7 +61,6 @@ export default function TabsLayout() {
           paddingHorizontal: 8,
           borderTopWidth: 0,
           backgroundColor: "#FFFFFF",
-
           shadowColor: "#15251C",
           shadowOpacity: 0.1,
           shadowRadius: 18,
@@ -79,7 +68,6 @@ export default function TabsLayout() {
             width: 0,
             height: -5,
           },
-
           elevation: 15,
         },
       })}

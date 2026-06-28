@@ -1,15 +1,681 @@
 // customer-app/src/app/(tabs)/bottles.tsx
 
-import SectionScreen from "../../components/SectionScreen";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import {
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function BottlesScreen() {
+import BottleVisual from "../../components/BottleVisual";
+import { useCart } from "../../context/CartContext";
+import {
+  PRODUCTS,
+  Product,
+  ProductCategory,
+} from "../../data/products";
+
+type Filter = "All" | ProductCategory;
+
+const FILTERS: Filter[] = [
+  "All",
+  "Hydrating",
+  "Fruity",
+];
+
+function ProductCard({
+  product,
+}: {
+  product: Product;
+}) {
+  const {
+    addItem,
+    increaseItem,
+    decreaseItem,
+    getQuantity,
+  } = useCart();
+
+  const quantity = getQuantity(product.id);
+
   return (
-    <SectionScreen
-      eyebrow="FRESH SELECTION"
-      title="Choose your bottle"
-      description="Browse all available 300 ml bottles, ingredients, nutrition and prices."
-      icon="nutrition-outline"
-      buttonText="Explore bottles"
-    />
+    <View
+      style={[
+        styles.productCard,
+        { backgroundColor: product.cardColor },
+      ]}
+    >
+      <View style={styles.productTopRow}>
+        <View style={styles.sizeBadge}>
+          <Text style={styles.sizeBadgeText}>
+            {product.sizeMl} ml
+          </Text>
+        </View>
+
+        {product.subscriptionEligible ? (
+          <View style={styles.planBadge}>
+            <Ionicons
+              name="repeat"
+              size={11}
+              color="#42664F"
+            />
+            <Text style={styles.planBadgeText}>Plans</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.visualArea}>
+        <View
+          style={[
+            styles.visualCircle,
+            {
+              backgroundColor:
+                "rgba(255,255,255,0.48)",
+            },
+          ]}
+        />
+
+        <BottleVisual
+          label={product.shortName}
+          liquidColor={product.liquidColor}
+          accentColor={product.accentColor}
+        />
+      </View>
+
+      <Text numberOfLines={2} style={styles.productName}>
+        {product.name}
+      </Text>
+
+      <Text
+        numberOfLines={2}
+        style={styles.productDescription}
+      >
+        {product.description}
+      </Text>
+
+      <View style={styles.priceRow}>
+        <View>
+          <Text style={styles.price}>
+            ₹{product.price}
+          </Text>
+          <Text style={styles.taxText}>
+            per bottle
+          </Text>
+        </View>
+
+        {quantity === 0 ? (
+          <Pressable
+            onPress={() => addItem(product)}
+            style={({ pressed }) => [
+              styles.addButton,
+              {
+                backgroundColor: product.accentColor,
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="add"
+              size={20}
+              color="#FFFFFF"
+            />
+          </Pressable>
+        ) : (
+          <View style={styles.quantityControl}>
+            <Pressable
+              onPress={() => decreaseItem(product.id)}
+              style={styles.quantityButton}
+            >
+              <Ionicons
+                name="remove"
+                size={15}
+                color="#244E38"
+              />
+            </Pressable>
+
+            <Text style={styles.quantityText}>
+              {quantity}
+            </Text>
+
+            <Pressable
+              onPress={() => increaseItem(product.id)}
+              style={styles.quantityButton}
+            >
+              <Ionicons
+                name="add"
+                size={15}
+                color="#244E38"
+              />
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
+
+export default function BottlesScreen() {
+  const router = useRouter();
+  const { itemCount, subtotal } = useCart();
+  const [selectedFilter, setSelectedFilter] =
+    useState<Filter>("All");
+
+  const filteredProducts = useMemo(() => {
+    if (selectedFilter === "All") {
+      return PRODUCTS.filter(
+        (product) => product.available
+      );
+    }
+
+    return PRODUCTS.filter(
+      (product) =>
+        product.available &&
+        product.category === selectedFilter
+    );
+  }, [selectedFilter]);
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>
+            FRESH SELECTION
+          </Text>
+
+          <Text style={styles.title}>
+            Choose your bottle
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Freshly prepared 300 ml bottles for one-time
+            orders or subscriptions.
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => router.push("/cart")}
+          style={({ pressed }) => [
+            styles.cartButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="bag-outline"
+            size={22}
+            color="#244E38"
+          />
+
+          {itemCount > 0 ? (
+            <View style={styles.cartCount}>
+              <Text style={styles.cartCountText}>
+                {itemCount}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
+
+      <View style={styles.filterRow}>
+        {FILTERS.map((filter) => {
+          const active = selectedFilter === filter;
+
+          return (
+            <Pressable
+              key={filter}
+              onPress={() => setSelectedFilter(filter)}
+              style={[
+                styles.filterButton,
+                active && styles.filterButtonActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  active && styles.filterTextActive,
+                ]}
+              >
+                {filter}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <FlatList
+        data={filteredProducts}
+        numColumns={2}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ProductCard product={item} />
+        )}
+        columnWrapperStyle={styles.productRow}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.listContent,
+          itemCount > 0 && styles.listWithCartBar,
+        ]}
+        ListFooterComponent={
+          <View style={styles.deliveryNotice}>
+            <View style={styles.deliveryIcon}>
+              <Ionicons
+                name="location-outline"
+                size={20}
+                color="#386E52"
+              />
+            </View>
+
+            <View style={styles.deliveryText}>
+              <Text style={styles.deliveryTitle}>
+                Selected delivery locations only
+              </Text>
+
+              <Text style={styles.deliveryDescription}>
+                Your pincode will be checked before the
+                order can be placed.
+              </Text>
+            </View>
+          </View>
+        }
+      />
+
+      {itemCount > 0 ? (
+        <View style={styles.floatingCartWrapper}>
+          <Pressable
+            onPress={() => router.push("/cart")}
+            style={({ pressed }) => [
+              styles.floatingCart,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.floatingCartCount}>
+              <Text style={styles.floatingCartCountText}>
+                {itemCount}
+              </Text>
+            </View>
+
+            <View style={styles.floatingCartText}>
+              <Text style={styles.floatingCartTitle}>
+                View your cart
+              </Text>
+
+              <Text style={styles.floatingCartSubtitle}>
+                {itemCount}{" "}
+                {itemCount === 1 ? "bottle" : "bottles"}
+              </Text>
+            </View>
+
+            <Text style={styles.floatingCartPrice}>
+              ₹{subtotal}
+            </Text>
+
+            <Ionicons
+              name="arrow-forward"
+              size={18}
+              color="#FFFFFF"
+            />
+          </Pressable>
+        </View>
+      ) : null}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F7F7F2",
+  },
+
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 19,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  headerText: {
+    flex: 1,
+    paddingRight: 14,
+  },
+
+  eyebrow: {
+    color: "#4D765F",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.6,
+    marginBottom: 8,
+  },
+
+  title: {
+    color: "#17221C",
+    fontSize: 31,
+    lineHeight: 38,
+    fontWeight: "800",
+    letterSpacing: -1,
+  },
+
+  subtitle: {
+    color: "#717A75",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+
+  cartButton: {
+    width: 47,
+    height: 47,
+    borderRadius: 17,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  cartCount: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: "#1F513B",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#F7F7F2",
+  },
+
+  cartCountText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  filterRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 17,
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: "#EAEBE6",
+  },
+
+  filterButtonActive: {
+    backgroundColor: "#245C42",
+  },
+
+  filterText: {
+    color: "#68716C",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  filterTextActive: {
+    color: "#FFFFFF",
+  },
+
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 120,
+  },
+
+  listWithCartBar: {
+    paddingBottom: 200,
+  },
+
+  productRow: {
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  productCard: {
+    flex: 1,
+    minHeight: 315,
+    padding: 13,
+    borderRadius: 24,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#17221C",
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        shadowOffset: {
+          width: 0,
+          height: 6,
+        },
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+
+  productTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  sizeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
+
+  sizeBadgeText: {
+    color: "#5A635E",
+    fontSize: 8,
+    fontWeight: "800",
+  },
+
+  planBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+
+  planBadgeText: {
+    color: "#42664F",
+    fontSize: 8,
+    fontWeight: "800",
+  },
+
+  visualArea: {
+    height: 135,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  visualCircle: {
+    position: "absolute",
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+  },
+
+  productName: {
+    color: "#17221C",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800",
+    minHeight: 36,
+  },
+
+  productDescription: {
+    color: "#6D7671",
+    fontSize: 10,
+    lineHeight: 15,
+    minHeight: 31,
+    marginTop: 4,
+  },
+
+  priceRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  price: {
+    color: "#17221C",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  taxText: {
+    color: "#7C857F",
+    fontSize: 8,
+    marginTop: 1,
+  },
+
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quantityControl: {
+    padding: 3,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  quantityButton: {
+    width: 27,
+    height: 29,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quantityText: {
+    minWidth: 20,
+    textAlign: "center",
+    color: "#1E3D2D",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  deliveryNotice: {
+    marginTop: 13,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: "#E8F0EA",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  deliveryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: "#D8E7DC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deliveryText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  deliveryTitle: {
+    color: "#294534",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  deliveryDescription: {
+    color: "#657269",
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 3,
+  },
+
+  floatingCartWrapper: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 91,
+  },
+
+  floatingCart: {
+    minHeight: 64,
+    paddingHorizontal: 14,
+    borderRadius: 21,
+    backgroundColor: "#1F513B",
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#14271B",
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 9,
+    },
+    elevation: 12,
+  },
+
+  floatingCartCount: {
+    width: 37,
+    height: 37,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  floatingCartCountText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  floatingCartText: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  floatingCartTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  floatingCartSubtitle: {
+    color: "#C9DDD0",
+    fontSize: 9,
+    marginTop: 2,
+  },
+
+  floatingCartPrice: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+    marginRight: 9,
+  },
+
+  pressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.98 }],
+  },
+});
