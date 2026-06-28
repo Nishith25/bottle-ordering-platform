@@ -1,5 +1,3 @@
-// backend/src/server.js
-
 require("dotenv").config();
 
 const cors = require("cors");
@@ -50,6 +48,11 @@ const subscriptionRoutes = require(
   "./routes/subscriptions"
 );
 
+const razorpayRefundWebhookMiddleware =
+  require(
+    "./middleware/razorpayRefundWebhook"
+  );
+
 const {
   router:
     razorpayPaymentRoutes,
@@ -80,7 +83,14 @@ const allowedOrigins = String(
 
 app.disable("x-powered-by");
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: {
+      policy:
+        "same-origin-allow-popups",
+    },
+  })
+);
 
 app.use(
   cors({
@@ -121,6 +131,10 @@ app.use(
  * Razorpay webhook must receive the
  * untouched raw request body.
  * Keep this before express.json().
+ *
+ * Refund events are reconciled first,
+ * then the existing payment webhook
+ * handler processes payment events.
  */
 app.post(
   "/api/payments/razorpay/webhook",
@@ -130,6 +144,7 @@ app.post(
     limit: "1mb",
   }),
 
+  razorpayRefundWebhookMiddleware,
   razorpayWebhookHandler
 );
 

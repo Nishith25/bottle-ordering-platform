@@ -1,5 +1,3 @@
-// backend/src/routes/adminOrders.js
-
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -12,8 +10,10 @@ const Order = require("../models/Order");
 const User = require("../models/User");
 
 const {
-  restoreOrderInventory,
-} = require("../services/inventory");
+  cancelOrderWithRefund,
+  getCancellationMessage,
+  retryOrderRefund,
+} = require("../services/orderRefund");
 
 const router = express.Router();
 
@@ -62,6 +62,17 @@ function escapeRegex(value) {
     /[.*+?^${}()|[\]\\]/g,
     "\\$&"
   );
+}
+
+async function findPopulatedOrder(
+  orderId
+) {
+  return Order.findById(orderId)
+    .populate(
+      "user",
+      "fullName email phone role"
+    )
+    .lean();
 }
 
 router.get(
@@ -223,34 +234,91 @@ router.get(
 router.patch(
   "/:orderId/status",
   async (req, res, next) => {
+    const nextStatus = cleanText(
+      req.body.orderStatus
+    );
+
+    const cancellationReason =
+      cleanText(
+        req.body.cancellationReason
+      );
+
+    if (
+      !ORDER_STATUSES.includes(
+        nextStatus
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+
+        message:
+          "Please select a valid order status.",
+      });
+    }
+
+    if (
+      nextStatus === "cancelled"
+    ) {
+      try {
+        const cancelledOrder =
+          await cancelOrderWithRefund({
+            orderId:
+              req.params.orderId,
+
+            allowedStatuses: [
+              "placed",
+              "confirmed",
+              "preparing",
+            ],
+
+            reason:
+              cancellationReason ||
+              "Cancelled by administrator",
+
+            initiatedBy: "admin",
+          });
+
+        const populatedOrder =
+          await findPopulatedOrder(
+            cancelledOrder._id
+          );
+
+        return res.status(200).json({
+          success: true,
+
+          message:
+            getCancellationMessage(
+              populatedOrder,
+              "admin"
+            ),
+
+          data: {
+            order:
+              populatedOrder,
+          },
+        });
+      } catch (error) {
+        if (
+          error.name === "CastError"
+        ) {
+          return res.status(404).json({
+            success: false,
+            message:
+              "Order not found.",
+          });
+        }
+
+        return next(error);
+      }
+    }
+
     const session =
       await mongoose.startSession();
 
     try {
-      const nextStatus =
-        cleanText(
-          req.body.orderStatus
-        );
-
-      const cancellationReason =
-        cleanText(
-          req.body.cancellationReason
-        );
-
-      if (
-        !ORDER_STATUSES.includes(
-          nextStatus
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-
-          message:
-            "Please select a valid order status.",
-        });
-      }
-
       let updatedOrderId = null;
+      let message =
+        "Order status updated successfully.";
 
       await session.withTransaction(
         async () => {
@@ -274,6 +342,9 @@ router.patch(
           ) {
             updatedOrderId =
               order._id;
+
+            message =
+              "Order status is already up to date.";
 
             return;
           }
@@ -301,23 +372,6 @@ router.patch(
 
           if (
             nextStatus ===
-            "cancelled"
-          ) {
-            order.cancelledAt =
-              new Date();
-
-            order.cancellationReason =
-              cancellationReason ||
-              "Cancelled by administrator";
-
-            await restoreOrderInventory({
-              order,
-              session,
-            });
-          }
-
-          if (
-            nextStatus ===
             "delivered"
           ) {
             order.deliveredAt =
@@ -342,20 +396,13 @@ router.patch(
       );
 
       const updatedOrder =
-        await Order.findById(
+        await findPopulatedOrder(
           updatedOrderId
-        )
-          .populate(
-            "user",
-            "fullName email phone role"
-          )
-          .lean();
+        );
 
       return res.status(200).json({
         success: true,
-
-        message:
-          "Order status updated successfully.",
+        message,
 
         data: {
           order: updatedOrder,
@@ -375,6 +422,66 @@ router.patch(
       return next(error);
     } finally {
       await session.endSession();
+    }
+  }
+);
+
+router.post(
+  "/:orderId/refund/retry",
+  async (req, res, next) => {
+    try {
+      const order =
+        await retryOrderRefund({
+          orderId:
+            req.params.orderId,
+
+          initiatedBy: "admin",
+        });
+
+      const populatedOrder =
+        await findPopulatedOrder(
+          order._id
+        );
+
+      let message =
+        "Refund retry submitted.";
+
+      if (
+        populatedOrder.refundStatus ===
+        "processed"
+      ) {
+        message =
+          "Refund processed successfully.";
+      } else if (
+        populatedOrder.refundStatus ===
+        "failed"
+      ) {
+        message =
+          populatedOrder.refundFailureReason ||
+          "Refund retry failed.";
+      }
+
+      return res.status(200).json({
+        success: true,
+        message,
+
+        data: {
+          order:
+            populatedOrder,
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Order not found.",
+        });
+      }
+
+      return next(error);
     }
   }
 );

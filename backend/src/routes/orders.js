@@ -1,5 +1,3 @@
-// backend/src/routes/orders.js
-
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -11,7 +9,6 @@ const Order = require("../models/Order");
 
 const {
   reserveProductInventory,
-  restoreOrderInventory,
 } = require("../services/inventory");
 
 const {
@@ -19,6 +16,11 @@ const {
   cleanText,
   createUniqueOrderNumber,
 } = require("../services/orderCheckout");
+
+const {
+  cancelOrderWithRefund,
+  getCancellationMessage,
+} = require("../services/orderRefund");
 
 const router = express.Router();
 
@@ -90,6 +92,9 @@ router.post(
 
                   paymentReference: "",
                   orderStatus: "placed",
+
+                  refundStatus:
+                    "not_required",
 
                   inventoryReserved:
                     true,
@@ -209,86 +214,38 @@ router.patch(
   "/:orderId/cancel",
   protect,
   async (req, res, next) => {
-    const session =
-      await mongoose.startSession();
-
     try {
-      let cancelledOrder = null;
+      const cancelledOrder =
+        await cancelOrderWithRefund({
+          orderId:
+            req.params.orderId,
 
-      await session.withTransaction(
-        async () => {
-          const order =
-            await Order.findOne({
-              _id:
-                req.params.orderId,
+          userId:
+            req.user._id,
 
-              user:
-                req.user._id,
-            }).session(session);
+          allowedStatuses: [
+            "placed",
+            "confirmed",
+          ],
 
-          if (!order) {
-            const error = new Error(
-              "Order not found."
-            );
-
-            error.statusCode = 404;
-            throw error;
-          }
-
-          if (
-            ![
-              "placed",
-              "confirmed",
-            ].includes(
-              order.orderStatus
-            )
-          ) {
-            const error = new Error(
-              "This order can no longer be cancelled."
-            );
-
-            error.statusCode = 400;
-            throw error;
-          }
-
-          order.orderStatus =
-            "cancelled";
-
-          order.cancellationReason =
+          reason:
             cleanText(
               req.body.reason
             ) ||
-            "Cancelled by customer";
+            "Cancelled by customer",
 
-          order.cancelledAt =
-            new Date();
-
-          if (
-            order.paymentStatus ===
-            "paid"
-          ) {
-            order.paymentStatus =
-              "refunded";
-          }
-
-          await restoreOrderInventory({
-            order,
-            session,
-          });
-
-          await order.save({
-            session,
-          });
-
-          cancelledOrder = order;
-        }
-      );
+          initiatedBy:
+            "customer",
+        });
 
       return res.status(200).json({
         success: true,
 
         message:
-          "Your order was cancelled and the reserved stock was restored.",
+          getCancellationMessage(
+            cancelledOrder,
+            "customer"
+          ),
 
         data: {
           order:
@@ -307,8 +264,6 @@ router.patch(
       }
 
       return next(error);
-    } finally {
-      await session.endSession();
     }
   }
 );

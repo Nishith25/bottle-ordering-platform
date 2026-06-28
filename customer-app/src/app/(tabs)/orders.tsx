@@ -1,5 +1,3 @@
-// customer-app/src/app/(tabs)/orders.tsx
-
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import {
@@ -20,6 +18,25 @@ import type {
   OrderStatus,
 } from "../../services/api";
 
+type RefundStatus =
+  | "not_required"
+  | "pending"
+  | "processed"
+  | "failed";
+
+type RefundAwareOrder = CustomerOrder & {
+  paymentGateway?:
+    | ""
+    | "razorpay";
+
+  refundStatus?: RefundStatus;
+  refundId?: string;
+  refundAmount?: number;
+  refundRequestedAt?: string | null;
+  refundProcessedAt?: string | null;
+  refundFailureReason?: string;
+};
+
 const STATUS_LABELS: Record<
   OrderStatus,
   string
@@ -32,6 +49,31 @@ const STATUS_LABELS: Record<
   delivered: "Delivered",
   cancelled: "Cancelled",
 };
+
+function getRefundStatus(
+  order: RefundAwareOrder
+): RefundStatus {
+  return (
+    order.refundStatus ??
+    "not_required"
+  );
+}
+
+function formatRefundDate(
+  value?: string | null
+) {
+  if (!value) {
+    return "";
+  }
+
+  return new Date(
+    value
+  ).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -51,7 +93,7 @@ export default function OrdersScreen() {
   } = useOrders();
 
   const requestCancellation = (
-    order: CustomerOrder
+    order: RefundAwareOrder
   ) => {
     const performCancellation =
       async () => {
@@ -61,13 +103,20 @@ export default function OrdersScreen() {
         );
       };
 
+    const refundMessage =
+      order.paymentMethod ===
+        "online" &&
+      order.paymentStatus === "paid"
+        ? " A full Razorpay refund will be requested after cancellation."
+        : "";
+
     if (
       Platform.OS === "web" &&
       typeof window !== "undefined"
     ) {
       const confirmed =
         window.confirm(
-          `Cancel order ${order.orderNumber}?`
+          `Cancel order ${order.orderNumber}?${refundMessage}`
         );
 
       if (confirmed) {
@@ -79,7 +128,7 @@ export default function OrdersScreen() {
 
     Alert.alert(
       "Cancel order",
-      `Are you sure you want to cancel ${order.orderNumber}?`,
+      `Are you sure you want to cancel ${order.orderNumber}?${refundMessage}`,
       [
         {
           text: "Keep order",
@@ -163,8 +212,8 @@ export default function OrdersScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          Track current deliveries and review
-          previous bottle orders.
+          Track current deliveries, refunds
+          and previous bottle orders.
         </Text>
       </View>
 
@@ -183,7 +232,7 @@ export default function OrdersScreen() {
       ) : null}
 
       <FlatList
-        data={orders}
+        data={orders as RefundAwareOrder[]}
         keyExtractor={(order) =>
           order._id
         }
@@ -249,6 +298,9 @@ export default function OrdersScreen() {
             item.orderStatus
           );
 
+          const refundStatus =
+            getRefundStatus(item);
+
           return (
             <View style={styles.orderCard}>
               <View
@@ -280,9 +332,7 @@ export default function OrdersScreen() {
                 </View>
 
                 <StatusBadge
-                  status={
-                    item.orderStatus
-                  }
+                  status={item.orderStatus}
                 />
               </View>
 
@@ -292,9 +342,7 @@ export default function OrdersScreen() {
                 {item.items.map(
                   (orderItem) => (
                     <View
-                      key={
-                        orderItem.productId
-                      }
+                      key={orderItem.productId}
                       style={styles.itemRow}
                     >
                       <View
@@ -307,30 +355,20 @@ export default function OrdersScreen() {
                             styles.itemQuantityText
                           }
                         >
-                          {
-                            orderItem.quantity
-                          }
-                          ×
+                          {orderItem.quantity}×
                         </Text>
                       </View>
 
                       <Text
-                        style={
-                          styles.itemName
-                        }
+                        style={styles.itemName}
                       >
                         {orderItem.name}
                       </Text>
 
                       <Text
-                        style={
-                          styles.itemPrice
-                        }
+                        style={styles.itemPrice}
                       >
-                        ₹
-                        {
-                          orderItem.lineTotal
-                        }
+                        ₹{orderItem.lineTotal}
                       </Text>
                     </View>
                   )
@@ -338,9 +376,7 @@ export default function OrdersScreen() {
               </View>
 
               <View
-                style={
-                  styles.orderInformation
-                }
+                style={styles.orderInformation}
               >
                 <InformationRow
                   icon="calendar-outline"
@@ -369,14 +405,22 @@ export default function OrdersScreen() {
                     item.paymentMethod ===
                     "cod"
                       ? "Cash on delivery"
-                      : "Online payment"
+                      : `Online payment · ${item.paymentStatus}`
                   }
                 />
               </View>
 
-              <View
-                style={styles.totalRow}
-              >
+              {item.orderStatus ===
+                "cancelled" &&
+              item.paymentMethod ===
+                "online" ? (
+                <RefundNotice
+                  order={item}
+                  status={refundStatus}
+                />
+              ) : null}
+
+              <View style={styles.totalRow}>
                 <Text
                   style={styles.totalLabel}
                 >
@@ -397,9 +441,7 @@ export default function OrdersScreen() {
                     item._id
                   }
                   onPress={() =>
-                    requestCancellation(
-                      item
-                    )
+                    requestCancellation(item)
                   }
                   style={({ pressed }) => [
                     styles.cancelButton,
@@ -408,8 +450,7 @@ export default function OrdersScreen() {
                       item._id &&
                       styles.cancelDisabled,
 
-                    pressed &&
-                      styles.pressed,
+                    pressed && styles.pressed,
                   ]}
                 >
                   <Text
@@ -420,7 +461,12 @@ export default function OrdersScreen() {
                     {cancellingOrderId ===
                     item._id
                       ? "Cancelling..."
-                      : "Cancel order"}
+                      : item.paymentMethod ===
+                            "online" &&
+                          item.paymentStatus ===
+                            "paid"
+                        ? "Cancel and request refund"
+                        : "Cancel order"}
                   </Text>
                 </Pressable>
               ) : null}
@@ -433,9 +479,7 @@ export default function OrdersScreen() {
                     styles.cancellationText
                   }
                 >
-                  {
-                    item.cancellationReason
-                  }
+                  {item.cancellationReason}
                 </Text>
               ) : null}
             </View>
@@ -443,6 +487,96 @@ export default function OrdersScreen() {
         }}
       />
     </SafeAreaView>
+  );
+}
+
+function RefundNotice({
+  order,
+  status,
+}: {
+  order: RefundAwareOrder;
+  status: RefundStatus;
+}) {
+  if (status === "not_required") {
+    return null;
+  }
+
+  const amount =
+    order.refundAmount ??
+    order.total;
+
+  const config = {
+    pending: {
+      icon: "time-outline" as const,
+      title: "Refund processing",
+      description:
+        `A refund of ₹${amount} has been requested through Razorpay.`,
+      container:
+        styles.refundPending,
+      iconColor: "#86651B",
+    },
+
+    processed: {
+      icon:
+        "checkmark-circle-outline" as const,
+      title: "Refund completed",
+      description:
+        `₹${amount} was refunded${
+          order.refundProcessedAt
+            ? ` on ${formatRefundDate(
+                order.refundProcessedAt
+              )}`
+            : ""
+        }.`,
+      container:
+        styles.refundProcessed,
+      iconColor: "#2D714D",
+    },
+
+    failed: {
+      icon:
+        "alert-circle-outline" as const,
+      title: "Refund needs attention",
+      description:
+        order.refundFailureReason ||
+        "The automatic refund could not be completed. The support team can retry it.",
+      container:
+        styles.refundFailed,
+      iconColor: "#9B4949",
+    },
+  }[status];
+
+  return (
+    <View
+      style={[
+        styles.refundNotice,
+        config.container,
+      ]}
+    >
+      <Ionicons
+        name={config.icon}
+        size={20}
+        color={config.iconColor}
+      />
+
+      <View style={styles.refundContent}>
+        <Text style={styles.refundTitle}>
+          {config.title}
+        </Text>
+
+        <Text
+          style={styles.refundDescription}
+        >
+          {config.description}
+        </Text>
+
+        {order.refundId ? (
+          <Text style={styles.refundId}>
+            Refund ID: {order.refundId}
+          </Text>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -653,6 +787,50 @@ const styles = StyleSheet.create({
     color: "#66736B",
     fontSize: 9,
     lineHeight: 14,
+  },
+
+  refundNotice: {
+    padding: 13,
+    borderRadius: 17,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 13,
+  },
+
+  refundPending: {
+    backgroundColor: "#FFF5D8",
+  },
+
+  refundProcessed: {
+    backgroundColor: "#E7F3EA",
+  },
+
+  refundFailed: {
+    backgroundColor: "#FAEAEA",
+  },
+
+  refundContent: {
+    flex: 1,
+  },
+
+  refundTitle: {
+    color: "#2D3B33",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  refundDescription: {
+    color: "#66736B",
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 4,
+  },
+
+  refundId: {
+    color: "#718078",
+    fontSize: 8,
+    marginTop: 5,
   },
 
   totalRow: {

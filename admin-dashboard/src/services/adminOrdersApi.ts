@@ -1,5 +1,3 @@
-// admin-dashboard/src/services/adminOrdersApi.ts
-
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL ??
   "http://localhost:5001"
@@ -18,6 +16,12 @@ export type AdminOrderPaymentStatus =
   | "paid"
   | "failed"
   | "refunded";
+
+export type AdminOrderRefundStatus =
+  | "not_required"
+  | "pending"
+  | "processed"
+  | "failed";
 
 export type AdminOrderUser = {
   _id: string;
@@ -74,10 +78,17 @@ export type AdminOrder = {
     | "cod"
     | "online";
 
+  paymentGateway?:
+    | ""
+    | "razorpay";
+
+  paymentGatewayOrderId?: string;
+
   paymentStatus:
     AdminOrderPaymentStatus;
 
   paymentReference: string;
+  paidAt?: string | null;
 
   orderStatus:
     AdminOrderStatus;
@@ -85,6 +96,31 @@ export type AdminOrder = {
   cancellationReason: string;
   cancelledAt: string | null;
   deliveredAt: string | null;
+
+  refundStatus?:
+    AdminOrderRefundStatus;
+
+  refundId?: string;
+  refundAmount?: number;
+  refundAmountPaise?: number;
+
+  refundSpeedRequested?:
+    | ""
+    | "normal"
+    | "optimum";
+
+  refundInitiatedBy?:
+    | ""
+    | "customer"
+    | "admin"
+    | "system";
+
+  refundIdempotencyKey?: string;
+  refundRequestedAt?: string | null;
+  refundProcessedAt?: string | null;
+  refundFailedAt?: string | null;
+  refundFailureReason?: string;
+  refundAttemptCount?: number;
 
   createdAt: string;
   updatedAt: string;
@@ -236,6 +272,25 @@ export async function updateAdminOrderStatus(
           orderStatus,
           cancellationReason,
         }),
+      }
+    );
+
+  return response.data.order;
+}
+
+export async function retryAdminOrderRefund(
+  token: string,
+  orderId: string
+): Promise<AdminOrder> {
+  const response =
+    await request<AdminOrderResponse>(
+      `/api/admin/orders/${encodeURIComponent(
+        orderId
+      )}/refund/retry`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
       }
     );
 

@@ -1,6 +1,5 @@
-// backend/src/services/razorpay.js
-
 const crypto = require("crypto");
+const https = require("https");
 const Razorpay = require("razorpay");
 
 let razorpayClient = null;
@@ -126,8 +125,265 @@ function verifyWebhookSignature(
   );
 }
 
+function getRazorpayRefundSpeed() {
+  return String(
+    process.env.RAZORPAY_REFUND_SPEED ||
+      "normal"
+  ).toLowerCase() === "optimum"
+    ? "optimum"
+    : "normal";
+}
+
+function getRazorpayErrorMessage(error) {
+  return (
+    error?.razorpayError?.error
+      ?.description ||
+    error?.error?.description ||
+    error?.description ||
+    error?.message ||
+    "Razorpay could not complete the request."
+  );
+}
+
+function requestRazorpayApi({
+  method,
+  path,
+  body,
+  headers = {},
+}) {
+  if (!isRazorpayConfigured()) {
+    return Promise.reject(
+      createConfigurationError(
+        "Razorpay is not configured on the backend."
+      )
+    );
+  }
+
+  const keyId =
+    process.env.RAZORPAY_KEY_ID;
+
+  const keySecret =
+    process.env.RAZORPAY_KEY_SECRET;
+
+  const bodyText = body
+    ? JSON.stringify(body)
+    : "";
+
+  const authorization =
+    Buffer.from(
+      `${keyId}:${keySecret}`
+    ).toString("base64");
+
+  return new Promise(
+    (resolve, reject) => {
+      const request = https.request(
+        {
+          protocol: "https:",
+          hostname:
+            "api.razorpay.com",
+          port: 443,
+          method,
+          path,
+
+          headers: {
+            Accept:
+              "application/json",
+
+            Authorization:
+              `Basic ${authorization}`,
+
+            ...(bodyText
+              ? {
+                  "Content-Type":
+                    "application/json",
+
+                  "Content-Length":
+                    Buffer.byteLength(
+                      bodyText
+                    ),
+                }
+              : {}),
+
+            ...headers,
+          },
+        },
+        (response) => {
+          let responseText = "";
+
+          response.setEncoding(
+            "utf8"
+          );
+
+          response.on(
+            "data",
+            (chunk) => {
+              responseText += chunk;
+            }
+          );
+
+          response.on(
+            "end",
+            () => {
+              let payload = {};
+
+              if (responseText) {
+                try {
+                  payload = JSON.parse(
+                    responseText
+                  );
+                } catch {
+                  const error =
+                    new Error(
+                      "Razorpay returned an invalid response."
+                    );
+
+                  error.statusCode =
+                    502;
+
+                  reject(error);
+                  return;
+                }
+              }
+
+              const statusCode =
+                Number(
+                  response.statusCode ||
+                    500
+                );
+
+              if (
+                statusCode >= 200 &&
+                statusCode < 300
+              ) {
+                resolve(payload);
+                return;
+              }
+
+              const message =
+                payload?.error
+                  ?.description ||
+                payload?.error
+                  ?.reason ||
+                payload?.message ||
+                `Razorpay request failed with status ${statusCode}.`;
+
+              const error =
+                new Error(message);
+
+              error.statusCode =
+                statusCode;
+
+              error.razorpayError =
+                payload;
+
+              reject(error);
+            }
+          );
+        }
+      );
+
+      request.setTimeout(
+        15000,
+        () => {
+          request.destroy(
+            new Error(
+              "Razorpay took too long to respond."
+            )
+          );
+        }
+      );
+
+      request.on(
+        "error",
+        (error) => {
+          reject(error);
+        }
+      );
+
+      if (bodyText) {
+        request.write(bodyText);
+      }
+
+      request.end();
+    }
+  );
+}
+
+async function createRazorpayRefund({
+  paymentId,
+  amountPaise,
+  speed,
+  notes,
+  idempotencyKey,
+}) {
+  if (!paymentId) {
+    const error = new Error(
+      "A Razorpay payment ID is required for refund."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    !Number.isInteger(amountPaise) ||
+    amountPaise < 100
+  ) {
+    const error = new Error(
+      "Refund amount must be at least ₹1."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    !idempotencyKey ||
+    idempotencyKey.length < 10
+  ) {
+    const error = new Error(
+      "A valid refund idempotency key is required."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return requestRazorpayApi({
+    method: "POST",
+
+    path:
+      `/v1/payments/${encodeURIComponent(
+        paymentId
+      )}/refund`,
+
+    headers: {
+      "X-Refund-Idempotency":
+        idempotencyKey,
+    },
+
+    body: {
+      amount: amountPaise,
+      speed,
+      notes,
+    },
+  });
+}
+
+async function fetchRazorpayPayment(
+  paymentId
+) {
+  return getRazorpayClient().payments.fetch(
+    paymentId
+  );
+}
+
 module.exports = {
+  createRazorpayRefund,
+  fetchRazorpayPayment,
   getRazorpayClient,
+  getRazorpayErrorMessage,
+  getRazorpayRefundSpeed,
   isRazorpayConfigured,
   verifyPaymentSignature,
   verifyWebhookSignature,

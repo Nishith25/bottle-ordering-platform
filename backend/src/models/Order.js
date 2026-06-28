@@ -1,5 +1,3 @@
-// backend/src/models/Order.js
-
 const mongoose = require("mongoose");
 
 const orderItemSchema =
@@ -277,6 +275,90 @@ const orderSchema =
         default: null,
       },
 
+      refundStatus: {
+        type: String,
+        enum: [
+          "not_required",
+          "pending",
+          "processed",
+          "failed",
+        ],
+        default: "not_required",
+      },
+
+      refundId: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      refundAmount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      refundAmountPaise: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      refundSpeedRequested: {
+        type: String,
+        enum: ["", "normal", "optimum"],
+        default: "",
+      },
+
+      refundInitiatedBy: {
+        type: String,
+        enum: [
+          "",
+          "customer",
+          "admin",
+          "system",
+        ],
+        default: "",
+      },
+
+      refundIdempotencyKey: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      refundRequestedAt: {
+        type: Date,
+        default: null,
+      },
+
+      refundProcessedAt: {
+        type: Date,
+        default: null,
+      },
+
+      refundFailedAt: {
+        type: Date,
+        default: null,
+      },
+
+      refundFailureReason: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      refundAttemptCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      refundRequestLockedAt: {
+        type: Date,
+        default: null,
+      },
+
       inventoryReserved: {
         type: Boolean,
         default: false,
@@ -309,6 +391,15 @@ orderSchema.index({
 
 orderSchema.index({
   paymentGatewayOrderId: 1,
+});
+
+orderSchema.index({
+  refundId: 1,
+});
+
+orderSchema.index({
+  refundStatus: 1,
+  updatedAt: -1,
 });
 
 module.exports = mongoose.model(

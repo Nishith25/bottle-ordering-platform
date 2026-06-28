@@ -1,6 +1,5 @@
-// admin-dashboard/src/pages/OrdersPage.tsx
-
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -11,8 +10,10 @@ import { useAdminAuth } from "../context/AuthContext";
 
 import {
   fetchAdminOrders,
+  retryAdminOrderRefund,
   updateAdminOrderStatus,
   type AdminOrder,
+  type AdminOrderRefundStatus,
   type AdminOrderStatus,
   type AdminOrderStatusCounts,
   type AdminOrderUser,
@@ -31,6 +32,17 @@ const STATUS_LABELS: Record<
     "Out for delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
+};
+
+const REFUND_LABELS: Record<
+  AdminOrderRefundStatus,
+  string
+> = {
+  not_required:
+    "No refund required",
+  pending: "Refund processing",
+  processed: "Refund completed",
+  failed: "Refund failed",
 };
 
 const NEXT_STATUSES: Record<
@@ -57,7 +69,6 @@ const NEXT_STATUSES: Record<
   ],
 
   delivered: [],
-
   cancelled: [],
 };
 
@@ -94,6 +105,14 @@ function formatDate(value: string) {
   });
 }
 
+function formatOptionalDate(
+  value?: string | null
+) {
+  return value
+    ? formatDate(value)
+    : "Not available";
+}
+
 function getCustomer(
   order: AdminOrder
 ): AdminOrderUser | null {
@@ -105,6 +124,36 @@ function getCustomer(
   }
 
   return null;
+}
+
+function getRefundStatus(
+  order: AdminOrder
+): AdminOrderRefundStatus {
+  return (
+    order.refundStatus ??
+    "not_required"
+  );
+}
+
+function getRefundSuccessMessage(
+  order: AdminOrder
+) {
+  const status =
+    getRefundStatus(order);
+
+  if (status === "processed") {
+    return `${order.orderNumber} was cancelled and refunded.`;
+  }
+
+  if (status === "pending") {
+    return `${order.orderNumber} was cancelled and the refund was initiated.`;
+  }
+
+  if (status === "failed") {
+    return `${order.orderNumber} was cancelled, but the refund needs a retry.`;
+  }
+
+  return `${order.orderNumber} was cancelled.`;
 }
 
 export default function OrdersPage() {
@@ -161,14 +210,12 @@ export default function OrdersPage() {
             token,
             {
               status: statusFilter,
-
               search:
                 submittedSearch,
             }
           );
 
         setOrders(result.orders);
-
         setStatusCounts(
           result.statusCounts
         );
@@ -195,7 +242,7 @@ export default function OrdersPage() {
     () =>
       Object.values(
         statusCounts
-      ).reduce(
+      ).reduce<number>(
         (sum, count) =>
           sum + count,
         0
@@ -204,7 +251,7 @@ export default function OrdersPage() {
   );
 
   const handleSearch = (
-    event: React.FormEvent
+    event: FormEvent
   ) => {
     event.preventDefault();
 
@@ -233,9 +280,17 @@ export default function OrdersPage() {
       if (
         nextStatus === "cancelled"
       ) {
+        const refundNote =
+          order.paymentMethod ===
+            "online" &&
+          order.paymentStatus ===
+            "paid"
+            ? " A full Razorpay refund will also be requested."
+            : "";
+
         const confirmed =
           window.confirm(
-            `Cancel order ${order.orderNumber}?`
+            `Cancel order ${order.orderNumber}?${refundNote}`
           );
 
         if (!confirmed) {
@@ -275,7 +330,11 @@ export default function OrdersPage() {
         );
 
         setSuccess(
-          `${order.orderNumber} changed to ${STATUS_LABELS[nextStatus]}.`
+          nextStatus === "cancelled"
+            ? getRefundSuccessMessage(
+                updatedOrder
+              )
+            : `${order.orderNumber} changed to ${STATUS_LABELS[nextStatus]}.`
         );
 
         await loadOrders();
@@ -290,6 +349,68 @@ export default function OrdersPage() {
       }
     };
 
+  const handleRefundRetry =
+    async (order: AdminOrder) => {
+      if (!token) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Retry the Razorpay refund for ${order.orderNumber}?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setUpdatingOrderId(order._id);
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const updatedOrder =
+          await retryAdminOrderRefund(
+            token,
+            order._id
+          );
+
+        setOrders(
+          (currentOrders) =>
+            currentOrders.map(
+              (currentOrder) =>
+                currentOrder._id ===
+                updatedOrder._id
+                  ? updatedOrder
+                  : currentOrder
+            )
+        );
+
+        const refundStatus =
+          getRefundStatus(
+            updatedOrder
+          );
+
+        setSuccess(
+          refundStatus === "processed"
+            ? "Refund processed successfully."
+            : refundStatus === "pending"
+              ? "Refund request submitted to Razorpay."
+              : "Refund retry completed."
+        );
+
+        await loadOrders();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to retry refund."
+        );
+      } finally {
+        setUpdatingOrderId(null);
+      }
+    };
+
   return (
     <div className="orders-page">
       <div className="page-heading-row">
@@ -297,8 +418,9 @@ export default function OrdersPage() {
           <h2>Customer orders</h2>
 
           <p>
-            Confirm, prepare and track customer
-            bottle deliveries.
+            Confirm, prepare, deliver and
+            manage refunds for customer
+            bottle orders.
           </p>
         </div>
 
@@ -406,7 +528,6 @@ export default function OrdersPage() {
         orders.length === 0 ? (
           <div className="page-state compact">
             <div className="spinner" />
-
             <p>Loading customer orders</p>
           </div>
         ) : orders.length === 0 ? (
@@ -433,6 +554,17 @@ export default function OrdersPage() {
                   order.orderStatus
                 ];
 
+              const refundStatus =
+                getRefundStatus(order);
+
+              const showRefundPanel =
+                order.paymentMethod ===
+                  "online" &&
+                (order.orderStatus ===
+                  "cancelled" ||
+                  refundStatus !==
+                    "not_required");
+
               return (
                 <article
                   key={order._id}
@@ -442,9 +574,7 @@ export default function OrdersPage() {
                     <div>
                       <div className="order-number-row">
                         <strong>
-                          {
-                            order.orderNumber
-                          }
+                          {order.orderNumber}
                         </strong>
 
                         <span
@@ -452,8 +582,7 @@ export default function OrdersPage() {
                         >
                           {
                             STATUS_LABELS[
-                              order
-                                .orderStatus
+                              order.orderStatus
                             ]
                           }
                         </span>
@@ -485,8 +614,7 @@ export default function OrdersPage() {
 
                       <strong>
                         {customer?.fullName ??
-                          order
-                            .deliveryAddress
+                          order.deliveryAddress
                             .fullName}
                       </strong>
 
@@ -498,8 +626,7 @@ export default function OrdersPage() {
                       <span>
                         +91{" "}
                         {customer?.phone ??
-                          order
-                            .deliveryAddress
+                          order.deliveryAddress
                             .phone}
                       </span>
                     </div>
@@ -509,36 +636,31 @@ export default function OrdersPage() {
 
                       <strong>
                         {
-                          order
-                            .deliverySchedule
+                          order.deliverySchedule
                             .deliveryDateLabel
                         }
                       </strong>
 
                       <span>
                         {
-                          order
-                            .deliverySchedule
+                          order.deliverySchedule
                             .deliverySlot
                         }
                       </span>
 
                       <span>
                         {
-                          order
-                            .deliveryAddress
+                          order.deliveryAddress
                             .area
                         }
                         ,{" "}
                         {
-                          order
-                            .deliveryAddress
+                          order.deliveryAddress
                             .city
                         }{" "}
                         –{" "}
                         {
-                          order
-                            .deliveryAddress
+                          order.deliveryAddress
                             .pincode
                         }
                       </span>
@@ -551,14 +673,12 @@ export default function OrdersPage() {
                         {order.paymentMethod ===
                         "cod"
                           ? "Cash on delivery"
-                          : "Online payment"}
+                          : "Razorpay online payment"}
                       </strong>
 
                       <span>
                         Status:{" "}
-                        {
-                          order.paymentStatus
-                        }
+                        {order.paymentStatus}
                       </span>
 
                       <span>
@@ -570,8 +690,126 @@ export default function OrdersPage() {
                               order.deliveryFee
                             )}
                       </span>
+
+                      {order.paymentReference ? (
+                        <span className="payment-reference">
+                          Payment ID:{" "}
+                          {order.paymentReference}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
+
+                  {showRefundPanel ? (
+                    <div
+                      className={`refund-panel refund-${refundStatus}`}
+                    >
+                      <div className="refund-panel-heading">
+                        <div>
+                          <span className="refund-eyebrow">
+                            RAZORPAY REFUND
+                          </span>
+
+                          <h4>
+                            {
+                              REFUND_LABELS[
+                                refundStatus
+                              ]
+                            }
+                          </h4>
+                        </div>
+
+                        <span
+                          className={`refund-status-pill refund-status-${refundStatus}`}
+                        >
+                          {
+                            REFUND_LABELS[
+                              refundStatus
+                            ]
+                          }
+                        </span>
+                      </div>
+
+                      <div className="refund-detail-grid">
+                        <div>
+                          <span>Amount</span>
+                          <strong>
+                            {formatCurrency(
+                              order.refundAmount ??
+                                order.total
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>Requested</span>
+                          <strong>
+                            {formatOptionalDate(
+                              order.refundRequestedAt
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>Refund ID</span>
+                          <strong>
+                            {order.refundId ||
+                              "Awaiting Razorpay"}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>Attempts</span>
+                          <strong>
+                            {order.refundAttemptCount ??
+                              0}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {refundStatus ===
+                        "failed" &&
+                      order.refundFailureReason ? (
+                        <div className="refund-failure-reason">
+                          {
+                            order.refundFailureReason
+                          }
+                        </div>
+                      ) : null}
+
+                      {refundStatus ===
+                      "processed" ? (
+                        <div className="refund-completed-note">
+                          Completed:{" "}
+                          {formatOptionalDate(
+                            order.refundProcessedAt
+                          )}
+                        </div>
+                      ) : null}
+
+                      {refundStatus ===
+                      "failed" ? (
+                        <button
+                          type="button"
+                          className="refund-retry-button"
+                          disabled={
+                            updatingOrderId ===
+                            order._id
+                          }
+                          onClick={() => {
+                            void handleRefundRetry(
+                              order
+                            );
+                          }}
+                        >
+                          {updatingOrderId ===
+                          order._id
+                            ? "Retrying refund..."
+                            : "Retry refund"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="admin-order-items">
                     <h4>Ordered bottles</h4>
@@ -579,9 +817,7 @@ export default function OrdersPage() {
                     {order.items.map(
                       (item) => (
                         <div
-                          key={
-                            item.productId
-                          }
+                          key={item.productId}
                           className="admin-order-item"
                         >
                           <span>
@@ -606,18 +842,15 @@ export default function OrdersPage() {
 
                     <p>
                       {
-                        order
-                          .deliveryAddress
+                        order.deliveryAddress
                           .houseDetails
                       }
                       ,{" "}
                       {
-                        order
-                          .deliveryAddress
+                        order.deliveryAddress
                           .areaDetails
                       }
-                      {order
-                        .deliveryAddress
+                      {order.deliveryAddress
                         .landmark
                         ? `, near ${order.deliveryAddress.landmark}`
                         : ""}
@@ -637,12 +870,9 @@ export default function OrdersPage() {
                               updatingOrderId ===
                               order._id
                             }
-                            onChange={(
-                              event
-                            ) => {
+                            onChange={(event) => {
                               const value =
-                                event
-                                  .target
+                                event.target
                                   .value as AdminOrderStatus;
 
                               if (value) {
@@ -658,16 +888,10 @@ export default function OrdersPage() {
                             </option>
 
                             {nextStatuses.map(
-                              (
-                                nextStatus
-                              ) => (
+                              (nextStatus) => (
                                 <option
-                                  key={
-                                    nextStatus
-                                  }
-                                  value={
-                                    nextStatus
-                                  }
+                                  key={nextStatus}
+                                  value={nextStatus}
                                 >
                                   {
                                     STATUS_LABELS[
@@ -692,7 +916,13 @@ export default function OrdersPage() {
                         {order.orderStatus ===
                         "delivered"
                           ? "Order completed"
-                          : "Order cancelled"}
+                          : refundStatus ===
+                              "pending"
+                            ? "Order cancelled · refund processing"
+                            : refundStatus ===
+                                "processed"
+                              ? "Order cancelled · refunded"
+                              : "Order cancelled"}
                       </span>
                     )}
                   </div>
@@ -702,9 +932,7 @@ export default function OrdersPage() {
                   order.cancellationReason ? (
                     <div className="cancellation-reason">
                       Cancellation reason:{" "}
-                      {
-                        order.cancellationReason
-                      }
+                      {order.cancellationReason}
                     </div>
                   ) : null}
                 </article>
@@ -739,7 +967,6 @@ function OrderMetric({
       }`}
     >
       <span>{label}</span>
-
       <strong>{value}</strong>
     </button>
   );
