@@ -2,8 +2,12 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +17,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
+
+const ADMIN_DASHBOARD_URL = (
+  process.env
+    .EXPO_PUBLIC_ADMIN_DASHBOARD_URL ??
+  "http://localhost:5174"
+).replace(/\/$/, "");
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -24,14 +34,67 @@ export default function AccountScreen() {
     logout,
   } = useAuth();
 
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
+  const openAdminDashboard = async () => {
+    try {
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined"
+      ) {
+        window.open(
+          ADMIN_DASHBOARD_URL,
+          "_blank",
+          "noopener,noreferrer"
+        );
+
+        return;
+      }
+
+      const supported =
+        await Linking.canOpenURL(
+          ADMIN_DASHBOARD_URL
+        );
+
+      if (!supported) {
+        Alert.alert(
+          "Unable to open dashboard",
+          "The admin dashboard URL is not available."
+        );
+
+        return;
+      }
+
+      await Linking.openURL(
+        ADMIN_DASHBOARD_URL
+      );
+    } catch {
+      Alert.alert(
+        "Unable to open dashboard",
+        "Please check that the admin dashboard is running."
+      );
+    }
+  };
+
   const handleLogout = async () => {
-    await logout();
+    if (loggingOut) {
+      return;
+    }
+
+    setLoggingOut(true);
+
+    try {
+      await Promise.resolve(logout());
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centerState}>
           <ActivityIndicator
             size="large"
             color="#245C42"
@@ -49,260 +112,390 @@ export default function AccountScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={
             styles.guestContent
           }
-          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.eyebrow}>
-            YOUR ACCOUNT
+          <View style={styles.guestIcon}>
+            <Ionicons
+              name="person-outline"
+              size={39}
+              color="#35694E"
+            />
+          </View>
+
+          <Text style={styles.guestTitle}>
+            Your account
           </Text>
 
-          <Text style={styles.title}>
-            Orders made easier
+          <Text
+            style={styles.guestDescription}
+          >
+            Log in to save orders, manage
+            subscriptions and view your
+            delivery history.
           </Text>
 
-          <Text style={styles.subtitle}>
-            Log in to manage your profile,
-            orders and recurring bottle plans.
-          </Text>
-
-          <View style={styles.guestCard}>
-            <View style={styles.guestIcon}>
-              <Ionicons
-                name="person-outline"
-                size={37}
-                color="#245C42"
-              />
-            </View>
-
-            <Text style={styles.guestTitle}>
-              You are browsing as a guest
+          <Pressable
+            onPress={() =>
+              router.push("/login")
+            }
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Log in
             </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              router.push("/register")
+            }
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
+              Create account
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() =>
+              router.push(
+                "/(tabs)/bottles"
+              )
+            }
+            style={({ pressed }) => [
+              styles.browseButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="nutrition-outline"
+              size={18}
+              color="#35694E"
+            />
 
             <Text
-              style={styles.guestDescription}
+              style={styles.browseButtonText}
             >
-              Your cart can still be used, but
-              an account will be required for
-              saved orders and subscriptions.
+              Continue browsing bottles
             </Text>
-
-            <Pressable
-              onPress={() =>
-                router.push("/login")
-              }
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.primaryButtonText
-                }
-              >
-                Log in
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                router.push("/register")
-              }
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.secondaryButtonText
-                }
-              >
-                Create account
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.benefitsCard}>
-            <BenefitItem
-              icon="receipt-outline"
-              title="Order history"
-              description="Keep all your bottle orders in one place."
-            />
-
-            <BenefitItem
-              icon="repeat-outline"
-              title="Subscription control"
-              description="Manage weekly and monthly deliveries."
-            />
-
-            <BenefitItem
-              icon="location-outline"
-              title="Saved details"
-              description="Reuse delivery information during checkout."
-              last
-            />
-          </View>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  const initial =
-    user.fullName.trim().charAt(0).toUpperCase() ||
-    "U";
+  const isAdmin =
+    user.role === "admin";
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={
-          styles.profileContent
+          styles.scrollContent
         }
       >
         <Text style={styles.eyebrow}>
-          YOUR ACCOUNT
+          MY ACCOUNT
         </Text>
 
-        <View style={styles.profileHeader}>
+        <Text style={styles.title}>
+          Hello,{" "}
+          {user.fullName.split(" ")[0]}
+        </Text>
+
+        <Text style={styles.subtitle}>
+          Manage your orders, recurring plans
+          and account details.
+        </Text>
+
+        <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {initial}
+              {user.fullName
+                .charAt(0)
+                .toUpperCase()}
             </Text>
           </View>
 
-          <View style={styles.profileHeaderText}>
-            <Text style={styles.profileName}>
-              {user.fullName}
+          <View style={styles.profileDetails}>
+            <View style={styles.nameRow}>
+              <Text style={styles.profileName}>
+                {user.fullName}
+              </Text>
+
+              {isAdmin ? (
+                <View style={styles.adminBadge}>
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={12}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.adminBadgeText
+                    }
+                  >
+                    Admin
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={styles.profileEmail}>
+              {user.email}
             </Text>
 
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>
-                {user.role === "admin"
-                  ? "Administrator"
-                  : "Customer"}
-              </Text>
-            </View>
+            <Text style={styles.profilePhone}>
+              +91 {user.phone}
+            </Text>
           </View>
         </View>
 
-        <View style={styles.infoCard}>
-          <AccountRow
+        {isAdmin ? (
+          <View style={styles.adminCard}>
+            <View style={styles.adminCardTop}>
+              <View style={styles.adminIcon}>
+                <Ionicons
+                  name="settings-outline"
+                  size={24}
+                  color="#245C42"
+                />
+              </View>
+
+              <View
+                style={
+                  styles.adminCardContent
+                }
+              >
+                <Text
+                  style={
+                    styles.adminCardTitle
+                  }
+                >
+                  Administrator dashboard
+                </Text>
+
+                <Text
+                  style={
+                    styles.adminCardDescription
+                  }
+                >
+                  Manage bottle prices,
+                  availability, delivery areas
+                  and subscription plans.
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                void openAdminDashboard();
+              }}
+              style={({ pressed }) => [
+                styles.adminDashboardButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="open-outline"
+                size={18}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.adminDashboardButtonText
+                }
+              >
+                Open Admin Dashboard
+              </Text>
+            </Pressable>
+
+            <Text style={styles.adminNotice}>
+              Your administrator account can
+              still buy bottles and subscribe
+              through this customer app.
+            </Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>
+          Shopping
+        </Text>
+
+        <MenuButton
+          icon="nutrition-outline"
+          title="Browse bottles"
+          description="Order fresh bottles for delivery"
+          onPress={() =>
+            router.push(
+              "/(tabs)/bottles"
+            )
+          }
+        />
+
+        <MenuButton
+          icon="receipt-outline"
+          title="My orders"
+          description="Track and review bottle orders"
+          onPress={() =>
+            router.push(
+              "/(tabs)/orders"
+            )
+          }
+        />
+
+        <MenuButton
+          icon="repeat-outline"
+          title="My subscriptions"
+          description="Manage recurring bottle plans"
+          onPress={() =>
+            router.push(
+              "/(tabs)/plans"
+            )
+          }
+        />
+
+        <Text style={styles.sectionTitle}>
+          Account information
+        </Text>
+
+        <View style={styles.informationCard}>
+          <InformationRow
             icon="mail-outline"
-            label="Email address"
+            label="Email"
             value={user.email}
           />
 
-          <AccountRow
+          <InformationRow
             icon="call-outline"
-            label="Mobile number"
+            label="Mobile"
             value={`+91 ${user.phone}`}
           />
 
-          <AccountRow
-            icon="shield-checkmark-outline"
+          <InformationRow
+            icon="person-circle-outline"
+            label="Account type"
+            value={
+              isAdmin
+                ? "Customer and administrator"
+                : "Customer"
+            }
+          />
+
+          <InformationRow
+            icon="checkmark-circle-outline"
             label="Account status"
             value={
               user.active
                 ? "Active"
-                : "Disabled"
-            }
-            last
-          />
-        </View>
-
-        <View style={styles.actionCard}>
-          <ActionRow
-            icon="receipt-outline"
-            title="My orders"
-            description="View current and previous orders"
-            onPress={() =>
-              router.push("/(tabs)/orders")
-            }
-          />
-
-          <ActionRow
-            icon="repeat-outline"
-            title="My subscriptions"
-            description="Manage recurring bottle plans"
-            onPress={() =>
-              router.push("/(tabs)/plans")
+                : "Inactive"
             }
             last
           />
         </View>
 
         <Pressable
+          disabled={loggingOut}
           onPress={() => {
             void handleLogout();
           }}
           style={({ pressed }) => [
             styles.logoutButton,
-            pressed && styles.pressed,
+
+            loggingOut &&
+              styles.logoutButtonDisabled,
+
+            pressed &&
+              !loggingOut &&
+              styles.pressed,
           ]}
         >
           <Ionicons
             name="log-out-outline"
             size={19}
-            color="#9B4545"
+            color="#A34848"
           />
 
           <Text style={styles.logoutText}>
-            Log out
+            {loggingOut
+              ? "Logging out..."
+              : "Log out"}
           </Text>
         </Pressable>
-
-        <Text style={styles.sessionNote}>
-          Your login is securely saved on this
-          device until you log out.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function BenefitItem({
+function MenuButton({
   icon,
   title,
   description,
-  last = false,
+  onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  last?: boolean;
+  onPress: () => void;
 }) {
   return (
-    <View
-      style={[
-        styles.benefitItem,
-        last && styles.lastItem,
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuButton,
+        pressed && styles.pressed,
       ]}
     >
-      <View style={styles.rowIcon}>
+      <View style={styles.menuIcon}>
         <Ionicons
           name={icon}
-          size={20}
+          size={22}
           color="#35694E"
         />
       </View>
 
-      <View style={styles.rowContent}>
-        <Text style={styles.rowTitle}>
+      <View style={styles.menuContent}>
+        <Text style={styles.menuTitle}>
           {title}
         </Text>
 
-        <Text style={styles.rowDescription}>
+        <Text
+          style={styles.menuDescription}
+        >
           {description}
         </Text>
       </View>
-    </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={19}
+        color="#87918B"
+      />
+    </Pressable>
   );
 }
 
-function AccountRow({
+function InformationRow({
   icon,
   label,
   value,
@@ -316,77 +509,34 @@ function AccountRow({
   return (
     <View
       style={[
-        styles.accountRow,
-        last && styles.lastItem,
+        styles.informationRow,
+        last &&
+          styles.lastInformationRow,
       ]}
     >
-      <View style={styles.rowIcon}>
+      <View style={styles.informationIcon}>
         <Ionicons
           name={icon}
-          size={20}
+          size={18}
           color="#35694E"
         />
       </View>
 
-      <View style={styles.rowContent}>
-        <Text style={styles.rowLabel}>
+      <View style={styles.informationContent}>
+        <Text
+          style={styles.informationLabel}
+        >
           {label}
         </Text>
 
-        <Text style={styles.rowValue}>
+        <Text
+          numberOfLines={2}
+          style={styles.informationValue}
+        >
           {value}
         </Text>
       </View>
     </View>
-  );
-}
-
-function ActionRow({
-  icon,
-  title,
-  description,
-  onPress,
-  last = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description: string;
-  onPress: () => void;
-  last?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionRow,
-        last && styles.lastItem,
-        pressed && styles.actionPressed,
-      ]}
-    >
-      <View style={styles.rowIcon}>
-        <Ionicons
-          name={icon}
-          size={20}
-          color="#35694E"
-        />
-      </View>
-
-      <View style={styles.rowContent}>
-        <Text style={styles.rowTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.rowDescription}>
-          {description}
-        </Text>
-      </View>
-
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color="#8B958F"
-      />
-    </Pressable>
   );
 }
 
@@ -396,34 +546,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F7F2",
   },
 
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    color: "#59665F",
-    fontSize: 12,
-    marginTop: 14,
-  },
-
-  guestContent: {
+  scrollContent: {
     width: "100%",
     maxWidth: 650,
     alignSelf: "center",
-    paddingHorizontal: 21,
-    paddingTop: 14,
-    paddingBottom: 120,
-  },
-
-  profileContent: {
-    width: "100%",
-    maxWidth: 650,
-    alignSelf: "center",
-    paddingHorizontal: 21,
-    paddingTop: 14,
-    paddingBottom: 120,
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 130,
   },
 
   eyebrow: {
@@ -435,49 +564,302 @@ const styles = StyleSheet.create({
 
   title: {
     color: "#17221C",
-    fontSize: 30,
-    lineHeight: 37,
+    fontSize: 31,
     fontWeight: "900",
     letterSpacing: -1,
-    marginTop: 10,
+    marginTop: 8,
   },
 
   subtitle: {
     color: "#717A75",
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 7,
   },
 
-  guestCard: {
-    padding: 22,
-    borderRadius: 27,
+  profileCard: {
+    padding: 17,
+    borderRadius: 24,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E8E3",
+    borderColor: "#E4E8E2",
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 27,
+    marginTop: 22,
+  },
+
+  avatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 21,
+    backgroundColor: "#DDEBDD",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  avatarText: {
+    color: "#245C42",
+    fontSize: 25,
+    fontWeight: "900",
+  },
+
+  profileDetails: {
+    flex: 1,
+    marginLeft: 14,
+  },
+
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+
+  profileName: {
+    color: "#203128",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  adminBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  adminBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  profileEmail: {
+    color: "#6F7B74",
+    fontSize: 10,
+    marginTop: 6,
+  },
+
+  profilePhone: {
+    color: "#6F7B74",
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  adminCard: {
+    padding: 17,
+    borderRadius: 24,
+    backgroundColor: "#E2EFE4",
+    borderWidth: 1,
+    borderColor: "#CFE0D2",
+    marginTop: 14,
+  },
+
+  adminCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  adminIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  adminCardContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  adminCardTitle: {
+    color: "#244332",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  adminCardDescription: {
+    color: "#617168",
+    fontSize: 9,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+
+  adminDashboardButton: {
+    minHeight: 51,
+    borderRadius: 17,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 15,
+  },
+
+  adminDashboardButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  adminNotice: {
+    color: "#617168",
+    fontSize: 8,
+    lineHeight: 13,
+    textAlign: "center",
+    marginTop: 10,
+  },
+
+  sectionTitle: {
+    color: "#1D2922",
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 24,
+    marginBottom: 11,
+  },
+
+  menuButton: {
+    minHeight: 72,
+    padding: 13,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E8E2",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  menuIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 15,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  menuContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  menuTitle: {
+    color: "#26372E",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  menuDescription: {
+    color: "#747F78",
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 4,
+  },
+
+  informationCard: {
+    paddingHorizontal: 16,
+    borderRadius: 23,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E8E2",
+  },
+
+  informationRow: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8EBE7",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  lastInformationRow: {
+    borderBottomWidth: 0,
+  },
+
+  informationIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 13,
+    backgroundColor: "#E7F0E9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  informationContent: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  informationLabel: {
+    color: "#7A847E",
+    fontSize: 8,
+  },
+
+  informationValue: {
+    color: "#28372F",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+
+  logoutButton: {
+    minHeight: 51,
+    borderRadius: 17,
+    backgroundColor: "#FAECEC",
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 20,
+  },
+
+  logoutButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  logoutText: {
+    color: "#A34848",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  guestContent: {
+    flexGrow: 1,
+    width: "100%",
+    maxWidth: 500,
+    alignSelf: "center",
+    paddingHorizontal: 25,
+    paddingBottom: 50,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   guestIcon: {
-    width: 82,
-    height: 82,
+    width: 85,
+    height: 85,
     borderRadius: 28,
-    backgroundColor: "#E4EFE7",
+    backgroundColor: "#E5EFE7",
     alignItems: "center",
     justifyContent: "center",
   },
 
   guestTitle: {
     color: "#1D2922",
-    fontSize: 17,
+    fontSize: 24,
     fontWeight: "900",
-    textAlign: "center",
-    marginTop: 18,
+    marginTop: 20,
   },
 
   guestDescription: {
-    color: "#707A74",
+    color: "#727D76",
     fontSize: 11,
     lineHeight: 18,
     textAlign: "center",
@@ -491,22 +873,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#245C42",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 21,
+    marginTop: 23,
   },
 
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   secondaryButton: {
     width: "100%",
     minHeight: 52,
     borderRadius: 17,
-    backgroundColor: "#EDF2EC",
-    borderWidth: 1,
-    borderColor: "#DCE5DD",
+    backgroundColor: "#E8EEE8",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 10,
@@ -514,182 +894,33 @@ const styles = StyleSheet.create({
 
   secondaryButtonText: {
     color: "#245C42",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  benefitsCard: {
-    paddingHorizontal: 17,
-    borderRadius: 24,
-    backgroundColor: "#E8F0EA",
-    marginTop: 15,
-  },
-
-  benefitItem: {
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#D3E0D6",
-  },
-
-  profileHeader: {
-    padding: 20,
-    borderRadius: 25,
-    backgroundColor: "#E4EFE7",
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 18,
-  },
-
-  avatar: {
-    width: 65,
-    height: 65,
-    borderRadius: 22,
-    backgroundColor: "#245C42",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  avatarText: {
-    color: "#FFFFFF",
-    fontSize: 25,
+    fontSize: 11,
     fontWeight: "900",
   },
 
-  profileHeaderText: {
-    flex: 1,
-    marginLeft: 15,
-  },
-
-  profileName: {
-    color: "#1D3024",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
-  roleBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    marginTop: 7,
-  },
-
-  roleText: {
-    color: "#35694E",
-    fontSize: 8,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-
-  infoCard: {
-    paddingHorizontal: 17,
-    borderRadius: 24,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E8E3",
-    marginTop: 15,
-  },
-
-  actionCard: {
-    paddingHorizontal: 17,
-    borderRadius: 24,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E8E3",
-    marginTop: 15,
-  },
-
-  accountRow: {
-    paddingVertical: 16,
+  browseButton: {
     flexDirection: "row",
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBE7",
-  },
-
-  actionRow: {
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EBE7",
-  },
-
-  actionPressed: {
-    opacity: 0.65,
-  },
-
-  lastItem: {
-    borderBottomWidth: 0,
-  },
-
-  rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#E7F0E9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  rowContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  rowLabel: {
-    color: "#7A847E",
-    fontSize: 9,
-  },
-
-  rowValue: {
-    color: "#28372F",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-
-  rowTitle: {
-    color: "#28372F",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  rowDescription: {
-    color: "#738078",
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 3,
-  },
-
-  logoutButton: {
-    minHeight: 52,
-    borderRadius: 17,
-    backgroundColor: "#FAECEC",
-    borderWidth: 1,
-    borderColor: "#F0DADA",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     gap: 8,
-    marginTop: 16,
+    marginTop: 20,
   },
 
-  logoutText: {
-    color: "#994646",
-    fontSize: 12,
+  browseButtonText: {
+    color: "#35694E",
+    fontSize: 10,
     fontWeight: "800",
   },
 
-  sessionNote: {
-    color: "#7A847E",
-    fontSize: 9,
-    lineHeight: 15,
-    textAlign: "center",
-    marginTop: 13,
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color: "#657269",
+    fontSize: 11,
+    marginTop: 12,
   },
 
   pressed: {
