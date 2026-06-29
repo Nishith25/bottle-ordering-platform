@@ -1,7 +1,7 @@
 import type {
+  AdminDeliveryStatus,
   AdminOrder,
   AdminOrderUser,
-  AdminDeliveryStatus,
 } from "./adminOrdersApi";
 
 const API_BASE_URL = (
@@ -60,33 +60,33 @@ export type DeliveryOrder = Omit<
     AdminDeliveryStatus;
 };
 
-type PartnersResponse =
-  ApiResponse & {
-    count: number;
-    data: {
-      partners: DeliveryPartner[];
-    };
-  };
+type PartnersResponse = ApiResponse & {
+  count: number;
 
-type PartnerResponse =
-  ApiResponse & {
-    data: {
-      partner: DeliveryPartner;
-    };
+  data: {
+    partners: DeliveryPartner[];
   };
+};
 
-type OrderResponse =
-  ApiResponse & {
-    data: {
-      order: AdminOrder;
-    };
+type PartnerResponse = ApiResponse & {
+  data: {
+    partner: DeliveryPartner;
   };
+};
+
+type OrderResponse = ApiResponse & {
+  data: {
+    order: AdminOrder;
+  };
+};
 
 type DeliveryOrdersResponse =
   ApiResponse & {
     count: number;
+
     data: {
       orders: DeliveryOrder[];
+
       statusCounts:
         DeliveryOrderStatusCounts;
     };
@@ -101,30 +101,42 @@ async function request<T>(
     `${API_BASE_URL}${path}`,
     {
       ...options,
+
       headers: {
         Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+
+        "Content-Type":
+          "application/json",
+
+        Authorization:
+          `Bearer ${token}`,
+
         ...(options.headers ?? {}),
       },
     }
   );
 
-  const text = await response.text();
+  const responseText =
+    await response.text();
 
   let payload: T & ApiResponse;
 
   try {
-    payload = text
-      ? JSON.parse(text)
-      : ({ success: response.ok } as T & ApiResponse);
+    payload = responseText
+      ? JSON.parse(responseText)
+      : ({
+          success: response.ok,
+        } as T & ApiResponse);
   } catch {
     throw new Error(
       "The server returned an invalid response."
     );
   }
 
-  if (!response.ok || payload.success === false) {
+  if (
+    !response.ok ||
+    payload.success === false
+  ) {
     throw new Error(
       payload.message ??
         "Unable to complete the request."
@@ -137,31 +149,40 @@ async function request<T>(
 export async function fetchDeliveryPartners(
   token: string
 ): Promise<DeliveryPartner[]> {
-  const response = await request<PartnersResponse>(
-    "/api/admin/delivery-partners",
-    token
-  );
+  const response =
+    await request<PartnersResponse>(
+      "/api/admin/delivery-partners",
+      token
+    );
 
   return response.data.partners;
 }
 
 export async function createDeliveryPartner(
   token: string,
+
   payload: Required<
     Pick<
       DeliveryPartnerPayload,
-      "fullName" | "email" | "phone" | "password"
+      | "fullName"
+      | "email"
+      | "phone"
+      | "password"
     >
   >
 ): Promise<DeliveryPartner> {
-  const response = await request<PartnerResponse>(
-    "/api/admin/delivery-partners",
-    token,
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }
-  );
+  const response =
+    await request<PartnerResponse>(
+      "/api/admin/delivery-partners",
+      token,
+      {
+        method: "POST",
+
+        body: JSON.stringify(
+          payload
+        ),
+      }
+    );
 
   return response.data.partner;
 }
@@ -171,16 +192,20 @@ export async function updateDeliveryPartner(
   partnerId: string,
   payload: DeliveryPartnerPayload
 ): Promise<DeliveryPartner> {
-  const response = await request<PartnerResponse>(
-    `/api/admin/delivery-partners/${encodeURIComponent(
-      partnerId
-    )}`,
-    token,
-    {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }
-  );
+  const response =
+    await request<PartnerResponse>(
+      `/api/admin/delivery-partners/${encodeURIComponent(
+        partnerId
+      )}`,
+      token,
+      {
+        method: "PATCH",
+
+        body: JSON.stringify(
+          payload
+        ),
+      }
+    );
 
   return response.data.partner;
 }
@@ -190,18 +215,20 @@ export async function assignDeliveryPartner(
   orderId: string,
   deliveryPartnerId: string
 ): Promise<AdminOrder> {
-  const response = await request<OrderResponse>(
-    `/api/admin/orders/${encodeURIComponent(
-      orderId
-    )}/delivery-partner`,
-    token,
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        deliveryPartnerId,
-      }),
-    }
-  );
+  const response =
+    await request<OrderResponse>(
+      `/api/admin/orders/${encodeURIComponent(
+        orderId
+      )}/delivery-partner`,
+      token,
+      {
+        method: "PATCH",
+
+        body: JSON.stringify({
+          deliveryPartnerId,
+        }),
+      }
+    );
 
   return response.data.order;
 }
@@ -210,12 +237,15 @@ export async function fetchAssignedDeliveryOrders(
   token: string
 ): Promise<{
   orders: DeliveryOrder[];
-  statusCounts: DeliveryOrderStatusCounts;
+
+  statusCounts:
+    DeliveryOrderStatusCounts;
 }> {
-  const response = await request<DeliveryOrdersResponse>(
-    "/api/delivery/orders/assigned",
-    token
-  );
+  const response =
+    await request<DeliveryOrdersResponse>(
+      "/api/delivery/orders/assigned",
+      token
+    );
 
   return response.data;
 }
@@ -223,6 +253,7 @@ export async function fetchAssignedDeliveryOrders(
 export async function updateDeliveryOrderStatus(
   token: string,
   orderId: string,
+
   deliveryStatus:
     | "picked_up"
     | "out_for_delivery"
@@ -240,6 +271,7 @@ export async function updateDeliveryOrderStatus(
     token,
     {
       method: "PATCH",
+
       body: JSON.stringify({
         deliveryStatus,
       }),
@@ -267,7 +299,10 @@ export async function verifyDeliveryOrderOtp(
     token,
     {
       method: "POST",
-      body: JSON.stringify({ otp }),
+
+      body: JSON.stringify({
+        otp,
+      }),
     }
   );
 

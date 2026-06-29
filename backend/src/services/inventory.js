@@ -1,14 +1,49 @@
-// backend/src/services/inventory.js
-
 const Product = require(
   "../models/Product"
 );
 
-function createInventoryError(message) {
-  const error = new Error(message);
-  error.statusCode = 409;
+function createInventoryError(
+  message,
+  statusCode = 409
+) {
+  const error = new Error(
+    message
+  );
+
+  error.statusCode =
+    statusCode;
 
   return error;
+}
+
+/*
+ * A completed Order stores items
+ * directly in order.items.
+ *
+ * A pending Razorpay PaymentSession
+ * stores them in
+ * paymentSession.orderDraft.items.
+ */
+function getInventoryItems(
+  record
+) {
+  if (
+    Array.isArray(
+      record?.items
+    )
+  ) {
+    return record.items;
+  }
+
+  if (
+    Array.isArray(
+      record?.orderDraft?.items
+    )
+  ) {
+    return record.orderDraft.items;
+  }
+
+  return [];
 }
 
 async function reserveProductInventory({
@@ -16,14 +51,18 @@ async function reserveProductInventory({
   quantitiesByProductId,
   session,
 }) {
-  for (const product of products) {
+  for (
+    const product of products
+  ) {
     const quantity =
       quantitiesByProductId.get(
         product.productId
       );
 
     if (
-      !Number.isInteger(quantity) ||
+      !Number.isInteger(
+        quantity
+      ) ||
       quantity < 1
     ) {
       throw createInventoryError(
@@ -31,11 +70,15 @@ async function reserveProductInventory({
       );
     }
 
-    const currentStock = Number(
-      product.stockQuantity ?? 0
-    );
+    const currentStock =
+      Number(
+        product.stockQuantity ??
+          0
+      );
 
-    if (currentStock < quantity) {
+    if (
+      currentStock < quantity
+    ) {
       throw createInventoryError(
         currentStock <= 0
           ? `${product.name} is currently out of stock.`
@@ -51,6 +94,7 @@ async function reserveProductInventory({
       await Product.updateOne(
         {
           _id: product._id,
+
           available: true,
 
           stockQuantity: {
@@ -70,7 +114,9 @@ async function reserveProductInventory({
         }
       );
 
-    if (result.modifiedCount !== 1) {
+    if (
+      result.modifiedCount !== 1
+    ) {
       throw createInventoryError(
         `${product.name} stock changed while the order was being placed. Please refresh your cart and try again.`
       );
@@ -83,30 +129,89 @@ async function restoreOrderInventory({
   session,
 }) {
   if (
-    !order.inventoryReserved ||
+    !order?.inventoryReserved ||
     order.inventoryRestored
   ) {
     return false;
   }
 
-  const operations = order.items.map(
-    (item) => ({
+  const items =
+    getInventoryItems(order);
+
+  if (
+    items.length === 0
+  ) {
+    throw createInventoryError(
+      "Reserved inventory cannot be restored because the order items are missing.",
+      500
+    );
+  }
+
+  const quantitiesByProduct =
+    new Map();
+
+  for (
+    const item of items
+  ) {
+    const productId =
+      String(
+        item?.product?._id ??
+          item?.product ??
+          ""
+      ).trim();
+
+    const quantity =
+      Number(
+        item?.quantity
+      );
+
+    if (
+      !productId ||
+      !Number.isInteger(
+        quantity
+      ) ||
+      quantity < 1
+    ) {
+      throw createInventoryError(
+        "Reserved inventory contains an invalid product or quantity.",
+        500
+      );
+    }
+
+    quantitiesByProduct.set(
+      productId,
+
+      (quantitiesByProduct.get(
+        productId
+      ) || 0) + quantity
+    );
+  }
+
+  const operations = [
+    ...quantitiesByProduct.entries(),
+  ].map(
+    ([
+      productId,
+      quantity,
+    ]) => ({
       updateOne: {
         filter: {
-          _id: item.product,
+          _id: productId,
         },
 
         update: {
           $inc: {
             stockQuantity:
-              item.quantity,
+              quantity,
           },
         },
       },
     })
   );
 
-  if (operations.length > 0) {
+  if (
+    operations.length > 0
+  ) {
     await Product.bulkWrite(
       operations,
       {
@@ -115,7 +220,9 @@ async function restoreOrderInventory({
     );
   }
 
-  order.inventoryRestored = true;
+  order.inventoryRestored =
+    true;
+
   order.inventoryRestoredAt =
     new Date();
 

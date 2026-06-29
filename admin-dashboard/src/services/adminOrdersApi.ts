@@ -36,7 +36,12 @@ export type AdminOrderUser = {
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin" | "delivery";
+
+  role:
+    | "customer"
+    | "admin"
+    | "delivery";
+
   active?: boolean;
 };
 
@@ -81,6 +86,34 @@ export type AdminOrder = {
 
   subtotal: number;
   deliveryFee: number;
+
+  amountBeforeDiscount?: number;
+  couponDiscount?: number;
+
+  coupon?: {
+    couponId?: string | null;
+    code: string;
+    description: string;
+
+    discountType:
+      | ""
+      | "fixed"
+      | "percentage";
+
+    discountValue: number;
+    maxDiscountAmount: number;
+    minimumOrder: number;
+
+    appliesTo:
+      | ""
+      | "order"
+      | "subscription"
+      | "both";
+
+    eligibleAmount: number;
+    discountAmount: number;
+  } | null;
+
   total: number;
 
   paymentMethod:
@@ -97,14 +130,21 @@ export type AdminOrder = {
     AdminOrderPaymentStatus;
 
   paymentReference: string;
+
   paidAt?: string | null;
 
   orderStatus:
     AdminOrderStatus;
 
   cancellationReason: string;
-  cancelledAt: string | null;
-  deliveredAt: string | null;
+
+  cancelledAt:
+    | string
+    | null;
+
+  deliveredAt:
+    | string
+    | null;
 
   deliveryPartner?:
     | AdminOrderUser
@@ -117,11 +157,24 @@ export type AdminOrder = {
     phone: string;
   } | null;
 
-  deliveryStatus?: AdminDeliveryStatus;
-  deliveryAssignedAt?: string | null;
-  pickedUpAt?: string | null;
-  outForDeliveryAt?: string | null;
-  deliveryCompletedAt?: string | null;
+  deliveryStatus?:
+    AdminDeliveryStatus;
+
+  deliveryAssignedAt?:
+    | string
+    | null;
+
+  pickedUpAt?:
+    | string
+    | null;
+
+  outForDeliveryAt?:
+    | string
+    | null;
+
+  deliveryCompletedAt?:
+    | string
+    | null;
 
   refundStatus?:
     AdminOrderRefundStatus;
@@ -142,9 +195,19 @@ export type AdminOrder = {
     | "system";
 
   refundIdempotencyKey?: string;
-  refundRequestedAt?: string | null;
-  refundProcessedAt?: string | null;
-  refundFailedAt?: string | null;
+
+  refundRequestedAt?:
+    | string
+    | null;
+
+  refundProcessedAt?:
+    | string
+    | null;
+
+  refundFailedAt?:
+    | string
+    | null;
+
   refundFailureReason?: string;
   refundAttemptCount?: number;
 
@@ -191,7 +254,9 @@ async function request<T>(
       ...options,
 
       headers: {
-        Accept: "application/json",
+        Accept:
+          "application/json",
+
         "Content-Type":
           "application/json",
 
@@ -236,12 +301,14 @@ async function request<T>(
 
 export async function fetchAdminOrders(
   token: string,
+
   options?: {
     status?: string;
     search?: string;
   }
 ): Promise<{
   orders: AdminOrder[];
+
   statusCounts:
     AdminOrderStatusCounts;
 }> {
@@ -258,7 +325,9 @@ export async function fetchAdminOrders(
     );
   }
 
-  if (options?.search?.trim()) {
+  if (
+    options?.search?.trim()
+  ) {
     parameters.set(
       "search",
       options.search.trim()
@@ -271,7 +340,9 @@ export async function fetchAdminOrders(
   const response =
     await request<AdminOrdersResponse>(
       `/api/admin/orders${
-        query ? `?${query}` : ""
+        query
+          ? `?${query}`
+          : ""
       }`,
       token
     );
@@ -316,7 +387,10 @@ export async function retryAdminOrderRefund(
       token,
       {
         method: "POST",
-        body: JSON.stringify({}),
+
+        body: JSON.stringify(
+          {}
+        ),
       }
     );
 
