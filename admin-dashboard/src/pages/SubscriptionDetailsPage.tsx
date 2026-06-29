@@ -27,6 +27,7 @@ import {
   type AdminSubscriptionDeliveryPagination,
   type SubscriptionGenerationState,
 } from "../services/adminSubscriptionDetailsApi";
+import SubscriptionChargesPanel from "../components/SubscriptionChargesPanel";
 
 import "./subscriptionDetails.css";
 
@@ -1067,6 +1068,12 @@ export default function SubscriptionDetailsPage() {
           </p>
         </div>
       ) : null}
+
+      <SubscriptionChargesPanel
+  subscriptionId={
+    subscription._id
+  }
+/>
 
       <div className="subscription-history-heading">
         <div>

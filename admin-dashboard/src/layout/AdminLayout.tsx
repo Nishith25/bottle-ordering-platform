@@ -14,23 +14,48 @@ const PAGE_TITLES: Record<string, string> = {
   "/products": "Bottle management",
   "/orders": "Order management",
   "/delivery-partners": "Delivery partner management",
+  "/reviews": "Customer review management",
   "/coupons": "Coupon management",
   "/locations": "Delivery location management",
   "/plans": "Subscription plan management",
   "/subscriptions": "Customer subscription management",
+  "/subscription-charges": "Recurring payment management",
   "/users": "Customer account management",
-  "/reviews": "Customer review management",
 };
+
+function getPageTitle(pathname: string) {
+  if (
+    pathname.startsWith("/subscriptions/") &&
+    pathname !== "/subscriptions"
+  ) {
+    return "Subscription details";
+  }
+
+  return PAGE_TITLES[pathname] ?? "Administration";
+}
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAdminAuth();
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const {
+    user,
+    logout,
+  } = useAdminAuth();
+
+  const [
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  ] = useState(false);
 
   const pageTitle =
-    PAGE_TITLES[location.pathname] ?? "Administration";
+    getPageTitle(location.pathname);
+
+  const administratorInitial =
+    user?.fullName
+      ?.trim()
+      .charAt(0)
+      .toUpperCase() || "A";
 
   const closeMobileMenu = () => {
     setMobileMenuOpen(false);
@@ -38,22 +63,34 @@ export default function AdminLayout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+
+    navigate("/login", {
+      replace: true,
+    });
   };
 
   return (
     <div className="admin-shell">
       <aside
         className={`sidebar ${
-          mobileMenuOpen ? "sidebar-open" : ""
+          mobileMenuOpen
+            ? "sidebar-open"
+            : ""
         }`}
       >
         <div className="sidebar-brand">
-          <div className="brand-mark">B</div>
+          <div className="brand-mark">
+            B
+          </div>
 
           <div>
-            <strong>Bottle Admin</strong>
-            <span>Operations panel</span>
+            <strong>
+              Bottle Admin
+            </strong>
+
+            <span>
+              Operations panel
+            </span>
           </div>
         </div>
 
@@ -87,11 +124,11 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
-  to="/reviews"
-  icon="★"
-  label="Reviews"
-  onClick={closeMobileMenu}
-/>
+            to="/reviews"
+            icon="★"
+            label="Reviews"
+            onClick={closeMobileMenu}
+          />
 
           <NavigationLink
             to="/coupons"
@@ -122,6 +159,13 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
+            to="/subscription-charges"
+            icon="₹"
+            label="Recurring payments"
+            onClick={closeMobileMenu}
+          />
+
+          <NavigationLink
             to="/users"
             icon="◎"
             label="Customers"
@@ -132,12 +176,19 @@ export default function AdminLayout() {
         <div className="sidebar-footer">
           <div className="administrator-card">
             <div className="administrator-avatar">
-              {user?.fullName.charAt(0).toUpperCase() ?? "A"}
+              {administratorInitial}
             </div>
 
             <div className="administrator-details">
-              <strong>{user?.fullName}</strong>
-              <span>{user?.email}</span>
+              <strong>
+                {user?.fullName ||
+                  "Administrator"}
+              </strong>
+
+              <span>
+                {user?.email ||
+                  "Admin account"}
+              </span>
             </div>
           </div>
 
@@ -164,20 +215,31 @@ export default function AdminLayout() {
         <header className="topbar">
           <button
             type="button"
+            aria-label="Toggle navigation"
             className="mobile-menu-button"
             onClick={() =>
-              setMobileMenuOpen((current) => !current)
+              setMobileMenuOpen(
+                (currentValue) =>
+                  !currentValue
+              )
             }
           >
             ☰
           </button>
 
           <div>
-            <span className="topbar-eyebrow">ADMINISTRATION</span>
-            <h1>{pageTitle}</h1>
+            <span className="topbar-eyebrow">
+              ADMINISTRATION
+            </span>
+
+            <h1>
+              {pageTitle}
+            </h1>
           </div>
 
-          <div className="topbar-role">Administrator</div>
+          <div className="topbar-role">
+            Administrator
+          </div>
         </header>
 
         <main className="page-container">
@@ -203,14 +265,23 @@ function NavigationLink({
     <NavLink
       to={to}
       onClick={onClick}
-      className={({ isActive }) =>
+      className={({
+        isActive,
+      }) =>
         `navigation-link ${
-          isActive ? "navigation-link-active" : ""
+          isActive
+            ? "navigation-link-active"
+            : ""
         }`
       }
     >
-      <span className="navigation-icon">{icon}</span>
-      {label}
+      <span className="navigation-icon">
+        {icon}
+      </span>
+
+      <span>
+        {label}
+      </span>
     </NavLink>
   );
 }

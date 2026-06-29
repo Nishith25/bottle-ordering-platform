@@ -21,6 +21,7 @@ import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
 import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
+import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 
 export default function App() {
   return (
@@ -61,6 +62,8 @@ export default function App() {
             <Route
   path="/reviews"
   element={<DeliveryReviewsPage />}
+
+  
 />
           </Route>
         </Route>
@@ -70,6 +73,12 @@ export default function App() {
             <ProtectedRoute allowedRoles={["delivery"]} />
           }
         >
+          <Route
+  path="/subscription-charges"
+  element={
+    <SubscriptionChargesPage />
+  }
+/>
           <Route element={<DeliveryLayout />}>
             <Route
               path="/delivery"

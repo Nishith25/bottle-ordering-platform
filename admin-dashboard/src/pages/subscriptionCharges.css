@@ -1,0 +1,595 @@
+.subscription-charges-page {
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding-bottom: 44px;
+  color: #203128;
+}
+
+.subscription-charges-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 18px;
+}
+
+.subscription-charges-eyebrow {
+  display: block;
+  color: #4d765f;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+}
+
+.subscription-charges-heading h2 {
+  margin: 7px 0 0;
+  color: #18261e;
+  font-size: 31px;
+  font-weight: 900;
+  letter-spacing: -0.8px;
+}
+
+.subscription-charges-heading p {
+  max-width: 650px;
+  margin: 7px 0 0;
+  color: #6e7b73;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.charge-secondary-button,
+.charge-retry-button,
+.charge-search-button,
+.charge-pagination button {
+  min-height: 43px;
+  padding: 0 15px;
+  border-radius: 13px;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.charge-secondary-button {
+  border: 1px solid #d5ded7;
+  color: #285c43;
+  background: #ffffff;
+}
+
+.charge-retry-button,
+.charge-search-button {
+  border: 0;
+  color: #ffffff;
+  background: #245c42;
+}
+
+.charge-secondary-button:disabled,
+.charge-retry-button:disabled,
+.charge-search-button:disabled,
+.charge-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.charge-filter-notice,
+.charge-inline-error,
+.charge-inline-success {
+  margin-bottom: 14px;
+  padding: 13px 15px;
+  border-radius: 15px;
+  font-size: 9px;
+}
+
+.charge-filter-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  color: #315c44;
+  background: #e8f1ea;
+}
+
+.charge-filter-notice button {
+  border: 0;
+  color: #245c42;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.charge-inline-error {
+  color: #984747;
+  background: #faeaea;
+}
+
+.charge-inline-success {
+  color: #286344;
+  background: #e7f2e9;
+}
+
+.charge-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.charge-summary-card {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid #dfe5df;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgb(31 61 43 / 5%);
+}
+
+.charge-summary-card span,
+.charge-summary-card strong {
+  display: block;
+}
+
+.charge-summary-card span {
+  color: #748078;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.charge-summary-card strong {
+  margin-top: 10px;
+  color: #20372a;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.charge-summary-card p {
+  margin: 7px 0 0;
+  color: #87918b;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.charge-summary-positive {
+  background: #f4faf5;
+}
+
+.charge-summary-warning {
+  background: #fff9ec;
+}
+
+.charge-summary-negative {
+  background: #fff5f5;
+}
+
+.charge-filter-card {
+  margin-top: 16px;
+  padding: 19px;
+  border: 1px solid #dfe5df;
+  border-radius: 22px;
+  background: #ffffff;
+}
+
+.charge-filter-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 16px;
+}
+
+.charge-filter-heading h3 {
+  margin: 0;
+  color: #203128;
+  font-size: 15px;
+}
+
+.charge-filter-heading p {
+  margin: 5px 0 0;
+  color: #78847c;
+  font-size: 9px;
+}
+
+.charge-text-button {
+  border: 0;
+  color: #2f6c4d;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.charge-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 1.6fr)
+    repeat(4, minmax(130px, 1fr))
+    auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.charge-filter-grid label {
+  display: grid;
+  gap: 7px;
+  color: #5e6c64;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.charge-filter-grid input,
+.charge-filter-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  padding: 0 12px;
+  border: 1px solid #d9e1da;
+  border-radius: 13px;
+  outline: none;
+  color: #25362d;
+  background: #f8faf7;
+  font-family: inherit;
+  font-size: 9px;
+}
+
+.charge-filter-grid input:focus,
+.charge-filter-grid select:focus {
+  border-color: #79a089;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(70 128 91 / 10%);
+}
+
+.charge-records-heading {
+  margin: 25px 0 12px;
+}
+
+.charge-records-heading h3 {
+  margin: 0;
+  color: #203128;
+  font-size: 19px;
+}
+
+.charge-records-heading p {
+  margin: 5px 0 0;
+  color: #78837c;
+  font-size: 9px;
+}
+
+.charge-list {
+  display: grid;
+  gap: 14px;
+}
+
+.charge-card {
+  padding: 20px;
+  border: 1px solid #dfe5df;
+  border-radius: 23px;
+  background: #ffffff;
+  box-shadow: 0 12px 34px rgb(27 60 41 / 5%);
+}
+
+.charge-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e8ece8;
+}
+
+.charge-payment-id {
+  display: block;
+  color: #37624a;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.charge-card-top h3 {
+  margin: 7px 0 0;
+  color: #1e3127;
+  font-size: 17px;
+}
+
+.charge-card-top p {
+  margin: 5px 0 0;
+  color: #758179;
+  font-size: 9px;
+}
+
+.charge-status {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.charge-status-fulfilled {
+  color: #286a46;
+  background: #e3f1e7;
+}
+
+.charge-status-fulfillment_failed {
+  color: #954848;
+  background: #fae9e9;
+}
+
+.charge-status-received,
+.charge-status-processing {
+  color: #80601f;
+  background: #fff0d0;
+}
+
+.charge-status-ignored {
+  color: #626d66;
+  background: #edf0ed;
+}
+
+.charge-information-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.charge-information {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f5f7f4;
+}
+
+.charge-information span,
+.charge-information strong {
+  display: block;
+}
+
+.charge-information span {
+  color: #7a867e;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.charge-information strong {
+  margin-top: 6px;
+  color: #2c3d34;
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.charge-information-highlight {
+  color: #1e6842 !important;
+  font-size: 14px !important;
+}
+
+.charge-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #edf3ee;
+}
+
+.charge-reference-grid span,
+.charge-reference-grid strong {
+  display: block;
+}
+
+.charge-reference-grid span {
+  color: #728078;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.charge-reference-grid strong {
+  margin-top: 6px;
+  color: #2c4035;
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+
+.charge-warning-box,
+.charge-failure-box {
+  margin-top: 12px;
+  padding: 12px 13px;
+  border-radius: 14px;
+}
+
+.charge-warning-box {
+  color: #79591d;
+  background: #fff1d7;
+  font-size: 8px;
+}
+
+.charge-failure-box {
+  color: #914747;
+  background: #faeaea;
+}
+
+.charge-failure-box strong {
+  display: block;
+  font-size: 9px;
+}
+
+.charge-failure-box p {
+  margin: 5px 0 0;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.charge-order-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  margin-top: 12px;
+  padding: 13px;
+  border-radius: 15px;
+  background: #e8f1ea;
+}
+
+.charge-order-box span,
+.charge-order-box strong {
+  display: block;
+}
+
+.charge-order-box span {
+  color: #627169;
+  font-size: 8px;
+}
+
+.charge-order-box strong {
+  margin-top: 5px;
+  color: #274335;
+  font-size: 10px;
+}
+
+.charge-order-box button {
+  min-height: 35px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 11px;
+  color: #245c42;
+  background: #ffffff;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.charge-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e8ece8;
+}
+
+.charge-card-actions > span {
+  margin-left: auto;
+  color: #7b867f;
+  font-size: 8px;
+}
+
+.charge-state-card {
+  min-height: 250px;
+  padding: 30px;
+  border: 1px dashed #d5ddd6;
+  border-radius: 23px;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.charge-state-card h3 {
+  margin: 13px 0 0;
+  color: #26382e;
+}
+
+.charge-state-card p {
+  max-width: 420px;
+  margin: 7px 0 0;
+  color: #78837c;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.charge-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #dbe6de;
+  border-top-color: #2d6b4c;
+  border-radius: 50%;
+  animation: charge-spin 0.8s linear infinite;
+}
+
+@keyframes charge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.charge-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 17px;
+}
+
+.charge-pagination button {
+  border: 1px solid #d5ded7;
+  color: #285c43;
+  background: #ffffff;
+}
+
+.charge-pagination span {
+  color: #68756d;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+@media (max-width: 1200px) {
+  .charge-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .charge-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .charge-reference-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 850px) {
+  .subscription-charges-heading {
+    flex-direction: column;
+  }
+
+  .subscription-charges-heading .charge-secondary-button {
+    width: 100%;
+  }
+
+  .charge-summary-grid,
+  .charge-information-grid,
+  .charge-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charge-card-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .charge-card-actions > span {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .charge-summary-grid,
+  .charge-information-grid,
+  .charge-filter-grid,
+  .charge-reference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .charge-card {
+    padding: 16px;
+  }
+
+  .charge-card-top,
+  .charge-order-box,
+  .charge-filter-notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
