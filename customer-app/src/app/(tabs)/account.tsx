@@ -1,8 +1,7 @@
-// customer-app/src/app/(tabs)/account.tsx
-
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+
 import {
   ActivityIndicator,
   Alert,
@@ -14,15 +13,22 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
 
-const ADMIN_DASHBOARD_URL = (
+const DASHBOARD_BASE_URL = (
   process.env
     .EXPO_PUBLIC_ADMIN_DASHBOARD_URL ??
   "http://localhost:5174"
 ).replace(/\/$/, "");
+
+const ADMIN_DASHBOARD_URL =
+  `${DASHBOARD_BASE_URL}/dashboard`;
+
+const DELIVERY_DASHBOARD_URL =
+  `${DASHBOARD_BASE_URL}/delivery`;
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -37,42 +43,52 @@ export default function AccountScreen() {
   const [loggingOut, setLoggingOut] =
     useState(false);
 
-  const openAdminDashboard = async () => {
+  const openDashboard = async (
+    dashboardUrl: string,
+    dashboardName: string
+  ) => {
     try {
       if (
         Platform.OS === "web" &&
         typeof window !== "undefined"
       ) {
-        window.open(
-          ADMIN_DASHBOARD_URL,
-          "_blank",
-          "noopener,noreferrer"
-        );
+        const openedWindow =
+          window.open(
+            dashboardUrl,
+            "_blank",
+            "noopener,noreferrer"
+          );
+
+        if (!openedWindow) {
+          window.location.assign(
+            dashboardUrl
+          );
+        }
 
         return;
       }
 
       const supported =
         await Linking.canOpenURL(
-          ADMIN_DASHBOARD_URL
+          dashboardUrl
         );
 
       if (!supported) {
         Alert.alert(
-          "Unable to open dashboard",
-          "The admin dashboard URL is not available."
+          `Unable to open ${dashboardName}`,
+          "The dashboard URL is not available."
         );
 
         return;
       }
 
       await Linking.openURL(
-        ADMIN_DASHBOARD_URL
+        dashboardUrl
       );
     } catch {
       Alert.alert(
-        "Unable to open dashboard",
-        "Please check that the admin dashboard is running."
+        `Unable to open ${dashboardName}`,
+        "Please check that the dashboard is running."
       );
     }
   };
@@ -85,7 +101,7 @@ export default function AccountScreen() {
     setLoggingOut(true);
 
     try {
-      await Promise.resolve(logout());
+      await logout();
     } finally {
       setLoggingOut(false);
     }
@@ -93,14 +109,20 @@ export default function AccountScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerState}>
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={styles.centerState}
+        >
           <ActivityIndicator
             size="large"
             color="#245C42"
           />
 
-          <Text style={styles.loadingText}>
+          <Text
+            style={styles.loadingText}
+          >
             Loading your account
           </Text>
         </View>
@@ -108,16 +130,25 @@ export default function AccountScreen() {
     );
   }
 
-  if (!isAuthenticated || !user) {
+  if (
+    !isAuthenticated ||
+    !user
+  ) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView
+        style={styles.safeArea}
+      >
         <ScrollView
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
           contentContainerStyle={
             styles.guestContent
           }
         >
-          <View style={styles.guestIcon}>
+          <View
+            style={styles.guestIcon}
+          >
             <Ionicons
               name="person-outline"
               size={39}
@@ -125,12 +156,16 @@ export default function AccountScreen() {
             />
           </View>
 
-          <Text style={styles.guestTitle}>
+          <Text
+            style={styles.guestTitle}
+          >
             Your account
           </Text>
 
           <Text
-            style={styles.guestDescription}
+            style={
+              styles.guestDescription
+            }
           >
             Log in to save orders, manage
             subscriptions and view your
@@ -143,7 +178,8 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.primaryButton,
-              pressed && styles.pressed,
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -161,7 +197,8 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryButton,
-              pressed && styles.pressed,
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Text
@@ -181,7 +218,8 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.browseButton,
-              pressed && styles.pressed,
+              pressed &&
+                styles.pressed,
             ]}
           >
             <Ionicons
@@ -191,7 +229,9 @@ export default function AccountScreen() {
             />
 
             <Text
-              style={styles.browseButtonText}
+              style={
+                styles.browseButtonText
+              }
             >
               Continue browsing bottles
             </Text>
@@ -204,10 +244,71 @@ export default function AccountScreen() {
   const isAdmin =
     user.role === "admin";
 
+  const isDeliveryPartner =
+    user.role === "delivery";
+
+  const hasOperationsDashboard =
+    isAdmin ||
+    isDeliveryPartner;
+
+  const accountType = isAdmin
+    ? "Customer and administrator"
+    : isDeliveryPartner
+      ? "Delivery partner and customer"
+      : "Customer";
+
+  const roleBadgeText = isAdmin
+    ? "Admin"
+    : isDeliveryPartner
+      ? "Delivery partner"
+      : "";
+
+  const roleBadgeIcon:
+    keyof typeof Ionicons.glyphMap =
+    isAdmin
+      ? "shield-checkmark"
+      : "car-outline";
+
+  const dashboardUrl = isAdmin
+    ? ADMIN_DASHBOARD_URL
+    : DELIVERY_DASHBOARD_URL;
+
+  const dashboardName = isAdmin
+    ? "admin dashboard"
+    : "delivery dashboard";
+
+  const dashboardTitle = isAdmin
+    ? "Administrator dashboard"
+    : "Delivery dashboard";
+
+  const dashboardDescription =
+    isAdmin
+      ? "Manage bottle prices, stock, orders, delivery areas, coupons and subscription plans."
+      : "View assigned orders, update delivery progress and complete deliveries securely.";
+
+  const dashboardButtonText =
+    isAdmin
+      ? "Open Admin Dashboard"
+      : "Open Delivery Dashboard";
+
+  const dashboardIcon:
+    keyof typeof Ionicons.glyphMap =
+    isAdmin
+      ? "settings-outline"
+      : "navigate-outline";
+
+  const roleNotice = isAdmin
+    ? "Your administrator account can also buy bottles and subscribe through this customer app."
+    : "Your delivery partner account can also place personal bottle orders and subscriptions without changing roles.";
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={styles.safeArea}
+    >
       <ScrollView
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
         contentContainerStyle={
           styles.scrollContent
         }
@@ -222,8 +323,9 @@ export default function AccountScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          Manage your orders, recurring plans
-          and account details.
+          {isDeliveryPartner
+            ? "Manage your assigned deliveries, personal orders and recurring plans."
+            : "Manage your orders, recurring plans and account details."}
         </Text>
 
         <View style={styles.profileCard}>
@@ -235,47 +337,75 @@ export default function AccountScreen() {
             </Text>
           </View>
 
-          <View style={styles.profileDetails}>
+          <View
+            style={styles.profileDetails}
+          >
             <View style={styles.nameRow}>
-              <Text style={styles.profileName}>
+              <Text
+                style={styles.profileName}
+              >
                 {user.fullName}
               </Text>
 
-              {isAdmin ? (
-                <View style={styles.adminBadge}>
+              {hasOperationsDashboard ? (
+                <View
+                  style={[
+                    styles.roleBadge,
+
+                    isDeliveryPartner &&
+                      styles.deliveryBadge,
+                  ]}
+                >
                   <Ionicons
-                    name="shield-checkmark"
+                    name={roleBadgeIcon}
                     size={12}
                     color="#FFFFFF"
                   />
 
                   <Text
                     style={
-                      styles.adminBadgeText
+                      styles.roleBadgeText
                     }
                   >
-                    Admin
+                    {roleBadgeText}
                   </Text>
                 </View>
               ) : null}
             </View>
 
-            <Text style={styles.profileEmail}>
+            <Text
+              style={styles.profileEmail}
+            >
               {user.email}
             </Text>
 
-            <Text style={styles.profilePhone}>
+            <Text
+              style={styles.profilePhone}
+            >
               +91 {user.phone}
             </Text>
           </View>
         </View>
 
-        {isAdmin ? (
-          <View style={styles.adminCard}>
-            <View style={styles.adminCardTop}>
-              <View style={styles.adminIcon}>
+        {hasOperationsDashboard ? (
+          <View
+            style={[
+              styles.operationsCard,
+
+              isDeliveryPartner &&
+                styles.deliveryOperationsCard,
+            ]}
+          >
+            <View
+              style={styles.operationsCardTop}
+            >
+              <View
+                style={
+                  styles.operationsIcon
+                }
+              >
                 <Ionicons
-                  name="settings-outline"
+                  name={dashboardIcon}
                   size={24}
                   color="#245C42"
                 />
@@ -283,36 +413,39 @@ export default function AccountScreen() {
 
               <View
                 style={
-                  styles.adminCardContent
+                  styles.operationsCardContent
                 }
               >
                 <Text
                   style={
-                    styles.adminCardTitle
+                    styles.operationsCardTitle
                   }
                 >
-                  Administrator dashboard
+                  {dashboardTitle}
                 </Text>
 
                 <Text
                   style={
-                    styles.adminCardDescription
+                    styles.operationsCardDescription
                   }
                 >
-                  Manage bottle prices,
-                  availability, delivery areas
-                  and subscription plans.
+                  {dashboardDescription}
                 </Text>
               </View>
             </View>
 
             <Pressable
               onPress={() => {
-                void openAdminDashboard();
+                void openDashboard(
+                  dashboardUrl,
+                  dashboardName
+                );
               }}
               style={({ pressed }) => [
-                styles.adminDashboardButton,
-                pressed && styles.pressed,
+                styles.dashboardButton,
+
+                pressed &&
+                  styles.pressed,
               ]}
             >
               <Ionicons
@@ -323,17 +456,17 @@ export default function AccountScreen() {
 
               <Text
                 style={
-                  styles.adminDashboardButtonText
+                  styles.dashboardButtonText
                 }
               >
-                Open Admin Dashboard
+                {dashboardButtonText}
               </Text>
             </Pressable>
 
-            <Text style={styles.adminNotice}>
-              Your administrator account can
-              still buy bottles and subscribe
-              through this customer app.
+            <Text
+              style={styles.roleNotice}
+            >
+              {roleNotice}
             </Text>
           </View>
         ) : null}
@@ -356,7 +489,7 @@ export default function AccountScreen() {
         <MenuButton
           icon="receipt-outline"
           title="My orders"
-          description="Track and review bottle orders"
+          description="Track and review your bottle orders"
           onPress={() =>
             router.push(
               "/(tabs)/orders"
@@ -379,7 +512,9 @@ export default function AccountScreen() {
           Account information
         </Text>
 
-        <View style={styles.informationCard}>
+        <View
+          style={styles.informationCard}
+        >
           <InformationRow
             icon="mail-outline"
             label="Email"
@@ -393,13 +528,15 @@ export default function AccountScreen() {
           />
 
           <InformationRow
-            icon="person-circle-outline"
-            label="Account type"
-            value={
-              isAdmin
-                ? "Customer and administrator"
-                : "Customer"
+            icon={
+              isDeliveryPartner
+                ? "car-outline"
+                : isAdmin
+                  ? "shield-checkmark-outline"
+                  : "person-circle-outline"
             }
+            label="Account type"
+            value={accountType}
           />
 
           <InformationRow
@@ -436,7 +573,9 @@ export default function AccountScreen() {
             color="#A34848"
           />
 
-          <Text style={styles.logoutText}>
+          <Text
+            style={styles.logoutText}
+          >
             {loggingOut
               ? "Logging out..."
               : "Log out"}
@@ -453,7 +592,9 @@ function MenuButton({
   description,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
   title: string;
   description: string;
   onPress: () => void;
@@ -463,7 +604,9 @@ function MenuButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.menuButton,
-        pressed && styles.pressed,
+
+        pressed &&
+          styles.pressed,
       ]}
     >
       <View style={styles.menuIcon}>
@@ -480,7 +623,9 @@ function MenuButton({
         </Text>
 
         <Text
-          style={styles.menuDescription}
+          style={
+            styles.menuDescription
+          }
         >
           {description}
         </Text>
@@ -501,7 +646,9 @@ function InformationRow({
   value,
   last = false,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
   label: string;
   value: string;
   last?: boolean;
@@ -510,11 +657,14 @@ function InformationRow({
     <View
       style={[
         styles.informationRow,
+
         last &&
           styles.lastInformationRow,
       ]}
     >
-      <View style={styles.informationIcon}>
+      <View
+        style={styles.informationIcon}
+      >
         <Ionicons
           name={icon}
           size={18}
@@ -522,16 +672,24 @@ function InformationRow({
         />
       </View>
 
-      <View style={styles.informationContent}>
+      <View
+        style={
+          styles.informationContent
+        }
+      >
         <Text
-          style={styles.informationLabel}
+          style={
+            styles.informationLabel
+          }
         >
           {label}
         </Text>
 
         <Text
           numberOfLines={2}
-          style={styles.informationValue}
+          style={
+            styles.informationValue
+          }
         >
           {value}
         </Text>
@@ -621,7 +779,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  adminBadge: {
+  roleBadge: {
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 10,
@@ -631,7 +789,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
-  adminBadgeText: {
+  deliveryBadge: {
+    backgroundColor: "#35637A",
+  },
+
+  roleBadgeText: {
     color: "#FFFFFF",
     fontSize: 8,
     fontWeight: "900",
@@ -649,7 +811,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  adminCard: {
+  operationsCard: {
     padding: 17,
     borderRadius: 24,
     backgroundColor: "#E2EFE4",
@@ -658,12 +820,17 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
 
-  adminCardTop: {
+  deliveryOperationsCard: {
+    backgroundColor: "#E5EFF3",
+    borderColor: "#CEDFE6",
+  },
+
+  operationsCardTop: {
     flexDirection: "row",
     alignItems: "center",
   },
 
-  adminIcon: {
+  operationsIcon: {
     width: 48,
     height: 48,
     borderRadius: 16,
@@ -672,25 +839,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  adminCardContent: {
+  operationsCardContent: {
     flex: 1,
     marginLeft: 12,
   },
 
-  adminCardTitle: {
+  operationsCardTitle: {
     color: "#244332",
     fontSize: 13,
     fontWeight: "900",
   },
 
-  adminCardDescription: {
+  operationsCardDescription: {
     color: "#617168",
     fontSize: 9,
     lineHeight: 15,
     marginTop: 4,
   },
 
-  adminDashboardButton: {
+  dashboardButton: {
     minHeight: 51,
     borderRadius: 17,
     backgroundColor: "#245C42",
@@ -701,13 +868,13 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
 
-  adminDashboardButtonText: {
+  dashboardButtonText: {
     color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "900",
   },
 
-  adminNotice: {
+  roleNotice: {
     color: "#617168",
     fontSize: 8,
     lineHeight: 13,
@@ -925,6 +1092,11 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+
+    transform: [
+      {
+        scale: 0.98,
+      },
+    ],
   },
 });
