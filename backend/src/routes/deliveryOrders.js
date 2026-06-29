@@ -26,42 +26,56 @@ function sanitiseOrder(order) {
       ? order.toObject()
       : { ...order };
 
+  /*
+   * Never expose OTP security values
+   * through an API response.
+   */
   delete value.deliveryOtpSalt;
   delete value.deliveryOtpHash;
 
   return value;
 }
 
+/**
+ * GET /api/delivery/orders/customer/:orderId
+ *
+ * Any authenticated account may purchase bottles:
+ * - customer
+ * - admin
+ * - delivery
+ *
+ * OTP access is controlled by order ownership,
+ * not by the user's role.
+ */
 router.get(
   "/customer/:orderId",
   async (req, res, next) => {
     try {
-      if (req.user.role !== "customer") {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Only the customer who owns this order can view the delivery OTP.",
-        });
-      }
+      const order =
+        await Order.findOne({
+          _id: req.params.orderId,
 
-      const query = {
-        _id: req.params.orderId,
-        user: req.user._id,
-      };
-
-      const order = await Order.findOne(query)
-        .select(
-          "+deliveryOtpSalt +deliveryOtpHash"
-        )
-        .populate(
-          "deliveryPartner",
-          "fullName email phone role active"
-        );
+          /*
+           * This is the important security rule.
+           * Only the account that placed the order
+           * can view its delivery OTP.
+           */
+          user: req.user._id,
+        })
+          .select(
+            "+deliveryOtpSalt +deliveryOtpHash"
+          )
+          .populate(
+            "deliveryPartner",
+            "fullName email phone role active"
+          );
 
       if (!order) {
         return res.status(404).json({
           success: false,
-          message: "Order not found.",
+
+          message:
+            "Order not found for this account.",
         });
       }
 
@@ -71,28 +85,40 @@ router.get(
           "assigned",
           "picked_up",
           "out_for_delivery",
-        ].includes(order.deliveryStatus) &&
+        ].includes(
+          order.deliveryStatus
+        ) &&
         ![
           "delivered",
           "cancelled",
-        ].includes(order.orderStatus);
+        ].includes(
+          order.orderStatus
+        );
 
-      const deliveryOtp = otpAvailable
-        ? getDeliveryOtp(order)
-        : "";
+      const deliveryOtp =
+        otpAvailable
+          ? getDeliveryOtp(order)
+          : "";
 
       return res.status(200).json({
         success: true,
+
         data: {
-          order: sanitiseOrder(order),
+          order:
+            sanitiseOrder(order),
+
           deliveryOtp,
         },
       });
     } catch (error) {
-      if (error.name === "CastError") {
+      if (
+        error.name === "CastError"
+      ) {
         return res.status(404).json({
           success: false,
-          message: "Order not found.",
+
+          message:
+            "Order not found.",
         });
       }
 
@@ -101,28 +127,39 @@ router.get(
   }
 );
 
+/**
+ * GET /api/delivery/orders/assigned
+ *
+ * Only delivery partners can view
+ * orders assigned to them.
+ */
 router.get(
   "/assigned",
   allowRoles("delivery"),
   async (req, res, next) => {
     try {
-      const orders = await Order.find({
-        deliveryPartner: req.user._id,
-        orderStatus: {
-          $ne: "cancelled",
-        },
-      })
-        .populate(
-          "user",
-          "fullName phone"
-        )
-        .sort({
-          deliveredAt: 1,
-          "deliverySchedule.deliveryDateId": 1,
-          createdAt: -1,
+      const orders =
+        await Order.find({
+          deliveryPartner:
+            req.user._id,
+
+          orderStatus: {
+            $ne: "cancelled",
+          },
         })
-        .limit(200)
-        .lean();
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .sort({
+            deliveredAt: 1,
+
+            "deliverySchedule.deliveryDateId": 1,
+
+            createdAt: -1,
+          })
+          .limit(200)
+          .lean();
 
       const statusCounts = {
         assigned: 0,
@@ -138,13 +175,16 @@ router.get(
             order.deliveryStatus
           )
         ) {
-          statusCounts[order.deliveryStatus] += 1;
+          statusCounts[
+            order.deliveryStatus
+          ] += 1;
         }
       }
 
       return res.status(200).json({
         success: true,
         count: orders.length,
+
         data: {
           orders,
           statusCounts,
@@ -156,24 +196,35 @@ router.get(
   }
 );
 
+/**
+ * GET /api/delivery/orders/:orderId
+ *
+ * Only the delivery partner assigned
+ * to the order can view it here.
+ */
 router.get(
   "/:orderId",
   allowRoles("delivery"),
   async (req, res, next) => {
     try {
-      const order = await Order.findOne({
-        _id: req.params.orderId,
-        deliveryPartner: req.user._id,
-      })
-        .populate(
-          "user",
-          "fullName phone"
-        )
-        .lean();
+      const order =
+        await Order.findOne({
+          _id:
+            req.params.orderId,
+
+          deliveryPartner:
+            req.user._id,
+        })
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .lean();
 
       if (!order) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
@@ -181,14 +232,18 @@ router.get(
 
       return res.status(200).json({
         success: true,
+
         data: {
           order,
         },
       });
     } catch (error) {
-      if (error.name === "CastError") {
+      if (
+        error.name === "CastError"
+      ) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
@@ -199,14 +254,21 @@ router.get(
   }
 );
 
+/**
+ * PATCH /api/delivery/orders/:orderId/status
+ *
+ * Delivery status progression:
+ * assigned -> picked_up -> out_for_delivery
+ */
 router.patch(
   "/:orderId/status",
   allowRoles("delivery"),
   async (req, res, next) => {
     try {
-      const nextStatus = cleanText(
-        req.body.deliveryStatus
-      );
+      const nextStatus =
+        cleanText(
+          req.body.deliveryStatus
+        );
 
       if (
         ![
@@ -216,19 +278,25 @@ router.patch(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Please select a valid delivery status.",
         });
       }
 
-      const order = await Order.findOne({
-        _id: req.params.orderId,
-        deliveryPartner: req.user._id,
-      });
+      const order =
+        await Order.findOne({
+          _id:
+            req.params.orderId,
+
+          deliveryPartner:
+            req.user._id,
+        });
 
       if (!order) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
@@ -238,71 +306,112 @@ router.patch(
         [
           "cancelled",
           "delivered",
-        ].includes(order.orderStatus)
+        ].includes(
+          order.orderStatus
+        )
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "This order can no longer be updated.",
         });
       }
 
-      if (nextStatus === "picked_up") {
-        if (order.deliveryStatus !== "assigned") {
+      if (
+        nextStatus ===
+        "picked_up"
+      ) {
+        if (
+          order.deliveryStatus !==
+          "assigned"
+        ) {
           return res.status(400).json({
             success: false,
+
             message:
               "Only an assigned order can be marked as picked up.",
           });
         }
 
-        order.deliveryStatus = "picked_up";
-        order.pickedUpAt = new Date();
+        order.deliveryStatus =
+          "picked_up";
 
-        if (order.orderStatus === "confirmed") {
-          order.orderStatus = "preparing";
+        order.pickedUpAt =
+          new Date();
+
+        if (
+          [
+            "placed",
+            "confirmed",
+          ].includes(
+            order.orderStatus
+          )
+        ) {
+          order.orderStatus =
+            "preparing";
         }
       }
 
-      if (nextStatus === "out_for_delivery") {
-        if (order.deliveryStatus !== "picked_up") {
+      if (
+        nextStatus ===
+        "out_for_delivery"
+      ) {
+        if (
+          order.deliveryStatus !==
+          "picked_up"
+        ) {
           return res.status(400).json({
             success: false,
+
             message:
               "Mark the order as picked up before starting delivery.",
           });
         }
 
-        order.deliveryStatus = "out_for_delivery";
-        order.orderStatus = "out_for_delivery";
-        order.outForDeliveryAt = new Date();
+        order.deliveryStatus =
+          "out_for_delivery";
+
+        order.orderStatus =
+          "out_for_delivery";
+
+        order.outForDeliveryAt =
+          new Date();
       }
 
       await order.save();
 
-      const updatedOrder = await Order.findById(
-        order._id
-      )
-        .populate(
-          "user",
-          "fullName phone"
+      const updatedOrder =
+        await Order.findById(
+          order._id
         )
-        .lean();
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .lean();
 
       return res.status(200).json({
         success: true,
+
         message:
-          nextStatus === "picked_up"
+          nextStatus ===
+          "picked_up"
             ? "Order marked as picked up."
             : "Order is now out for delivery.",
+
         data: {
-          order: updatedOrder,
+          order:
+            updatedOrder,
         },
       });
     } catch (error) {
-      if (error.name === "CastError") {
+      if (
+        error.name === "CastError"
+      ) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
@@ -313,21 +422,32 @@ router.patch(
   }
 );
 
+/**
+ * POST /api/delivery/orders/:orderId/verify-otp
+ *
+ * Only the assigned delivery partner
+ * can verify the customer's OTP.
+ */
 router.post(
   "/:orderId/verify-otp",
   allowRoles("delivery"),
   async (req, res, next) => {
     try {
-      const order = await Order.findOne({
-        _id: req.params.orderId,
-        deliveryPartner: req.user._id,
-      }).select(
-        "+deliveryOtpSalt +deliveryOtpHash"
-      );
+      const order =
+        await Order.findOne({
+          _id:
+            req.params.orderId,
+
+          deliveryPartner:
+            req.user._id,
+        }).select(
+          "+deliveryOtpSalt +deliveryOtpHash"
+        );
 
       if (!order) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
@@ -341,6 +461,7 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Start delivery before verifying the customer OTP.",
         });
@@ -352,15 +473,17 @@ router.post(
       ) {
         return res.status(409).json({
           success: false,
+
           message:
             "Delivery OTP is unavailable. Ask the administrator to reassign this order.",
         });
       }
 
-      const result = verifyDeliveryOtp(
-        order,
-        req.body.otp
-      );
+      const result =
+        verifyDeliveryOtp(
+          order,
+          req.body.otp
+        );
 
       if (!result.valid) {
         await order.save();
@@ -368,6 +491,7 @@ router.post(
         if (result.locked) {
           return res.status(429).json({
             success: false,
+
             message:
               "Too many incorrect OTP attempts. Try again after 15 minutes.",
           });
@@ -375,47 +499,77 @@ router.post(
 
         return res.status(400).json({
           success: false,
-          message: `Incorrect delivery OTP. ${result.attemptsRemaining} attempt${
-            result.attemptsRemaining === 1 ? "" : "s"
-          } remaining.`,
+
+          message:
+            `Incorrect delivery OTP. ${result.attemptsRemaining} attempt${
+              result.attemptsRemaining ===
+              1
+                ? ""
+                : "s"
+            } remaining.`,
         });
       }
 
-      const completedAt = new Date();
+      const completedAt =
+        new Date();
 
-      order.deliveryStatus = "delivered";
-      order.orderStatus = "delivered";
-      order.deliveryCompletedAt = completedAt;
-      order.deliveredAt = completedAt;
+      order.deliveryStatus =
+        "delivered";
 
-      if (order.paymentMethod === "cod") {
-        order.paymentStatus = "paid";
-        order.paidAt = order.paidAt || completedAt;
+      order.orderStatus =
+        "delivered";
+
+      order.deliveryCompletedAt =
+        completedAt;
+
+      order.deliveredAt =
+        completedAt;
+
+      order.deliveryOtpVerifiedAt =
+        completedAt;
+
+      if (
+        order.paymentMethod ===
+        "cod"
+      ) {
+        order.paymentStatus =
+          "paid";
+
+        order.paidAt =
+          order.paidAt ||
+          completedAt;
       }
 
       await order.save();
 
-      const updatedOrder = await Order.findById(
-        order._id
-      )
-        .populate(
-          "user",
-          "fullName phone"
+      const updatedOrder =
+        await Order.findById(
+          order._id
         )
-        .lean();
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .lean();
 
       return res.status(200).json({
         success: true,
+
         message:
           "Delivery completed successfully after OTP verification.",
+
         data: {
-          order: updatedOrder,
+          order:
+            updatedOrder,
         },
       });
     } catch (error) {
-      if (error.name === "CastError") {
+      if (
+        error.name === "CastError"
+      ) {
         return res.status(404).json({
           success: false,
+
           message:
             "Assigned delivery order not found.",
         });
