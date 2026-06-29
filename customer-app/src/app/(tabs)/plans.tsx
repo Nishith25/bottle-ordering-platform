@@ -227,6 +227,21 @@ export default function PlansScreen() {
     });
   };
 
+  const openSubscriptionDetails = (
+    subscription:
+      CustomerSubscription
+  ) => {
+    router.push({
+      pathname:
+        "/subscription-details",
+
+      params: {
+        subscriptionId:
+          subscription._id,
+      },
+    });
+  };
+
   const openEditSubscription = (
     subscription:
       CustomerSubscription
@@ -310,6 +325,12 @@ export default function PlansScreen() {
             onPress={() => {
               void refreshPlans();
             }}
+            style={({ pressed }) => [
+              styles.refreshButton,
+
+              pressed &&
+                styles.pressed,
+            ]}
           >
             <Ionicons
               name="refresh"
@@ -336,6 +357,34 @@ export default function PlansScreen() {
               }
             >
               Loading plans
+            </Text>
+          </View>
+        ) : plans.length ===
+          0 ? (
+          <View
+            style={styles.emptyCard}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={31}
+              color="#35694E"
+            />
+
+            <Text
+              style={
+                styles.emptyTitle
+              }
+            >
+              No plans available
+            </Text>
+
+            <Text
+              style={
+                styles.emptyDescription
+              }
+            >
+              Subscription plans will
+              appear here when available.
             </Text>
           </View>
         ) : (
@@ -378,6 +427,12 @@ export default function PlansScreen() {
               onPress={() => {
                 void refreshSubscriptions();
               }}
+              style={({ pressed }) => [
+                styles.refreshButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
             >
               <Ionicons
                 name="refresh"
@@ -411,8 +466,9 @@ export default function PlansScreen() {
                 styles.guestDescription
               }
             >
-              Active, paused and cancelled
-              subscriptions will appear here.
+              Active, paused and
+              cancelled subscriptions
+              will appear here.
             </Text>
 
             <Pressable
@@ -421,9 +477,12 @@ export default function PlansScreen() {
                   "/login"
                 )
               }
-              style={
-                styles.loginButton
-              }
+              style={({ pressed }) => [
+                styles.loginButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
             >
               <Text
                 style={
@@ -507,6 +566,11 @@ export default function PlansScreen() {
                 skipping={
                   skippingSubscriptionId ===
                   subscription._id
+                }
+                onViewDetails={() =>
+                  openSubscriptionDetails(
+                    subscription
+                  )
                 }
                 onEdit={() =>
                   openEditSubscription(
@@ -707,6 +771,7 @@ function SubscriptionCard({
   pausing,
   resuming,
   skipping,
+  onViewDetails,
   onEdit,
   onPause,
   onResume,
@@ -721,6 +786,7 @@ function SubscriptionCard({
   resuming: boolean;
   skipping: boolean;
 
+  onViewDetails: () => void;
   onEdit: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -755,7 +821,9 @@ function SubscriptionCard({
           styles.subscriptionTopRow
         }
       >
-        <View style={{ flex: 1 }}>
+        <View
+          style={styles.subscriptionTitleArea}
+        >
           <Text
             style={
               styles.subscriptionNumber
@@ -809,40 +877,95 @@ function SubscriptionCard({
           styles.subscriptionInfo
         }
       >
-        <Text
+        <View
           style={
-            styles.subscriptionDetail
+            styles.subscriptionInfoRow
           }
         >
-          {
-            subscription.bottleCount
-          }{" "}
-          bottles ·{" "}
-          {
-            subscription.preferredDay
-          }
-        </Text>
+          <Ionicons
+            name="nutrition-outline"
+            size={15}
+            color="#607068"
+          />
 
-        <Text
-          style={
-            styles.subscriptionDetail
-          }
-        >
-          {
-            subscription.preferredSlot
-          }
-        </Text>
+          <Text
+            style={
+              styles.subscriptionDetail
+            }
+          >
+            {
+              subscription.bottleCount
+            }{" "}
+            bottles
+          </Text>
+        </View>
 
-        <Text
+        <View
           style={
-            styles.subscriptionDetail
+            styles.subscriptionInfoRow
           }
         >
-          Next billing:{" "}
-          {formatDate(
-            subscription.nextBillingAt
-          )}
-        </Text>
+          <Ionicons
+            name="calendar-outline"
+            size={15}
+            color="#607068"
+          />
+
+          <Text
+            style={
+              styles.subscriptionDetail
+            }
+          >
+            {
+              subscription.preferredDay
+            }
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.subscriptionInfoRow
+          }
+        >
+          <Ionicons
+            name="time-outline"
+            size={15}
+            color="#607068"
+          />
+
+          <Text
+            style={
+              styles.subscriptionDetail
+            }
+          >
+            {
+              subscription.preferredSlot
+            }
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.subscriptionInfoRow
+          }
+        >
+          <Ionicons
+            name="card-outline"
+            size={15}
+            color="#607068"
+          />
+
+          <Text
+            style={
+              styles.subscriptionDetail
+            }
+          >
+            Next billing:{" "}
+            {formatDate(
+              subscription.nextBillingAt
+            )}
+          </Text>
+        </View>
       </View>
 
       {isPaused ? (
@@ -869,20 +992,61 @@ function SubscriptionCard({
         </View>
       ) : null}
 
+      {!isActive &&
+      !isPaused ? (
+        <View
+          style={
+            styles.inactiveNotice
+          }
+        >
+          <Ionicons
+            name={
+              subscription.status ===
+              "cancelled"
+                ? "close-circle-outline"
+                : "time-outline"
+            }
+            size={18}
+            color="#984949"
+          />
+
+          <Text
+            style={
+              styles.inactiveNoticeText
+            }
+          >
+            {subscription.status ===
+            "cancelled"
+              ? "This subscription has been cancelled. Previous delivery history remains available."
+              : "This subscription has expired. Previous delivery history remains available."}
+          </Text>
+        </View>
+      ) : null}
+
       <View
         style={
           styles.subscriptionTotal
         }
       >
-        <Text
-          style={styles.totalLabel}
-        >
-          Per{" "}
-          {subscription.billingCycle ===
-          "weekly"
-            ? "week"
-            : "month"}
-        </Text>
+        <View>
+          <Text
+            style={styles.totalLabel}
+          >
+            Per{" "}
+            {subscription.billingCycle ===
+            "weekly"
+              ? "week"
+              : "month"}
+          </Text>
+
+          <Text
+            style={
+              styles.totalCaption
+            }
+          >
+            Includes plan savings
+          </Text>
+        </View>
 
         <Text
           style={styles.totalValue}
@@ -894,15 +1058,60 @@ function SubscriptionCard({
         </Text>
       </View>
 
+      <Pressable
+        disabled={processing}
+        onPress={onViewDetails}
+        style={({ pressed }) => [
+          styles.detailsButton,
+
+          processing &&
+            styles.disabledButton,
+
+          pressed &&
+            !processing &&
+            styles.pressed,
+        ]}
+      >
+        <View
+          style={
+            styles.detailsButtonLeft
+          }
+        >
+          <Ionicons
+            name="document-text-outline"
+            size={17}
+            color="#245C42"
+          />
+
+          <Text
+            style={
+              styles.detailsButtonText
+            }
+          >
+            View subscription details
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={17}
+          color="#245C42"
+        />
+      </Pressable>
+
       {canEdit ? (
         <Pressable
           disabled={processing}
           onPress={onEdit}
-          style={[
+          style={({ pressed }) => [
             styles.editButton,
 
             processing &&
               styles.disabledButton,
+
+            pressed &&
+              !processing &&
+              styles.pressed,
           ]}
         >
           <Ionicons
@@ -916,7 +1125,8 @@ function SubscriptionCard({
               styles.editButtonText
             }
           >
-            Edit bottles, schedule or address
+            Edit bottles, schedule or
+            address
           </Text>
         </Pressable>
       ) : null}
@@ -930,12 +1140,16 @@ function SubscriptionCard({
           <Pressable
             disabled={processing}
             onPress={onSkip}
-            style={[
+            style={({ pressed }) => [
               styles.managementButton,
               styles.skipButton,
 
               processing &&
                 styles.disabledButton,
+
+              pressed &&
+                !processing &&
+                styles.pressed,
             ]}
           >
             <Ionicons
@@ -958,12 +1172,16 @@ function SubscriptionCard({
           <Pressable
             disabled={processing}
             onPress={onPause}
-            style={[
+            style={({ pressed }) => [
               styles.managementButton,
               styles.pauseButton,
 
               processing &&
                 styles.disabledButton,
+
+              pressed &&
+                !processing &&
+                styles.pressed,
             ]}
           >
             <Ionicons
@@ -986,13 +1204,23 @@ function SubscriptionCard({
           <Pressable
             disabled={processing}
             onPress={onCancel}
-            style={[
+            style={({ pressed }) => [
               styles.cancelButton,
 
               processing &&
                 styles.disabledButton,
+
+              pressed &&
+                !processing &&
+                styles.pressed,
             ]}
           >
+            <Ionicons
+              name="close-circle-outline"
+              size={16}
+              color="#994646"
+            />
+
             <Text
               style={
                 styles.cancelButtonText
@@ -1015,11 +1243,15 @@ function SubscriptionCard({
           <Pressable
             disabled={processing}
             onPress={onResume}
-            style={[
+            style={({ pressed }) => [
               styles.resumeButton,
 
               processing &&
                 styles.disabledButton,
+
+              pressed &&
+                !processing &&
+                styles.pressed,
             ]}
           >
             <Ionicons
@@ -1042,13 +1274,23 @@ function SubscriptionCard({
           <Pressable
             disabled={processing}
             onPress={onCancel}
-            style={[
+            style={({ pressed }) => [
               styles.cancelButton,
 
               processing &&
                 styles.disabledButton,
+
+              pressed &&
+                !processing &&
+                styles.pressed,
             ]}
           >
+            <Ionicons
+              name="close-circle-outline"
+              size={16}
+              color="#994646"
+            />
+
             <Text
               style={
                 styles.cancelButtonText
@@ -1135,6 +1377,17 @@ const styles =
       color: "#1D2922",
       fontSize: 16,
       fontWeight: "900",
+    },
+
+    refreshButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 13,
+      backgroundColor:
+        "#E8F0EA",
+      alignItems: "center",
+      justifyContent:
+        "center",
     },
 
     planCard: {
@@ -1234,6 +1487,7 @@ const styles =
     },
 
     featureText: {
+      flex: 1,
       color: "#536159",
       fontSize: 10,
     },
@@ -1265,6 +1519,9 @@ const styles =
       alignItems: "center",
       justifyContent:
         "center",
+      borderWidth: 1,
+      borderColor:
+        "#E4E8E2",
     },
 
     loadingText: {
@@ -1291,6 +1548,7 @@ const styles =
     guestDescription: {
       color: "#68746D",
       fontSize: 10,
+      lineHeight: 16,
       textAlign: "center",
       marginTop: 6,
     },
@@ -1301,6 +1559,7 @@ const styles =
       borderRadius: 15,
       backgroundColor:
         "#245C42",
+      alignItems: "center",
       justifyContent:
         "center",
       marginTop: 16,
@@ -1330,6 +1589,7 @@ const styles =
     emptyDescription: {
       color: "#68746D",
       fontSize: 10,
+      lineHeight: 16,
       textAlign: "center",
       marginTop: 6,
     },
@@ -1350,6 +1610,10 @@ const styles =
       justifyContent:
         "space-between",
       gap: 12,
+    },
+
+    subscriptionTitleArea: {
+      flex: 1,
     },
 
     subscriptionNumber: {
@@ -1401,11 +1665,18 @@ const styles =
     },
 
     subscriptionInfo: {
-      gap: 5,
+      gap: 8,
       marginTop: 14,
     },
 
+    subscriptionInfoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
     subscriptionDetail: {
+      flex: 1,
       color: "#68746D",
       fontSize: 9,
     },
@@ -1428,12 +1699,31 @@ const styles =
       lineHeight: 14,
     },
 
+    inactiveNotice: {
+      marginTop: 13,
+      padding: 12,
+      borderRadius: 14,
+      backgroundColor:
+        "#FAECEC",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+    },
+
+    inactiveNoticeText: {
+      flex: 1,
+      color: "#8D4C4C",
+      fontSize: 9,
+      lineHeight: 14,
+    },
+
     subscriptionTotal: {
       paddingTop: 13,
       borderTopWidth: 1,
       borderTopColor:
         "#E8EBE7",
       flexDirection: "row",
+      alignItems: "center",
       justifyContent:
         "space-between",
       marginTop: 14,
@@ -1442,6 +1732,13 @@ const styles =
     totalLabel: {
       color: "#657269",
       fontSize: 10,
+      fontWeight: "800",
+    },
+
+    totalCaption: {
+      color: "#8A948E",
+      fontSize: 8,
+      marginTop: 3,
     },
 
     totalValue: {
@@ -1450,9 +1747,37 @@ const styles =
       fontWeight: "900",
     },
 
+    detailsButton: {
+      minHeight: 46,
+      marginTop: 14,
+      paddingHorizontal: 13,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor:
+        "#CAD9CE",
+      backgroundColor:
+        "#F4F8F4",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    detailsButtonLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    detailsButtonText: {
+      color: "#245C42",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
     editButton: {
       minHeight: 44,
-      marginTop: 14,
+      marginTop: 9,
       borderRadius: 14,
       borderWidth: 1,
       borderColor:
@@ -1464,12 +1789,14 @@ const styles =
       justifyContent:
         "center",
       gap: 7,
+      paddingHorizontal: 12,
     },
 
     editButtonText: {
       color: "#245C42",
       fontSize: 9,
       fontWeight: "900",
+      textAlign: "center",
     },
 
     managementActions: {
@@ -1532,9 +1859,11 @@ const styles =
       borderRadius: 14,
       backgroundColor:
         "#FAECEC",
+      flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "center",
+      gap: 7,
     },
 
     cancelButtonText: {
