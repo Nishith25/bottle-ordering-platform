@@ -25,10 +25,10 @@ const DASHBOARD_BASE_URL = (
 ).replace(/\/$/, "");
 
 const ADMIN_DASHBOARD_URL =
-  `${DASHBOARD_BASE_URL}/dashboard`;
+  `${DASHBOARD_BASE_URL}/login?role=admin`;
 
 const DELIVERY_DASHBOARD_URL =
-  `${DASHBOARD_BASE_URL}/delivery`;
+  `${DASHBOARD_BASE_URL}/login?role=delivery`;
 
 export default function AccountScreen() {
   const router = useRouter();

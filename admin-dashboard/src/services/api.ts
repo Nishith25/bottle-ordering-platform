@@ -17,14 +17,17 @@ export type DashboardRole =
   | "admin"
   | "delivery";
 
+export type UserRole =
+  | "customer"
+  | "admin"
+  | "delivery";
+
 export type AdminUser = {
   id: string;
   fullName: string;
   email: string;
   phone: string;
-  role:
-    | "customer"
-    | DashboardRole;
+  role: UserRole;
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -132,18 +135,25 @@ type ProductsResponse =
     count: number;
 
     data: {
-      products:
-        AdminProduct[];
+      products: AdminProduct[];
     };
   };
 
 type ProductResponse =
   ApiBaseResponse & {
     data: {
-      product:
-        AdminProduct;
+      product: AdminProduct;
     };
   };
+
+function isDashboardRole(
+  role: UserRole
+): role is DashboardRole {
+  return (
+    role === "admin" ||
+    role === "delivery"
+  );
+}
 
 async function apiRequest<T>(
   path: string,
@@ -270,6 +280,13 @@ async function apiRequest<T>(
   }
 }
 
+/**
+ * Logs in an administrator or delivery
+ * partner to the operations dashboard.
+ *
+ * Customer accounts are blocked from
+ * accessing the operations dashboard.
+ */
 export async function loginDashboardUser(
   identifier: string,
   password: string
@@ -287,22 +304,32 @@ export async function loginDashboardUser(
       }
     );
 
+  const session =
+    response.data;
+
   if (
-    ![
-      "admin",
-      "delivery",
-    ].includes(
-      response.data.user.role
+    !isDashboardRole(
+      session.user.role
     )
   ) {
     throw new Error(
-      "This account does not have dashboard access."
+      "This account does not have access to the operations dashboard."
     );
   }
 
-  return response.data;
+  if (!session.user.active) {
+    throw new Error(
+      "This dashboard account has been disabled."
+    );
+  }
+
+  return session;
 }
 
+/**
+ * Restores and validates the currently
+ * logged-in dashboard user.
+ */
 export async function fetchDashboardUser(
   token: string
 ): Promise<AdminUser> {
@@ -314,22 +341,34 @@ export async function fetchDashboardUser(
       }
     );
 
+  const dashboardUser =
+    response.data.user;
+
   if (
-    ![
-      "admin",
-      "delivery",
-    ].includes(
-      response.data.user.role
+    !isDashboardRole(
+      dashboardUser.role
     )
   ) {
     throw new Error(
-      "This account does not have dashboard access."
+      "This account does not have access to the operations dashboard."
     );
   }
 
-  return response.data.user;
+  if (!dashboardUser.active) {
+    throw new Error(
+      "This dashboard account has been disabled."
+    );
+  }
+
+  return dashboardUser;
 }
 
+/**
+ * Compatibility exports.
+ *
+ * Existing AuthContext files can continue
+ * importing loginAdmin and fetchAdminUser.
+ */
 export const loginAdmin =
   loginDashboardUser;
 
@@ -372,6 +411,10 @@ export async function fetchAdminProducts(
       lowStockThreshold:
         product.lowStockThreshold ??
         10,
+
+      sortOrder:
+        product.sortOrder ??
+        0,
     })
   );
 }
@@ -401,7 +444,21 @@ async function updateInventory(
       }
     );
 
-  return response.data.product;
+  return {
+    ...response.data.product,
+
+    stockQuantity:
+      response.data.product
+        .stockQuantity ?? 0,
+
+    lowStockThreshold:
+      response.data.product
+        .lowStockThreshold ?? 10,
+
+    sortOrder:
+      response.data.product
+        .sortOrder ?? 0,
+  };
 }
 
 export async function createAdminProduct(
@@ -474,8 +531,21 @@ export async function updateAdminProduct(
         }
       );
 
-    latestProduct =
-      response.data.product;
+    latestProduct = {
+      ...response.data.product,
+
+      stockQuantity:
+        response.data.product
+          .stockQuantity ?? 0,
+
+      lowStockThreshold:
+        response.data.product
+          .lowStockThreshold ?? 10,
+
+      sortOrder:
+        response.data.product
+          .sortOrder ?? 0,
+    };
   }
 
   if (
@@ -509,6 +579,17 @@ export async function adjustAdminProductStock(
   productId: string,
   adjustment: number
 ): Promise<AdminProduct> {
+  if (
+    !Number.isFinite(
+      adjustment
+    ) ||
+    adjustment === 0
+  ) {
+    throw new Error(
+      "Enter a valid stock adjustment."
+    );
+  }
+
   return updateInventory(
     token,
     productId,
@@ -533,7 +614,23 @@ export async function archiveAdminProduct(
       }
     );
 
-  return response.data.product;
+  return {
+    ...response.data.product,
+
+    stockQuantity:
+      response.data.product
+        .stockQuantity ?? 0,
+
+    lowStockThreshold:
+      response.data.product
+        .lowStockThreshold ?? 10,
+
+    sortOrder:
+      response.data.product
+        .sortOrder ?? 0,
+  };
 }
 
-export { API_BASE_URL };
+export {
+  API_BASE_URL,
+};

@@ -6,16 +6,18 @@ import {
 
 import {
   Navigate,
-  useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 
-import {
-  getDashboardHome,
-  useAdminAuth,
-} from "../context/AuthContext";
+import { useAdminAuth } from "../context/AuthContext";
+
+type DashboardRole =
+  | "admin"
+  | "delivery";
 
 export default function LoginPage() {
-  const navigate = useNavigate();
+  const [searchParams] =
+    useSearchParams();
 
   const {
     user,
@@ -23,6 +25,7 @@ export default function LoginPage() {
     authenticating,
     error,
     login,
+    logout,
     clearError,
   } = useAdminAuth();
 
@@ -39,14 +42,83 @@ export default function LoginPage() {
     setShowPassword,
   ] = useState(false);
 
+  const [
+    roleMessage,
+    setRoleMessage,
+  ] = useState<string | null>(
+    null
+  );
+
+  const requestedRoleValue =
+    searchParams.get("role");
+
+  const requestedRole:
+    DashboardRole | null =
+    requestedRoleValue ===
+    "delivery"
+      ? "delivery"
+      : requestedRoleValue ===
+          "admin"
+        ? "admin"
+        : null;
+
   useEffect(() => {
     clearError();
   }, [clearError]);
 
-  if (isAuthenticated && user) {
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      !user ||
+      !requestedRole ||
+      user.role === requestedRole
+    ) {
+      return;
+    }
+
+    const previousRole =
+      user.role === "admin"
+        ? "administrator"
+        : "delivery partner";
+
+    logout();
+
+    setRoleMessage(
+      `The existing ${previousRole} dashboard session was signed out. Log in with a ${requestedRole === "delivery" ? "delivery partner" : "administrator"} account.`
+    );
+  }, [
+    isAuthenticated,
+    user,
+    requestedRole,
+    logout,
+  ]);
+
+  if (
+    isAuthenticated &&
+    user
+  ) {
+    if (
+      requestedRole &&
+      user.role !== requestedRole
+    ) {
+      return (
+        <div className="full-screen-state">
+          <div className="spinner" />
+
+          <p>
+            Switching dashboard account
+          </p>
+        </div>
+      );
+    }
+
     return (
       <Navigate
-        to={getDashboardHome(user)}
+        to={
+          user.role === "delivery"
+            ? "/delivery"
+            : "/dashboard"
+        }
         replace
       />
     );
@@ -66,17 +138,27 @@ export default function LoginPage() {
       return;
     }
 
-    const successful = await login(
+    setRoleMessage(null);
+
+    await login(
       identifier.trim(),
       password
     );
-
-    if (successful) {
-      navigate("/", {
-        replace: true,
-      });
-    }
   };
+
+  const accessTitle =
+    requestedRole === "delivery"
+      ? "Delivery partner access"
+      : requestedRole === "admin"
+        ? "Administrator access"
+        : "Operations access";
+
+  const description =
+    requestedRole === "delivery"
+      ? "Log in using your delivery partner email address or mobile number."
+      : requestedRole === "admin"
+        ? "Log in using your administrator email address or mobile number."
+        : "Administrators and delivery partners can log in to their operations dashboard.";
 
   return (
     <div className="login-page">
@@ -87,36 +169,44 @@ export default function LoginPage() {
           </span>
 
           <h1>
-            Manage and deliver fresh bottles
-            from one secure dashboard.
+            Manage fresh bottle operations
+            from one dashboard.
           </h1>
 
           <p>
-            Administrators control products,
-            orders and delivery assignments.
-            Delivery partners handle only the
-            orders assigned to them.
+            Administrators can manage the
+            business, while delivery partners
+            can manage assigned orders.
           </p>
 
           <div className="login-feature-grid">
             <div>
-              <strong>Products</strong>
+              <strong>
+                Products
+              </strong>
+
               <span>
-                Manage prices and availability
+                Manage prices and stock
               </span>
             </div>
 
             <div>
-              <strong>Orders</strong>
+              <strong>
+                Orders
+              </strong>
+
               <span>
-                Assign and track deliveries
+                Track customer purchases
               </span>
             </div>
 
             <div>
-              <strong>Secure OTP</strong>
+              <strong>
+                Delivery
+              </strong>
+
               <span>
-                Confirm delivery at the doorstep
+                Complete assigned deliveries
               </span>
             </div>
           </div>
@@ -133,14 +223,13 @@ export default function LoginPage() {
           </div>
 
           <span className="form-eyebrow">
-            DASHBOARD ACCESS
+            {accessTitle.toUpperCase()}
           </span>
 
           <h2>Welcome back</h2>
 
           <p className="form-description">
-            Log in using your administrator or
-            delivery-partner account.
+            {description}
           </p>
 
           <label className="form-field">
@@ -156,6 +245,7 @@ export default function LoginPage() {
                 );
 
                 clearError();
+                setRoleMessage(null);
               }}
               placeholder="Enter email or phone"
               autoComplete="username"
@@ -180,6 +270,7 @@ export default function LoginPage() {
                   );
 
                   clearError();
+                  setRoleMessage(null);
                 }}
                 placeholder="Enter password"
                 autoComplete="current-password"
@@ -189,7 +280,8 @@ export default function LoginPage() {
                 type="button"
                 onClick={() =>
                   setShowPassword(
-                    (current) => !current
+                    (current) =>
+                      !current
                   )
                 }
               >
@@ -199,6 +291,12 @@ export default function LoginPage() {
               </button>
             </div>
           </label>
+
+          {roleMessage ? (
+            <div className="form-error">
+              {roleMessage}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="form-error">
@@ -213,12 +311,19 @@ export default function LoginPage() {
           >
             {authenticating
               ? "Logging in..."
-              : "Log in to dashboard"}
+              : requestedRole ===
+                    "delivery"
+                ? "Log in to delivery dashboard"
+                : requestedRole ===
+                    "admin"
+                  ? "Log in to admin dashboard"
+                  : "Log in to dashboard"}
           </button>
 
           <p className="login-security-note">
-            Access is restricted to administrator
-            and delivery-partner accounts.
+            Access is restricted to
+            administrator and delivery partner
+            accounts.
           </p>
         </form>
       </section>
