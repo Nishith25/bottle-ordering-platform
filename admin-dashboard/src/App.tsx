@@ -1,5 +1,3 @@
-// admin-dashboard/src/App.tsx
-
 import {
   BrowserRouter,
   Navigate,
@@ -9,6 +7,7 @@ import {
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
+import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -22,90 +21,32 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route
-          path="/login"
-          element={<LoginPage />}
-        />
+        <Route path="/login" element={<LoginPage />} />
 
-        <Route
-          element={
-            <ProtectedRoute />
-          }
-        >
-          <Route
-            element={
-              <AdminLayout />
-            }
-          >
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AdminLayout />}>
             <Route
               index
-              element={
-                <Navigate
-                  to="/dashboard"
-                  replace
-                />
-              }
+              element={<Navigate to="/dashboard" replace />}
             />
 
-            <Route
-              path="/dashboard"
-              element={
-                <DashboardPage />
-              }
-            />
-
-            <Route
-              path="/products"
-              element={
-                <ProductsPage />
-              }
-            />
-
-            <Route
-              path="/orders"
-              element={
-                <OrdersPage />
-              }
-            />
-
-            <Route
-              path="/locations"
-              element={
-                <LocationsPage />
-              }
-            />
-
-            <Route
-              path="/plans"
-              element={
-                <PlansPage />
-              }
-            />
-
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/products" element={<ProductsPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/coupons" element={<CouponsPage />} />
+            <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/plans" element={<PlansPage />} />
             <Route
               path="/subscriptions"
-              element={
-                <SubscriptionsPage />
-              }
+              element={<SubscriptionsPage />}
             />
-
-            <Route
-              path="/users"
-              element={
-                <UsersPage />
-              }
-            />
+            <Route path="/users" element={<UsersPage />} />
           </Route>
         </Route>
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/dashboard"
-              replace
-            />
-          }
+          element={<Navigate to="/dashboard" replace />}
         />
       </Routes>
     </BrowserRouter>

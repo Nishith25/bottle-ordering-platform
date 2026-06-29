@@ -1,20 +1,15 @@
-// backend/src/services/orderCheckout.js
-
 const crypto = require("crypto");
 
 const Order = require("../models/Order");
-const Product = require(
-  "../models/Product"
-);
+const Product = require("../models/Product");
+const ServiceableLocation = require("../models/ServiceableLocation");
 
-const ServiceableLocation = require(
-  "../models/ServiceableLocation"
-);
+const {
+  getCouponQuote,
+  normalizeCouponCode,
+} = require("./couponService");
 
-function createHttpError(
-  message,
-  statusCode = 400
-) {
+function createHttpError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
 
@@ -26,109 +21,64 @@ function cleanText(value) {
 }
 
 function cleanPhone(value) {
-  return String(value || "").replace(
-    /\D/g,
-    ""
-  );
+  return String(value || "").replace(/\D/g, "");
 }
 
 function cleanPincode(value) {
-  return String(value || "").replace(
-    /\D/g,
-    ""
-  );
+  return String(value || "").replace(/\D/g, "");
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
 function validateAddress(address) {
   if (!address) {
-    throw createHttpError(
-      "Delivery address is required."
-    );
+    throw createHttpError("Delivery address is required.");
   }
 
-  if (
-    cleanText(address.fullName).length <
-    2
-  ) {
-    throw createHttpError(
-      "A valid customer name is required."
-    );
+  if (cleanText(address.fullName).length < 2) {
+    throw createHttpError("A valid customer name is required.");
   }
 
-  if (
-    !/^[6-9]\d{9}$/.test(
-      cleanPhone(address.phone)
-    )
-  ) {
+  if (!/^[6-9]\d{9}$/.test(cleanPhone(address.phone))) {
     throw createHttpError(
       "A valid 10-digit Indian mobile number is required."
     );
   }
 
-  if (
-    cleanPincode(address.pincode)
-      .length !== 6
-  ) {
-    throw createHttpError(
-      "A valid six-digit pincode is required."
-    );
+  if (cleanPincode(address.pincode).length !== 6) {
+    throw createHttpError("A valid six-digit pincode is required.");
   }
 
-  if (
-    cleanText(address.houseDetails)
-      .length < 3
-  ) {
+  if (cleanText(address.houseDetails).length < 3) {
     throw createHttpError(
       "House, flat or building details are required."
     );
   }
 
-  if (
-    cleanText(address.areaDetails)
-      .length < 3
-  ) {
-    throw createHttpError(
-      "Area and street details are required."
-    );
+  if (cleanText(address.areaDetails).length < 3) {
+    throw createHttpError("Area and street details are required.");
   }
 }
 
 function validateSchedule(schedule) {
   if (
     !schedule ||
-    !cleanText(
-      schedule.deliveryDateId
-    ) ||
-    !cleanText(
-      schedule.deliveryDateLabel
-    ) ||
-    !cleanText(
-      schedule.deliverySlot
-    )
+    !cleanText(schedule.deliveryDateId) ||
+    !cleanText(schedule.deliveryDateLabel) ||
+    !cleanText(schedule.deliverySlot)
   ) {
-    throw createHttpError(
-      "Delivery date and slot are required."
-    );
+    throw createHttpError("Delivery date and slot are required.");
   }
 }
 
-async function buildOrderDraft(
-  requestBody,
-  session
-) {
-  const requestedItems =
-    requestBody.items;
+async function buildOrderDraft(requestBody, session, options = {}) {
+  const requestedItems = requestBody.items;
+  const deliveryAddress = requestBody.deliveryAddress;
+  const deliverySchedule = requestBody.deliverySchedule;
 
-  const deliveryAddress =
-    requestBody.deliveryAddress;
-
-  const deliverySchedule =
-    requestBody.deliverySchedule;
-
-  if (
-    !Array.isArray(requestedItems) ||
-    requestedItems.length === 0
-  ) {
+  if (!Array.isArray(requestedItems) || requestedItems.length === 0) {
     throw createHttpError(
       "Add at least one bottle before placing an order."
     );
@@ -137,17 +87,14 @@ async function buildOrderDraft(
   validateAddress(deliveryAddress);
   validateSchedule(deliverySchedule);
 
-  const pincode = cleanPincode(
-    deliveryAddress.pincode
-  );
+  const pincode = cleanPincode(deliveryAddress.pincode);
 
-  const serviceableLocation =
-    await ServiceableLocation.findOne({
-      pincode,
-      active: true,
-    })
-      .session(session)
-      .lean();
+  const serviceableLocation = await ServiceableLocation.findOne({
+    pincode,
+    active: true,
+  })
+    .session(session)
+    .lean();
 
   if (!serviceableLocation) {
     throw createHttpError(
@@ -155,18 +102,14 @@ async function buildOrderDraft(
     );
   }
 
-  const quantitiesByProductId =
-    new Map();
+  const quantitiesByProductId = new Map();
 
   for (const requestedItem of requestedItems) {
     const productId = cleanText(
-      requestedItem.productId ||
-        requestedItem.id
+      requestedItem.productId || requestedItem.id
     ).toLowerCase();
 
-    const quantity = Number(
-      requestedItem.quantity
-    );
+    const quantity = Number(requestedItem.quantity);
 
     if (!productId) {
       throw createHttpError(
@@ -186,92 +129,86 @@ async function buildOrderDraft(
 
     quantitiesByProductId.set(
       productId,
-
-      (quantitiesByProductId.get(
-        productId
-      ) || 0) + quantity
+      (quantitiesByProductId.get(productId) || 0) + quantity
     );
   }
 
-  const productIds = [
-    ...quantitiesByProductId.keys(),
-  ];
+  const productIds = [...quantitiesByProductId.keys()];
 
-  const products =
-    await Product.find({
-      productId: {
-        $in: productIds,
-      },
+  const products = await Product.find({
+    productId: {
+      $in: productIds,
+    },
+    available: true,
+  })
+    .session(session)
+    .lean();
 
-      available: true,
-    })
-      .session(session)
-      .lean();
-
-  if (
-    products.length !==
-    productIds.length
-  ) {
+  if (products.length !== productIds.length) {
     throw createHttpError(
       "One or more selected bottles are unavailable."
     );
   }
 
   const productsById = new Map(
-    products.map((product) => [
-      product.productId,
-      product,
-    ])
+    products.map((product) => [product.productId, product])
   );
 
-  const orderedProducts =
-    productIds.map((productId) =>
-      productsById.get(productId)
-    );
-
-  const items = orderedProducts.map(
-    (product) => {
-      const quantity =
-        quantitiesByProductId.get(
-          product.productId
-        );
-
-      return {
-        product: product._id,
-        productId:
-          product.productId,
-        name: product.name,
-        shortName:
-          product.shortName,
-        sizeMl: product.sizeMl,
-        price: product.price,
-        quantity,
-
-        lineTotal:
-          product.price * quantity,
-      };
-    }
+  const orderedProducts = productIds.map((productId) =>
+    productsById.get(productId)
   );
 
-  const subtotal = items.reduce(
-    (sum, item) =>
-      sum + item.lineTotal,
-    0
+  const items = orderedProducts.map((product) => {
+    const quantity = quantitiesByProductId.get(product.productId);
+
+    return {
+      product: product._id,
+      productId: product.productId,
+      name: product.name,
+      shortName: product.shortName,
+      sizeMl: product.sizeMl,
+      price: product.price,
+      quantity,
+      lineTotal: roundMoney(product.price * quantity),
+    };
+  });
+
+  const subtotal = roundMoney(
+    items.reduce((sum, item) => sum + item.lineTotal, 0)
   );
 
-  if (
-    subtotal <
-    serviceableLocation.minimumOrder
-  ) {
+  if (subtotal < serviceableLocation.minimumOrder) {
     throw createHttpError(
       `The minimum order for ${serviceableLocation.area} is ₹${serviceableLocation.minimumOrder}.`
     );
   }
 
   const deliveryFee =
-    subtotal >= 399
-      ? 0
-      : serviceableLocation.deliveryFee;
+    subtotal >= 399 ? 0 : Number(serviceableLocation.deliveryFee || 0);
+
+  const couponCode = normalizeCouponCode(requestBody.couponCode);
+
+  let coupon = null;
+  let couponDiscount = 0;
+
+  if (couponCode) {
+    const quote = await getCouponQuote({
+      code: couponCode,
+      context: "order",
+      eligibleAmount: subtotal,
+      userId: options.userId || null,
+      session,
+      includeUsageValidation: true,
+    });
+
+    coupon = quote.snapshot;
+    couponDiscount = quote.snapshot.discountAmount;
+  }
+
+  const amountBeforeDiscount = roundMoney(subtotal + deliveryFee);
+  const total = roundMoney(
+    Math.max(0, subtotal - couponDiscount + deliveryFee)
+  );
 
   return {
     products: orderedProducts,
@@ -281,55 +218,30 @@ async function buildOrderDraft(
       items,
 
       deliveryAddress: {
-        fullName: cleanText(
-          deliveryAddress.fullName
-        ),
-
-        phone: cleanPhone(
-          deliveryAddress.phone
-        ),
-
+        fullName: cleanText(deliveryAddress.fullName),
+        phone: cleanPhone(deliveryAddress.phone),
         pincode,
-
-        houseDetails: cleanText(
-          deliveryAddress.houseDetails
-        ),
-
-        areaDetails: cleanText(
-          deliveryAddress.areaDetails
-        ),
-
-        landmark: cleanText(
-          deliveryAddress.landmark
-        ),
-
-        area:
-          serviceableLocation.area,
-
-        city:
-          serviceableLocation.city,
+        houseDetails: cleanText(deliveryAddress.houseDetails),
+        areaDetails: cleanText(deliveryAddress.areaDetails),
+        landmark: cleanText(deliveryAddress.landmark),
+        area: serviceableLocation.area,
+        city: serviceableLocation.city,
       },
 
       deliverySchedule: {
-        deliveryDateId: cleanText(
-          deliverySchedule.deliveryDateId
+        deliveryDateId: cleanText(deliverySchedule.deliveryDateId),
+        deliveryDateLabel: cleanText(
+          deliverySchedule.deliveryDateLabel
         ),
-
-        deliveryDateLabel:
-          cleanText(
-            deliverySchedule.deliveryDateLabel
-          ),
-
-        deliverySlot: cleanText(
-          deliverySchedule.deliverySlot
-        ),
+        deliverySlot: cleanText(deliverySchedule.deliverySlot),
       },
 
       subtotal,
       deliveryFee,
-
-      total:
-        subtotal + deliveryFee,
+      amountBeforeDiscount,
+      couponDiscount,
+      coupon,
+      total,
     },
   };
 }
@@ -348,16 +260,9 @@ function generateOrderNumber() {
   return `BO-${datePart}-${randomPart}`;
 }
 
-async function createUniqueOrderNumber(
-  session
-) {
-  for (
-    let attempt = 0;
-    attempt < 5;
-    attempt += 1
-  ) {
-    const orderNumber =
-      generateOrderNumber();
+async function createUniqueOrderNumber(session) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const orderNumber = generateOrderNumber();
 
     const exists = await Order.exists({
       orderNumber,
@@ -368,9 +273,7 @@ async function createUniqueOrderNumber(
     }
   }
 
-  throw new Error(
-    "Unable to generate an order number."
-  );
+  throw new Error("Unable to generate an order number.");
 }
 
 module.exports = {

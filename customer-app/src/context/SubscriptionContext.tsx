@@ -1,5 +1,3 @@
-// customer-app/src/context/SubscriptionContext.tsx
-
 import {
   createContext,
   type ReactNode,
@@ -15,7 +13,9 @@ import {
   createCustomerSubscription,
   fetchMySubscriptions,
   fetchSubscriptionPlans,
+  validateCoupon,
   type CustomerSubscription,
+  type CouponQuote,
   type SubscriptionPaymentMethod,
   type SubscriptionPlan,
 } from "../services/api";
@@ -47,6 +47,10 @@ export type PendingSubscriptionDraft = {
   preferredSlot: string;
   originalTotal: number;
   savings: number;
+  amountBeforeCoupon?: number;
+  couponCode?: string;
+  couponDiscount?: number;
+  couponQuote?: CouponQuote | null;
   total: number;
   deliveryDetails?: SubscriptionDeliveryDetails;
 };
@@ -54,493 +58,436 @@ export type PendingSubscriptionDraft = {
 type SubscriptionContextValue = {
   plans: SubscriptionPlan[];
   subscriptions: CustomerSubscription[];
-
-  pendingSubscriptionDraft:
-    | PendingSubscriptionDraft
-    | null;
-
-  lastActivatedSubscription:
-    | CustomerSubscription
-    | null;
-
+  pendingSubscriptionDraft: PendingSubscriptionDraft | null;
+  lastActivatedSubscription: CustomerSubscription | null;
   loadingPlans: boolean;
   loadingSubscriptions: boolean;
   activatingSubscription: boolean;
-  cancellingSubscriptionId:
-    | string
-    | null;
-
+  applyingCoupon: boolean;
+  cancellingSubscriptionId: string | null;
   error: string | null;
-
+  couponError: string | null;
   setPendingSubscriptionDraft: (
-    draft:
-      | PendingSubscriptionDraft
-      | null
+    draft: PendingSubscriptionDraft | null
   ) => void;
-
   saveSubscriptionDeliveryDetails: (
     details: SubscriptionDeliveryDetails
   ) => boolean;
-
+  applySubscriptionCoupon: (code: string) => Promise<boolean>;
+  removeSubscriptionCoupon: () => void;
   confirmSubscription: (
     paymentMethod: SubscriptionPaymentMethod
   ) => Promise<CustomerSubscription | null>;
-
   refreshPlans: () => Promise<void>;
   refreshSubscriptions: () => Promise<void>;
-
   cancelSubscription: (
     subscriptionId: string,
     reason?: string
   ) => Promise<boolean>;
-
   getPlanById: (
     planId: string
   ) => SubscriptionPlan | undefined;
-
   getSubscriptionById: (
     subscriptionId: string
   ) => CustomerSubscription | undefined;
-
   clearError: () => void;
 };
 
-const SubscriptionContext =
-  createContext<
-    SubscriptionContextValue | undefined
-  >(undefined);
+const SubscriptionContext = createContext<
+  SubscriptionContextValue | undefined
+>(undefined);
+
+function getBaseSubscriptionAmount(
+  draft: PendingSubscriptionDraft
+) {
+  return (
+    draft.amountBeforeCoupon ??
+    draft.total + (draft.couponDiscount ?? 0)
+  );
+}
 
 export function SubscriptionProvider({
   children,
 }: {
   children: ReactNode;
 }) {
-  const {
-    token,
-    isAuthenticated,
-  } = useAuth();
+  const { token, isAuthenticated } = useAuth();
 
-  const [plans, setPlans] = useState<
-    SubscriptionPlan[]
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [subscriptions, setSubscriptions] = useState<
+    CustomerSubscription[]
   >([]);
-
-  const [
-    subscriptions,
-    setSubscriptions,
-  ] = useState<CustomerSubscription[]>(
-    []
-  );
-
-  const [
-    pendingSubscriptionDraft,
-    setPendingSubscriptionDraft,
-  ] =
-    useState<PendingSubscriptionDraft | null>(
-      null
-    );
-
-  const [
-    lastActivatedSubscription,
-    setLastActivatedSubscription,
-  ] =
-    useState<CustomerSubscription | null>(
-      null
-    );
-
-  const [
-    loadingPlans,
-    setLoadingPlans,
-  ] = useState(false);
-
-  const [
-    loadingSubscriptions,
-    setLoadingSubscriptions,
-  ] = useState(false);
-
-  const [
-    activatingSubscription,
-    setActivatingSubscription,
-  ] = useState(false);
-
-  const [
-    cancellingSubscriptionId,
-    setCancellingSubscriptionId,
-  ] = useState<string | null>(null);
-
-  const [error, setError] =
+  const [pendingSubscriptionDraft, setPendingSubscriptionDraft] =
+    useState<PendingSubscriptionDraft | null>(null);
+  const [lastActivatedSubscription, setLastActivatedSubscription] =
+    useState<CustomerSubscription | null>(null);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [loadingSubscriptions, setLoadingSubscriptions] =
+    useState(false);
+  const [activatingSubscription, setActivatingSubscription] =
+    useState(false);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [cancellingSubscriptionId, setCancellingSubscriptionId] =
     useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
 
   const clearError = useCallback(() => {
     setError(null);
+    setCouponError(null);
   }, []);
 
-  const refreshPlans =
-    useCallback(async () => {
-      setLoadingPlans(true);
-      setError(null);
+  const refreshPlans = useCallback(async () => {
+    setLoadingPlans(true);
+    setError(null);
 
-      try {
-        const latestPlans =
-          await fetchSubscriptionPlans();
+    try {
+      setPlans(await fetchSubscriptionPlans());
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load subscription plans."
+      );
+    } finally {
+      setLoadingPlans(false);
+    }
+  }, []);
 
-        setPlans(latestPlans);
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load subscription plans."
-        );
-      } finally {
-        setLoadingPlans(false);
-      }
-    }, []);
+  const refreshSubscriptions = useCallback(async () => {
+    if (!token) {
+      setSubscriptions([]);
+      return;
+    }
 
-  const refreshSubscriptions =
-    useCallback(async () => {
-      if (!token) {
-        setSubscriptions([]);
-        return;
-      }
+    setLoadingSubscriptions(true);
+    setError(null);
 
-      setLoadingSubscriptions(true);
-      setError(null);
-
-      try {
-        const latestSubscriptions =
-          await fetchMySubscriptions(token);
-
-        setSubscriptions(
-          latestSubscriptions
-        );
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load your subscriptions."
-        );
-      } finally {
-        setLoadingSubscriptions(false);
-      }
-    }, [token]);
+    try {
+      setSubscriptions(await fetchMySubscriptions(token));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load your subscriptions."
+      );
+    } finally {
+      setLoadingSubscriptions(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     void refreshPlans();
   }, [refreshPlans]);
 
   useEffect(() => {
-    if (
-      isAuthenticated &&
-      token
-    ) {
+    if (isAuthenticated && token) {
       void refreshSubscriptions();
       return;
     }
 
     setSubscriptions([]);
     setLastActivatedSubscription(null);
-  }, [
-    isAuthenticated,
-    token,
-    refreshSubscriptions,
-  ]);
+  }, [isAuthenticated, token, refreshSubscriptions]);
 
-  const saveSubscriptionDeliveryDetails =
-    useCallback(
-      (
-        details: SubscriptionDeliveryDetails
-      ): boolean => {
-        if (!pendingSubscriptionDraft) {
-          setError(
-            "Your subscription plan details are missing."
-          );
+  const saveSubscriptionDeliveryDetails = useCallback(
+    (details: SubscriptionDeliveryDetails): boolean => {
+      if (!pendingSubscriptionDraft) {
+        setError("Your subscription plan details are missing.");
+        return false;
+      }
 
-          return false;
-        }
+      setPendingSubscriptionDraft({
+        ...pendingSubscriptionDraft,
+        deliveryDetails: details,
+      });
+
+      setError(null);
+      return true;
+    },
+    [pendingSubscriptionDraft]
+  );
+
+  const applySubscriptionCoupon = useCallback(
+    async (code: string): Promise<boolean> => {
+      if (!pendingSubscriptionDraft) {
+        setCouponError("Your subscription plan details are missing.");
+        return false;
+      }
+
+      const normalizedCode = code.trim().toUpperCase();
+
+      if (!normalizedCode) {
+        setCouponError("Enter a coupon code.");
+        return false;
+      }
+
+      const amountBeforeCoupon = getBaseSubscriptionAmount(
+        pendingSubscriptionDraft
+      );
+
+      setApplyingCoupon(true);
+      setCouponError(null);
+
+      try {
+        const quote = await validateCoupon({
+          code: normalizedCode,
+          context: "subscription",
+          eligibleAmount: amountBeforeCoupon,
+        });
 
         setPendingSubscriptionDraft({
           ...pendingSubscriptionDraft,
-          deliveryDetails: details,
+          amountBeforeCoupon,
+          couponCode: quote.code,
+          couponDiscount: quote.discountAmount,
+          couponQuote: quote,
+          total: Math.max(
+            0,
+            amountBeforeCoupon - quote.discountAmount
+          ),
         });
 
-        setError(null);
-
         return true;
-      },
-      [pendingSubscriptionDraft]
-    );
+      } catch (requestError) {
+        setCouponError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to apply this coupon."
+        );
+        return false;
+      } finally {
+        setApplyingCoupon(false);
+      }
+    },
+    [pendingSubscriptionDraft]
+  );
 
-  const confirmSubscription =
-    useCallback(
-      async (
-        paymentMethod: SubscriptionPaymentMethod
-      ): Promise<CustomerSubscription | null> => {
-        if (!token) {
-          setError(
-            "Please log in before activating a subscription."
-          );
+  const removeSubscriptionCoupon = useCallback(() => {
+    setPendingSubscriptionDraft((currentDraft) => {
+      if (!currentDraft) return currentDraft;
 
-          return null;
-        }
+      const amountBeforeCoupon = getBaseSubscriptionAmount(
+        currentDraft
+      );
 
-        if (
-          !pendingSubscriptionDraft ||
-          !pendingSubscriptionDraft.deliveryDetails
-        ) {
-          setError(
-            "Your subscription delivery details are missing."
-          );
+      return {
+        ...currentDraft,
+        amountBeforeCoupon,
+        couponCode: "",
+        couponDiscount: 0,
+        couponQuote: null,
+        total: amountBeforeCoupon,
+      };
+    });
 
-          return null;
-        }
+    setCouponError(null);
+  }, []);
 
-        setActivatingSubscription(true);
-        setError(null);
+  const confirmSubscription = useCallback(
+    async (
+      paymentMethod: SubscriptionPaymentMethod
+    ): Promise<CustomerSubscription | null> => {
+      if (!token) {
+        setError(
+          "Please log in before activating a subscription."
+        );
+        return null;
+      }
 
-        try {
-          const subscription =
-            await createCustomerSubscription(
-              token,
-              {
-                planId:
-                  pendingSubscriptionDraft.planId,
+      if (
+        !pendingSubscriptionDraft ||
+        !pendingSubscriptionDraft.deliveryDetails
+      ) {
+        setError("Your subscription delivery details are missing.");
+        return null;
+      }
 
-                items:
-                  pendingSubscriptionDraft.items.map(
-                    (item) => ({
-                      productId:
-                        item.productId,
-                      quantity:
-                        item.quantity,
-                    })
-                  ),
+      setActivatingSubscription(true);
+      setError(null);
 
-                preferredDay:
-                  pendingSubscriptionDraft.preferredDay,
-
-                preferredSlot:
-                  pendingSubscriptionDraft.preferredSlot,
-
-                deliveryAddress: {
-                  fullName:
-                    pendingSubscriptionDraft
-                      .deliveryDetails
-                      .fullName,
-
-                  phone:
-                    pendingSubscriptionDraft
-                      .deliveryDetails.phone,
-
-                  pincode:
-                    pendingSubscriptionDraft
-                      .deliveryDetails
-                      .pincode,
-
-                  houseDetails:
-                    pendingSubscriptionDraft
-                      .deliveryDetails
-                      .houseDetails,
-
-                  areaDetails:
-                    pendingSubscriptionDraft
-                      .deliveryDetails
-                      .areaDetails,
-
-                  landmark:
-                    pendingSubscriptionDraft
-                      .deliveryDetails
-                      .landmark,
-                },
-
-                paymentMethod,
-              }
-            );
-
-          setSubscriptions(
-            (currentSubscriptions) => [
-              subscription,
-
-              ...currentSubscriptions.filter(
-                (currentSubscription) =>
-                  currentSubscription._id !==
-                  subscription._id
-              ),
-            ]
-          );
-
-          setLastActivatedSubscription(
-            subscription
-          );
-
-          setPendingSubscriptionDraft(
-            null
-          );
-
-          return subscription;
-        } catch (requestError) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Unable to activate this subscription."
-          );
-
-          return null;
-        } finally {
-          setActivatingSubscription(
-            false
-          );
-        }
-      },
-      [token, pendingSubscriptionDraft]
-    );
-
-  const cancelSubscription =
-    useCallback(
-      async (
-        subscriptionId: string,
-        reason =
-          "Cancelled by customer"
-      ): Promise<boolean> => {
-        if (!token) {
-          setError(
-            "Please log in to cancel a subscription."
-          );
-
-          return false;
-        }
-
-        setCancellingSubscriptionId(
-          subscriptionId
+      try {
+        const subscription = await createCustomerSubscription(
+          token,
+          {
+            planId: pendingSubscriptionDraft.planId,
+            items: pendingSubscriptionDraft.items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+            })),
+            preferredDay: pendingSubscriptionDraft.preferredDay,
+            preferredSlot: pendingSubscriptionDraft.preferredSlot,
+            deliveryAddress: {
+              fullName:
+                pendingSubscriptionDraft.deliveryDetails.fullName,
+              phone: pendingSubscriptionDraft.deliveryDetails.phone,
+              pincode: pendingSubscriptionDraft.deliveryDetails.pincode,
+              houseDetails:
+                pendingSubscriptionDraft.deliveryDetails.houseDetails,
+              areaDetails:
+                pendingSubscriptionDraft.deliveryDetails.areaDetails,
+              landmark:
+                pendingSubscriptionDraft.deliveryDetails.landmark,
+            },
+            couponCode:
+              pendingSubscriptionDraft.couponCode || undefined,
+            paymentMethod,
+          }
         );
 
-        setError(null);
-
-        try {
-          const updatedSubscription =
-            await cancelCustomerSubscription(
-              token,
-              subscriptionId,
-              reason
-            );
-
-          setSubscriptions(
-            (currentSubscriptions) =>
-              currentSubscriptions.map(
-                (subscription) =>
-                  subscription._id ===
-                  updatedSubscription._id
-                    ? updatedSubscription
-                    : subscription
-              )
-          );
-
-          setLastActivatedSubscription(
+        setSubscriptions((currentSubscriptions) => [
+          subscription,
+          ...currentSubscriptions.filter(
             (currentSubscription) =>
-              currentSubscription?._id ===
-              updatedSubscription._id
-                ? updatedSubscription
-                : currentSubscription
+              currentSubscription._id !== subscription._id
+          ),
+        ]);
+
+        setLastActivatedSubscription(subscription);
+        setPendingSubscriptionDraft(null);
+        setCouponError(null);
+
+        return subscription;
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to activate this subscription."
+        );
+        return null;
+      } finally {
+        setActivatingSubscription(false);
+      }
+    },
+    [token, pendingSubscriptionDraft]
+  );
+
+  const cancelSubscription = useCallback(
+    async (
+      subscriptionId: string,
+      reason = "Cancelled by customer"
+    ): Promise<boolean> => {
+      if (!token) {
+        setError("Please log in to cancel a subscription.");
+        return false;
+      }
+
+      setCancellingSubscriptionId(subscriptionId);
+      setError(null);
+
+      try {
+        const updatedSubscription =
+          await cancelCustomerSubscription(
+            token,
+            subscriptionId,
+            reason
           );
 
-          return true;
-        } catch (requestError) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Unable to cancel this subscription."
-          );
+        setSubscriptions((currentSubscriptions) =>
+          currentSubscriptions.map((subscription) =>
+            subscription._id === updatedSubscription._id
+              ? updatedSubscription
+              : subscription
+          )
+        );
 
-          return false;
-        } finally {
-          setCancellingSubscriptionId(
-            null
-          );
-        }
-      },
-      [token]
-    );
+        setLastActivatedSubscription((currentSubscription) =>
+          currentSubscription?._id === updatedSubscription._id
+            ? updatedSubscription
+            : currentSubscription
+        );
+
+        return true;
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to cancel this subscription."
+        );
+        return false;
+      } finally {
+        setCancellingSubscriptionId(null);
+      }
+    },
+    [token]
+  );
 
   const getPlanById = useCallback(
     (planId: string) =>
-      plans.find(
-        (plan) =>
-          plan.planId === planId
-      ),
+      plans.find((plan) => plan.planId === planId),
     [plans]
   );
 
-  const getSubscriptionById =
-    useCallback(
-      (subscriptionId: string) =>
-        subscriptions.find(
-          (subscription) =>
-            subscription._id ===
-            subscriptionId
-        ) ??
-        (lastActivatedSubscription?._id ===
-        subscriptionId
-          ? lastActivatedSubscription
-          : undefined),
-      [
-        subscriptions,
-        lastActivatedSubscription,
-      ]
-    );
+  const getSubscriptionById = useCallback(
+    (subscriptionId: string) =>
+      subscriptions.find(
+        (subscription) => subscription._id === subscriptionId
+      ) ??
+      (lastActivatedSubscription?._id === subscriptionId
+        ? lastActivatedSubscription
+        : undefined),
+    [subscriptions, lastActivatedSubscription]
+  );
 
-  const value =
-    useMemo<SubscriptionContextValue>(
-      () => ({
-        plans,
-        subscriptions,
-        pendingSubscriptionDraft,
-        lastActivatedSubscription,
-        loadingPlans,
-        loadingSubscriptions,
-        activatingSubscription,
-        cancellingSubscriptionId,
-        error,
-        setPendingSubscriptionDraft,
-        saveSubscriptionDeliveryDetails,
-        confirmSubscription,
-        refreshPlans,
-        refreshSubscriptions,
-        cancelSubscription,
-        getPlanById,
-        getSubscriptionById,
-        clearError,
-      }),
-      [
-        plans,
-        subscriptions,
-        pendingSubscriptionDraft,
-        lastActivatedSubscription,
-        loadingPlans,
-        loadingSubscriptions,
-        activatingSubscription,
-        cancellingSubscriptionId,
-        error,
-        saveSubscriptionDeliveryDetails,
-        confirmSubscription,
-        refreshPlans,
-        refreshSubscriptions,
-        cancelSubscription,
-        getPlanById,
-        getSubscriptionById,
-        clearError,
-      ]
-    );
+  const value = useMemo<SubscriptionContextValue>(
+    () => ({
+      plans,
+      subscriptions,
+      pendingSubscriptionDraft,
+      lastActivatedSubscription,
+      loadingPlans,
+      loadingSubscriptions,
+      activatingSubscription,
+      applyingCoupon,
+      cancellingSubscriptionId,
+      error,
+      couponError,
+      setPendingSubscriptionDraft,
+      saveSubscriptionDeliveryDetails,
+      applySubscriptionCoupon,
+      removeSubscriptionCoupon,
+      confirmSubscription,
+      refreshPlans,
+      refreshSubscriptions,
+      cancelSubscription,
+      getPlanById,
+      getSubscriptionById,
+      clearError,
+    }),
+    [
+      plans,
+      subscriptions,
+      pendingSubscriptionDraft,
+      lastActivatedSubscription,
+      loadingPlans,
+      loadingSubscriptions,
+      activatingSubscription,
+      applyingCoupon,
+      cancellingSubscriptionId,
+      error,
+      couponError,
+      saveSubscriptionDeliveryDetails,
+      applySubscriptionCoupon,
+      removeSubscriptionCoupon,
+      confirmSubscription,
+      refreshPlans,
+      refreshSubscriptions,
+      cancelSubscription,
+      getPlanById,
+      getSubscriptionById,
+      clearError,
+    ]
+  );
 
   return (
-    <SubscriptionContext.Provider
-      value={value}
-    >
+    <SubscriptionContext.Provider value={value}>
       {children}
     </SubscriptionContext.Provider>
   );
 }
 
 export function useSubscriptions(): SubscriptionContextValue {
-  const context =
-    useContext(SubscriptionContext);
+  const context = useContext(SubscriptionContext);
 
   if (!context) {
     throw new Error(
