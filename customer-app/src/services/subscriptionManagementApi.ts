@@ -18,6 +18,58 @@ type SubscriptionResponse =
     };
   };
 
+export type SubscriptionEditProduct = {
+  _id: string;
+  productId: string;
+  name: string;
+  shortName: string;
+  sizeMl: number;
+  price: number;
+  available: boolean;
+  subscriptionEligible: boolean;
+};
+
+export type SubscriptionEditOptions = {
+  subscription:
+    CustomerSubscription;
+
+  products:
+    SubscriptionEditProduct[];
+
+  canEdit: boolean;
+
+  editDeadline:
+    | string
+    | null;
+
+  editMessage: string;
+};
+
+export type UpdateSubscriptionInput = {
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+
+  preferredDay: string;
+  preferredSlot: string;
+
+  deliveryAddress: {
+    fullName: string;
+    phone: string;
+    pincode: string;
+    houseDetails: string;
+    areaDetails: string;
+    landmark?: string;
+  };
+};
+
+type EditOptionsResponse =
+  ApiResponse & {
+    data:
+      SubscriptionEditOptions;
+  };
+
 async function request<T>(
   path: string,
   token: string,
@@ -221,4 +273,45 @@ export async function skipNextCustomerSubscriptionDelivery(
         .skippedBillingDate ??
       null,
   };
+}
+
+export async function fetchSubscriptionEditOptions(
+  token: string,
+  subscriptionId: string
+): Promise<SubscriptionEditOptions> {
+  const response =
+    await request<EditOptionsResponse>(
+      getSubscriptionPath(
+        subscriptionId,
+        "edit-options"
+      ),
+      token
+    );
+
+  return response.data;
+}
+
+export async function updateCustomerSubscription(
+  token: string,
+  subscriptionId: string,
+  input: UpdateSubscriptionInput
+): Promise<CustomerSubscription> {
+  const response =
+    await request<SubscriptionResponse>(
+      getSubscriptionPath(
+        subscriptionId,
+        "edit"
+      ),
+      token,
+      {
+        method: "PATCH",
+
+        body: JSON.stringify(
+          input
+        ),
+      }
+    );
+
+  return response.data
+    .subscription;
 }

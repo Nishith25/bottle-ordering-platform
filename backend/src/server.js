@@ -24,6 +24,7 @@ const orderReviewRoutes = require("./routes/orderReviews");
 const orderRoutes = require("./routes/orders");
 const productRoutes = require("./routes/products");
 const subscriptionRoutes = require("./routes/subscriptions");
+const subscriptionEditRoutes = require("./routes/subscriptionEdits");
 
 const razorpayRefundWebhookMiddleware = require(
   "./middleware/razorpayRefundWebhook"
@@ -205,6 +206,11 @@ app.use(
 app.use(
   "/api/subscriptions",
   subscriptionRoutes
+);
+
+app.use(
+  "/api/subscriptions",
+  subscriptionEditRoutes
 );
 
 app.use(

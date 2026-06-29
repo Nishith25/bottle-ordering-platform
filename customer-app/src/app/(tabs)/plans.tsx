@@ -165,7 +165,7 @@ export default function PlansScreen() {
         "Resume subscription",
 
       message:
-        "Recurring delivery orders will become active again using your existing bottle selection and address.",
+        "Recurring delivery orders will become active again using your saved bottle selection and address.",
 
       confirmText:
         "Resume subscription",
@@ -187,7 +187,7 @@ export default function PlansScreen() {
         "Skip next delivery",
 
       message:
-        `Your delivery scheduled around ${formatDate(
+        `The delivery scheduled around ${formatDate(
           subscription.nextBillingAt
         )} will be skipped. Your subscription will remain active.`,
 
@@ -223,6 +223,21 @@ export default function PlansScreen() {
           subscription._id,
           "Cancelled by customer"
         );
+      },
+    });
+  };
+
+  const openEditSubscription = (
+    subscription:
+      CustomerSubscription
+  ) => {
+    router.push({
+      pathname:
+        "/edit-subscription",
+
+      params: {
+        subscriptionId:
+          subscription._id,
       },
     });
   };
@@ -396,9 +411,8 @@ export default function PlansScreen() {
                 styles.guestDescription
               }
             >
-              Active, paused and
-              cancelled subscriptions
-              will appear here.
+              Active, paused and cancelled
+              subscriptions will appear here.
             </Text>
 
             <Pressable
@@ -493,6 +507,11 @@ export default function PlansScreen() {
                 skipping={
                   skippingSubscriptionId ===
                   subscription._id
+                }
+                onEdit={() =>
+                  openEditSubscription(
+                    subscription
+                  )
                 }
                 onPause={() =>
                   requestPause(
@@ -688,6 +707,7 @@ function SubscriptionCard({
   pausing,
   resuming,
   skipping,
+  onEdit,
   onPause,
   onResume,
   onSkip,
@@ -701,6 +721,7 @@ function SubscriptionCard({
   resuming: boolean;
   skipping: boolean;
 
+  onEdit: () => void;
   onPause: () => void;
   onResume: () => void;
   onSkip: () => void;
@@ -713,6 +734,9 @@ function SubscriptionCard({
   const isPaused =
     subscription.status ===
     "paused";
+
+  const canEdit =
+    isActive || isPaused;
 
   const processing =
     cancelling ||
@@ -869,6 +893,33 @@ function SubscriptionCard({
           }
         </Text>
       </View>
+
+      {canEdit ? (
+        <Pressable
+          disabled={processing}
+          onPress={onEdit}
+          style={[
+            styles.editButton,
+
+            processing &&
+              styles.disabledButton,
+          ]}
+        >
+          <Ionicons
+            name="create-outline"
+            size={17}
+            color="#245C42"
+          />
+
+          <Text
+            style={
+              styles.editButtonText
+            }
+          >
+            Edit bottles, schedule or address
+          </Text>
+        </Pressable>
+      ) : null}
 
       {isActive ? (
         <View
@@ -1399,8 +1450,30 @@ const styles =
       fontWeight: "900",
     },
 
-    managementActions: {
+    editButton: {
+      minHeight: 44,
       marginTop: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor:
+        "#BCD3C4",
+      backgroundColor:
+        "#EFF5F0",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 7,
+    },
+
+    editButtonText: {
+      color: "#245C42",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    managementActions: {
+      marginTop: 9,
       gap: 9,
     },
 
