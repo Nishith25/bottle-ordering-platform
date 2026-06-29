@@ -1,6 +1,7 @@
-import {
-  API_BASE_URL,
-} from "./api";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL ??
+  "http://localhost:5001"
+).replace(/\/$/, "");
 
 type ApiResponse = {
   success: boolean;
@@ -28,23 +29,29 @@ export type LastGeneratedOrder = {
 export type DueSubscriptionDelivery = {
   _id: string;
   subscriptionNumber: string;
+
   user:
     | DueSubscriptionUser
     | string;
 
   planId: string;
   planName: string;
+
   billingCycle:
     | "weekly"
     | "monthly";
 
   bottleCount: number;
   deliveriesPerCycle: number;
+
   preferredDay: string;
   preferredSlot: string;
+
   status: string;
   paymentStatus: string;
+
   nextBillingAt: string;
+
   generatedDeliveryCount?: number;
   overdueByDays: number;
 
@@ -77,8 +84,10 @@ export type SubscriptionDeliveryResult = {
   subscriptionId: string;
   subscriptionNumber: string;
   planName: string;
+
   orderId: string | null;
   orderNumber: string;
+
   reason: string;
   nextBillingAt: string | null;
 };
@@ -130,6 +139,12 @@ async function request<T>(
   token: string,
   options: RequestInit = {}
 ): Promise<T> {
+  if (!token.trim()) {
+    throw new Error(
+      "Admin authentication is required."
+    );
+  }
+
   const controller =
     new AbortController();
 
@@ -207,7 +222,7 @@ async function request<T>(
         "AbortError"
     ) {
       throw new Error(
-        "The server took too long to respond."
+        "The backend took too long to respond."
       );
     }
 
@@ -261,6 +276,15 @@ export async function generateDueSubscriptionDeliveries(
   token: string,
   limit = 25
 ): Promise<SubscriptionDeliveryBatchResult> {
+  const safeLimit =
+    Math.min(
+      Math.max(
+        Math.floor(limit),
+        1
+      ),
+      100
+    );
+
   const response =
     await request<BatchResponse>(
       "/api/admin/subscriptions/generate-due-deliveries",
@@ -269,7 +293,7 @@ export async function generateDueSubscriptionDeliveries(
         method: "POST",
 
         body: JSON.stringify({
-          limit,
+          limit: safeLimit,
         }),
       }
     );
@@ -282,7 +306,10 @@ export async function generateSingleSubscriptionDelivery(
   subscriptionId: string,
   force = false
 ): Promise<SubscriptionDeliveryResult> {
-  if (!subscriptionId.trim()) {
+  const cleanSubscriptionId =
+    subscriptionId.trim();
+
+  if (!cleanSubscriptionId) {
     throw new Error(
       "Subscription ID is missing."
     );
@@ -291,7 +318,7 @@ export async function generateSingleSubscriptionDelivery(
   const response =
     await request<SingleResponse>(
       `/api/admin/subscriptions/${encodeURIComponent(
-        subscriptionId.trim()
+        cleanSubscriptionId
       )}/generate-delivery`,
       token,
       {

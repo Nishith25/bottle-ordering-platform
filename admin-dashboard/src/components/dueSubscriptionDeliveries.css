@@ -1,0 +1,355 @@
+.due-deliveries-panel {
+  margin-bottom: 22px;
+  padding: clamp(18px, 3vw, 25px);
+  border: 1px solid #dfe5de;
+  border-radius: 25px;
+  background: #ffffff;
+}
+
+.due-deliveries-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.due-deliveries-eyebrow {
+  display: block;
+  color: #4d765f;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.due-deliveries-heading h3 {
+  margin: 7px 0 0;
+  color: #203128;
+  font-size: 20px;
+}
+
+.due-deliveries-heading p {
+  max-width: 590px;
+  margin: 7px 0 0;
+  color: #708078;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.due-deliveries-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.due-deliveries-heading-actions button,
+.due-delivery-card-top button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 13px;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.due-deliveries-refresh {
+  color: #245c42;
+  background: #e8f0ea;
+}
+
+.due-deliveries-generate,
+.due-delivery-card-top button {
+  color: #ffffff;
+  background: #245c42;
+}
+
+.due-deliveries-heading-actions button:disabled,
+.due-delivery-card-top button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.due-deliveries-error,
+.due-deliveries-success {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.due-deliveries-error {
+  color: #924848;
+  background: #faecec;
+}
+
+.due-deliveries-success {
+  color: #2b6847;
+  background: #e5f2e8;
+}
+
+.due-deliveries-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 17px;
+}
+
+.due-deliveries-metric {
+  padding: 14px;
+  border: 1px solid #e1e6e0;
+  border-radius: 17px;
+  background: #f7f9f6;
+}
+
+.due-deliveries-metric span,
+.due-deliveries-metric strong {
+  display: block;
+}
+
+.due-deliveries-metric span {
+  color: #77837c;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.due-deliveries-metric strong {
+  margin-top: 8px;
+  color: #203128;
+  font-size: 21px;
+}
+
+.due-deliveries-batch-result {
+  margin-top: 13px;
+  padding: 13px;
+  border-radius: 17px;
+  background: #edf4ef;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.due-deliveries-batch-result > div {
+  text-align: center;
+}
+
+.due-deliveries-batch-result span,
+.due-deliveries-batch-result strong {
+  display: block;
+}
+
+.due-deliveries-batch-result span {
+  color: #688073;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.due-deliveries-batch-result strong {
+  margin-top: 5px;
+  color: #265d40;
+  font-size: 16px;
+}
+
+.due-deliveries-state {
+  min-height: 190px;
+  margin-top: 16px;
+  padding: 25px;
+  border: 1px dashed #d8dfd8;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.due-deliveries-state-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  color: #245c42;
+  background: #e6efe8;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.due-deliveries-state h4 {
+  margin: 12px 0 0;
+  color: #203128;
+  font-size: 15px;
+}
+
+.due-deliveries-state p {
+  max-width: 380px;
+  margin: 6px 0 0;
+  color: #748078;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.due-deliveries-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.due-delivery-card {
+  padding: 16px;
+  border: 1px solid #e0e6df;
+  border-radius: 20px;
+  background: #fbfcfa;
+}
+
+.due-delivery-card-failed {
+  border-color: #ebcccc;
+  background: #fffafa;
+}
+
+.due-delivery-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.due-delivery-number-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.due-delivery-number-row > strong {
+  color: #203128;
+  font-size: 11px;
+}
+
+.due-delivery-number-row > span {
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: #91611d;
+  background: #fff0d0;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.due-delivery-card-top h4 {
+  margin: 7px 0 0;
+  color: #4d5c53;
+  font-size: 10px;
+}
+
+.due-delivery-information {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.due-delivery-information > div {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f1f5f1;
+}
+
+.due-delivery-information span,
+.due-delivery-footer span {
+  display: block;
+  color: #7b8780;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.due-delivery-information strong,
+.due-delivery-footer strong {
+  display: block;
+  margin-top: 6px;
+  color: #2e3e35;
+  font-size: 9px;
+}
+
+.due-delivery-information p {
+  margin: 5px 0 0;
+  color: #69766e;
+  font-size: 8px;
+  line-height: 13px;
+  text-transform: capitalize;
+}
+
+.due-delivery-footer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e7e1;
+}
+
+.due-delivery-failure {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  color: #8f4444;
+  background: #faeaea;
+}
+
+.due-delivery-failure strong {
+  display: block;
+  font-size: 9px;
+}
+
+.due-delivery-failure p {
+  margin: 5px 0 0;
+  font-size: 8px;
+  line-height: 14px;
+}
+
+.due-delivery-failure span {
+  display: block;
+  margin-top: 6px;
+  color: #a06767;
+  font-size: 7px;
+}
+
+@media (max-width: 900px) {
+  .due-deliveries-heading {
+    flex-direction: column;
+  }
+
+  .due-deliveries-heading-actions {
+    width: 100%;
+  }
+
+  .due-deliveries-heading-actions button {
+    flex: 1;
+  }
+
+  .due-delivery-information {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .due-deliveries-metrics,
+  .due-deliveries-batch-result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .due-deliveries-heading-actions,
+  .due-delivery-card-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .due-delivery-information,
+  .due-delivery-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .due-delivery-card-top button {
+    width: 100%;
+  }
+}

@@ -1,5 +1,3 @@
-// admin-dashboard/src/pages/SubscriptionsPage.tsx
-
 import {
   type FormEvent,
   useCallback,
@@ -7,6 +5,8 @@ import {
   useMemo,
   useState,
 } from "react";
+
+import DueSubscriptionDeliveriesPanel from "../components/DueSubscriptionDeliveriesPanel";
 
 import { useAdminAuth } from "../context/AuthContext";
 
@@ -51,13 +51,12 @@ const NEXT_STATUSES: Record<
   expired: [],
 };
 
-const EMPTY_COUNTS: AdminSubscriptionStatusCounts =
-  {
-    active: 0,
-    paused: 0,
-    cancelled: 0,
-    expired: 0,
-  };
+const EMPTY_COUNTS: AdminSubscriptionStatusCounts = {
+  active: 0,
+  paused: 0,
+  cancelled: 0,
+  expired: 0,
+};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat(
@@ -80,7 +79,9 @@ function formatDate(
   const date = new Date(value);
 
   if (
-    Number.isNaN(date.getTime())
+    Number.isNaN(
+      date.getTime()
+    )
   ) {
     return "—";
   }
@@ -115,7 +116,8 @@ function formatPaymentMethod(
   paymentMethod: string
 ) {
   if (
-    paymentMethod === "upi_autopay"
+    paymentMethod ===
+    "upi_autopay"
   ) {
     return "UPI AutoPay";
   }
@@ -128,13 +130,17 @@ function formatPaymentStatus(
 ) {
   return paymentStatus
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
+    .replace(
+      /\b\w/g,
+      (letter) =>
+        letter.toUpperCase()
     );
 }
 
 export default function SubscriptionsPage() {
-  const { token } = useAdminAuth();
+  const {
+    token,
+  } = useAdminAuth();
 
   const [
     subscriptions,
@@ -151,34 +157,56 @@ export default function SubscriptionsPage() {
       EMPTY_COUNTS
     );
 
-  const [statusFilter, setStatusFilter] =
-    useState("all");
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState("all");
 
-  const [search, setSearch] =
-    useState("");
+  const [
+    search,
+    setSearch,
+  ] = useState("");
 
   const [
     submittedSearch,
     setSubmittedSearch,
   ] = useState("");
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
   const [
     updatingSubscriptionId,
     setUpdatingSubscriptionId,
-  ] = useState<string | null>(null);
+  ] = useState<
+    string | null
+  >(null);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] = useState<
+    string | null
+  >(null);
 
-  const [success, setSuccess] =
-    useState<string | null>(null);
+  const [
+    success,
+    setSuccess,
+  ] = useState<
+    string | null
+  >(null);
 
   const loadSubscriptions =
     useCallback(async () => {
       if (!token) {
+        setSubscriptions([]);
+        setStatusCounts(
+          EMPTY_COUNTS
+        );
+        setLoading(false);
+
         return;
       }
 
@@ -190,7 +218,9 @@ export default function SubscriptionsPage() {
           await fetchAdminSubscriptions(
             token,
             {
-              status: statusFilter,
+              status:
+                statusFilter,
+
               search:
                 submittedSearch,
             }
@@ -228,7 +258,10 @@ export default function SubscriptionsPage() {
         Object.values(
           statusCounts
         ).reduce(
-          (sum, count) =>
+          (
+            sum,
+            count
+          ) =>
             sum + count,
           0
         ),
@@ -245,7 +278,10 @@ export default function SubscriptionsPage() {
               "active"
           )
           .reduce(
-            (sum, subscription) =>
+            (
+              sum,
+              subscription
+            ) =>
               sum +
               subscription.totalPerCycle,
             0
@@ -254,7 +290,8 @@ export default function SubscriptionsPage() {
     );
 
   const handleSearch = (
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
@@ -274,7 +311,8 @@ export default function SubscriptionsPage() {
       if (
         !token ||
         nextStatus ===
-          subscription.status
+          subscription.status ||
+        updatingSubscriptionId
       ) {
         return;
       }
@@ -284,7 +322,8 @@ export default function SubscriptionsPage() {
         | undefined;
 
       if (
-        nextStatus === "cancelled"
+        nextStatus ===
+        "cancelled"
       ) {
         const confirmed =
           window.confirm(
@@ -313,7 +352,8 @@ export default function SubscriptionsPage() {
       }
 
       if (
-        nextStatus === "expired"
+        nextStatus ===
+        "expired"
       ) {
         const confirmed =
           window.confirm(
@@ -345,9 +385,13 @@ export default function SubscriptionsPage() {
           );
 
         setSubscriptions(
-          (currentSubscriptions) =>
+          (
+            currentSubscriptions
+          ) =>
             currentSubscriptions.map(
-              (currentSubscription) =>
+              (
+                currentSubscription
+              ) =>
                 currentSubscription._id ===
                 updatedSubscription._id
                   ? updatedSubscription
@@ -382,8 +426,10 @@ export default function SubscriptionsPage() {
           </h2>
 
           <p>
-            Review recurring plans and
-            manage subscription statuses.
+            Review recurring plans,
+            generate due delivery orders
+            and manage subscription
+            statuses.
           </p>
         </div>
 
@@ -412,6 +458,8 @@ export default function SubscriptionsPage() {
           {success}
         </div>
       ) : null}
+
+      <DueSubscriptionDeliveriesPanel />
 
       <div className="subscription-summary-grid">
         <article className="subscription-summary-card">
@@ -450,13 +498,15 @@ export default function SubscriptionsPage() {
       <div className="subscription-filter-grid">
         <SubscriptionMetric
           label="All"
-          value={totalSubscriptions}
+          value={
+            totalSubscriptions
+          }
           active={
             statusFilter === "all"
           }
-          onClick={() =>
-            setStatusFilter("all")
-          }
+          onClick={() => {
+            setStatusFilter("all");
+          }}
         />
 
         {(
@@ -467,17 +517,24 @@ export default function SubscriptionsPage() {
           <SubscriptionMetric
             key={status}
             label={
-              STATUS_LABELS[status]
+              STATUS_LABELS[
+                status
+              ]
             }
             value={
-              statusCounts[status]
+              statusCounts[
+                status
+              ]
             }
             active={
-              statusFilter === status
+              statusFilter ===
+              status
             }
-            onClick={() =>
-              setStatusFilter(status)
-            }
+            onClick={() => {
+              setStatusFilter(
+                status
+              );
+            }}
           />
         ))}
       </div>
@@ -485,15 +542,19 @@ export default function SubscriptionsPage() {
       <section className="panel subscriptions-toolbar">
         <form
           className="subscription-search-form"
-          onSubmit={handleSearch}
+          onSubmit={
+            handleSearch
+          }
         >
           <input
             value={search}
-            onChange={(event) =>
+            onChange={(
+              event
+            ) => {
               setSearch(
                 event.target.value
-              )
-            }
+              );
+            }}
             placeholder="Search subscription, plan, customer, email or phone"
           />
 
@@ -510,7 +571,9 @@ export default function SubscriptionsPage() {
               className="secondary-button"
               onClick={() => {
                 setSearch("");
-                setSubmittedSearch("");
+                setSubmittedSearch(
+                  ""
+                );
               }}
             >
               Clear
@@ -521,12 +584,14 @@ export default function SubscriptionsPage() {
 
       <section className="panel subscriptions-panel">
         {loading &&
-        subscriptions.length === 0 ? (
+        subscriptions.length ===
+          0 ? (
           <div className="page-state compact">
             <div className="spinner" />
 
             <p>
-              Loading customer subscriptions
+              Loading customer
+              subscriptions
             </p>
           </div>
         ) : subscriptions.length ===
@@ -541,14 +606,16 @@ export default function SubscriptionsPage() {
             </h3>
 
             <p>
-              No subscriptions match the
-              selected filters.
+              No subscriptions match
+              the selected filters.
             </p>
           </div>
         ) : (
           <div className="admin-subscription-list">
             {subscriptions.map(
-              (subscription) => {
+              (
+                subscription
+              ) => {
                 const customer =
                   getCustomer(
                     subscription
@@ -556,7 +623,8 @@ export default function SubscriptionsPage() {
 
                 const nextStatuses =
                   NEXT_STATUSES[
-                    subscription.status
+                    subscription
+                      .status
                   ];
 
                 return (
@@ -617,7 +685,8 @@ export default function SubscriptionsPage() {
                     <div className="subscription-plan-banner">
                       <div>
                         <span>
-                          Subscription plan
+                          Subscription
+                          plan
                         </span>
 
                         <strong>
@@ -675,7 +744,9 @@ export default function SubscriptionsPage() {
 
                     <div className="subscription-information-grid">
                       <div className="subscription-information-section">
-                        <h4>Customer</h4>
+                        <h4>
+                          Customer
+                        </h4>
 
                         <strong>
                           {customer?.fullName ??
@@ -708,7 +779,8 @@ export default function SubscriptionsPage() {
 
                       <div className="subscription-information-section">
                         <h4>
-                          Delivery preference
+                          Delivery
+                          preference
                         </h4>
 
                         <strong>
@@ -774,7 +846,8 @@ export default function SubscriptionsPage() {
 
                       <div className="subscription-information-section">
                         <h4>
-                          Payment mandate
+                          Payment
+                          mandate
                         </h4>
 
                         <strong>
@@ -811,10 +884,17 @@ export default function SubscriptionsPage() {
                             className="subscription-item-row"
                           >
                             <span>
-                              {item.quantity} ×{" "}
+                              {
+                                item.quantity
+                              }{" "}
+                              ×{" "}
                               {item.name}{" "}
                               <small>
-                                ({item.sizeMl} ml)
+                                (
+                                {
+                                  item.sizeMl
+                                }{" "}
+                                ml)
                               </small>
                             </span>
 
@@ -869,7 +949,8 @@ export default function SubscriptionsPage() {
 
                     <div className="subscription-address-section">
                       <h4>
-                        Complete delivery address
+                        Complete delivery
+                        address
                       </h4>
 
                       <p>
@@ -931,7 +1012,9 @@ export default function SubscriptionsPage() {
                                     .target
                                     .value as AdminSubscriptionStatus;
 
-                                if (value) {
+                                if (
+                                  value
+                                ) {
                                   void handleStatusChange(
                                     subscription,
                                     value
@@ -940,7 +1023,8 @@ export default function SubscriptionsPage() {
                               }}
                             >
                               <option value="">
-                                Select next status
+                                Select next
+                                status
                               </option>
 
                               {nextStatuses.map(
@@ -1024,8 +1108,13 @@ function SubscriptionMetric({
           : ""
       }`}
     >
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <span>
+        {label}
+      </span>
+
+      <strong>
+        {value}
+      </strong>
     </button>
   );
 }
