@@ -19,6 +19,7 @@ const authRoutes = require("./routes/auth");
 const couponRoutes = require("./routes/coupons");
 const deliveryOrderRoutes = require("./routes/deliveryOrders");
 const locationRoutes = require("./routes/locations");
+const notificationRoutes = require("./routes/notifications");
 const orderReviewRoutes = require("./routes/orderReviews");
 const orderRoutes = require("./routes/orders");
 const productRoutes = require("./routes/products");
@@ -43,12 +44,16 @@ const PORT = Number(
   process.env.PORT || 5001
 );
 
-const allowedOrigins = String(
-  process.env.CLIENT_ORIGINS || ""
-)
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const allowedOrigins =
+  String(
+    process.env.CLIENT_ORIGINS ||
+      ""
+  )
+    .split(",")
+    .map((origin) =>
+      origin.trim()
+    )
+    .filter(Boolean);
 
 app.use(
   helmet({
@@ -61,7 +66,10 @@ app.use(
 
 app.use(
   cors({
-    origin(origin, callback) {
+    origin(
+      origin,
+      callback
+    ) {
       if (!origin) {
         return callback(
           null,
@@ -82,9 +90,10 @@ app.use(
         );
       }
 
-      const error = new Error(
-        `Origin ${origin} is not permitted by CORS.`
-      );
+      const error =
+        new Error(
+          `Origin ${origin} is not permitted by CORS.`
+        );
 
       error.statusCode = 403;
 
@@ -99,7 +108,9 @@ app.post(
   "/api/payments/razorpay/webhook",
 
   express.raw({
-    type: "application/json",
+    type:
+      "application/json",
+
     limit: "1mb",
   }),
 
@@ -180,6 +191,11 @@ app.use(
 );
 
 app.use(
+  "/api/notifications",
+  notificationRoutes
+);
+
+app.use(
   "/api/subscriptions",
   subscriptionRoutes
 );
@@ -252,7 +268,8 @@ app.use(
     ) {
       const duplicateField =
         Object.keys(
-          error.keyPattern || {}
+          error.keyPattern ||
+            {}
         )[0] || "field";
 
       return res.status(409).json({
@@ -300,7 +317,6 @@ async function startServer() {
 
     app.listen(
       PORT,
-
       () => {
         console.log(
           `Backend running on port ${PORT}`

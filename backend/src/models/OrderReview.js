@@ -1,5 +1,11 @@
 const mongoose = require("mongoose");
 
+const {
+  notifyReviewSubmitted,
+} = require(
+  "../services/notificationService"
+);
+
 const personSnapshotSchema =
   new mongoose.Schema(
     {
@@ -57,7 +63,9 @@ const orderReviewSchema =
       },
 
       customerSnapshot: {
-        type: personSnapshotSchema,
+        type:
+          personSnapshotSchema,
+
         required: true,
       },
 
@@ -71,7 +79,9 @@ const orderReviewSchema =
       },
 
       deliveryPartnerSnapshot: {
-        type: personSnapshotSchema,
+        type:
+          personSnapshotSchema,
+
         required: true,
       },
 
@@ -106,6 +116,47 @@ const orderReviewSchema =
     }
   );
 
+orderReviewSchema.pre(
+  "save",
+
+  function captureNewReview() {
+    this.$locals.wasNewReview =
+      this.isNew;
+  }
+);
+
+orderReviewSchema.post(
+  "save",
+
+  function processNewReview(
+    review
+  ) {
+    if (
+      !review.$locals
+        .wasNewReview
+    ) {
+      return;
+    }
+
+    const timer =
+      setTimeout(() => {
+        void notifyReviewSubmitted(
+          review
+        );
+      }, 25);
+
+    if (
+      typeof timer.unref ===
+      "function"
+    ) {
+      timer.unref();
+    }
+
+    delete review.$locals
+      .wasNewReview;
+  }
+);
+
 orderReviewSchema.index({
   user: 1,
   createdAt: -1,
@@ -121,7 +172,8 @@ orderReviewSchema.index({
   createdAt: -1,
 });
 
-module.exports = mongoose.model(
-  "OrderReview",
-  orderReviewSchema
-);
+module.exports =
+  mongoose.model(
+    "OrderReview",
+    orderReviewSchema
+  );
