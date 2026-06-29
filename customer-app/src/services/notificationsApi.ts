@@ -21,7 +21,13 @@ export type NotificationType =
   | "refund_failed"
   | "review_submitted"
   | "subscription_created"
+  | "subscription_activated"
+  | "subscription_paused"
+  | "subscription_resumed"
   | "subscription_cancelled"
+  | "subscription_expired"
+  | "subscription_payment_failed"
+  | "subscription_billing_updated"
   | "system";
 
 export type NotificationAction =
@@ -37,15 +43,24 @@ export type CustomerNotification = {
   title: string;
   message: string;
   action: NotificationAction;
-  order: string | null;
-  subscription: string | null;
+
+  order:
+    | string
+    | null;
+
+  subscription:
+    | string
+    | null;
 
   metadata: Record<
     string,
     unknown
   >;
 
-  readAt: string | null;
+  readAt:
+    | string
+    | null;
+
   createdAt: string;
   updatedAt: string;
 };

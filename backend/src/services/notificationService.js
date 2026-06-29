@@ -43,9 +43,49 @@ function toPlainObject(value) {
   };
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  const parsedDate =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsedDate.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  return parsedDate.toLocaleDateString(
+    "en-IN",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
+function getUpdateToken(record) {
+  const updatedAt =
+    new Date(
+      record?.updatedAt ||
+        Date.now()
+    ).getTime();
+
+  return Number.isFinite(updatedAt)
+    ? updatedAt
+    : Date.now();
+}
+
 function getOrderNumber(order) {
   return (
-    cleanText(order.orderNumber) ||
+    cleanText(
+      order.orderNumber
+    ) ||
     "Your order"
   );
 }
@@ -56,7 +96,8 @@ function getPartnerName(order) {
       ?.fullName
   ) {
     return cleanText(
-      order.deliveryPartnerSnapshot
+      order
+        .deliveryPartnerSnapshot
         .fullName
     );
   }
@@ -73,6 +114,27 @@ function getPartnerName(order) {
   }
 
   return "A delivery partner";
+}
+
+function getSubscriptionNumber(
+  subscription
+) {
+  return (
+    cleanText(
+      subscription
+        .subscriptionNumber
+    ) ||
+    "Your subscription"
+  );
+}
+
+function getPlanName(subscription) {
+  return (
+    cleanText(
+      subscription.planName
+    ) ||
+    "subscription plan"
+  );
 }
 
 async function createNotification({
@@ -93,6 +155,7 @@ async function createNotification({
   const payload = {
     user: userId,
     type,
+
     title:
       cleanText(title),
 
@@ -100,7 +163,9 @@ async function createNotification({
       cleanText(message),
 
     action,
-    order: orderId || null,
+
+    order:
+      orderId || null,
 
     subscription:
       subscriptionId || null,
@@ -166,6 +231,10 @@ async function createNotificationSafely(
   }
 }
 
+/*
+ * Order notifications
+ */
+
 async function notifyOrderPlaced(
   order
 ) {
@@ -189,6 +258,7 @@ async function notifyOrderPlaced(
     userId,
     type: "order_placed",
     title: "Order placed",
+
     message:
       `${orderNumber} was placed successfully. We will notify you when it is confirmed.`,
 
@@ -197,6 +267,7 @@ async function notifyOrderPlaced(
 
     metadata: {
       orderNumber,
+
       orderStatus:
         current.orderStatus,
     },
@@ -262,6 +333,7 @@ async function notifyOrderCancelled(
 
     metadata: {
       orderNumber,
+
       refundStatus:
         current.refundStatus,
     },
@@ -304,6 +376,7 @@ async function notifyRefundUpdate(
       userId,
       type: "refund_pending",
       title: "Refund processing",
+
       message:
         `The refund for ${orderNumber} is being processed through Razorpay.`,
 
@@ -312,6 +385,7 @@ async function notifyRefundUpdate(
 
       metadata: {
         orderNumber,
+
         refundStatus:
           current.refundStatus,
       },
@@ -341,6 +415,7 @@ async function notifyRefundUpdate(
 
       metadata: {
         orderNumber,
+
         refundStatus:
           current.refundStatus,
 
@@ -362,6 +437,7 @@ async function notifyRefundUpdate(
     return createNotificationSafely({
       userId,
       type: "refund_failed",
+
       title:
         "Refund needs attention",
 
@@ -373,6 +449,7 @@ async function notifyRefundUpdate(
 
       metadata: {
         orderNumber,
+
         refundStatus:
           current.refundStatus,
       },
@@ -426,7 +503,8 @@ async function processOrderNotificationChanges({
 
   const previousPartnerId =
     getReferenceId(
-      previousOrder.deliveryPartner
+      previousOrder
+        .deliveryPartner
     );
 
   const currentPartnerId =
@@ -483,6 +561,7 @@ async function processOrderNotificationChanges({
 
     await createNotificationSafely({
       userId,
+
       type:
         "delivery_assigned",
 
@@ -499,6 +578,7 @@ async function processOrderNotificationChanges({
 
       metadata: {
         orderNumber,
+
         deliveryPartnerName:
           partnerName,
       },
@@ -520,6 +600,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_picked_up",
 
@@ -536,6 +617,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           deliveryStatus:
             current.deliveryStatus,
         },
@@ -554,6 +636,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_out_for_delivery",
 
@@ -570,6 +653,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           deliveryStatus:
             current.deliveryStatus,
         },
@@ -588,6 +672,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_delivered",
 
@@ -602,6 +687,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           deliveryStatus:
             current.deliveryStatus,
         },
@@ -625,6 +711,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_confirmed",
 
@@ -639,6 +726,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           orderStatus:
             current.orderStatus,
         },
@@ -654,6 +742,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_preparing",
 
@@ -668,6 +757,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           orderStatus:
             current.orderStatus,
         },
@@ -683,6 +773,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_out_for_delivery",
 
@@ -699,6 +790,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           orderStatus:
             current.orderStatus,
         },
@@ -714,6 +806,7 @@ async function processOrderNotificationChanges({
     ) {
       await createNotificationSafely({
         userId,
+
         type:
           "order_delivered",
 
@@ -728,6 +821,7 @@ async function processOrderNotificationChanges({
 
         metadata: {
           orderNumber,
+
           orderStatus:
             current.orderStatus,
         },
@@ -751,6 +845,10 @@ async function processOrderNotificationChanges({
     );
   }
 }
+
+/*
+ * Review notifications
+ */
 
 async function notifyReviewSubmitted(
   review
@@ -787,6 +885,7 @@ async function notifyReviewSubmitted(
 
   return createNotificationSafely({
     userId,
+
     type:
       "review_submitted",
 
@@ -801,6 +900,7 @@ async function notifyReviewSubmitted(
 
     metadata: {
       orderNumber,
+
       orderRating:
         current.orderRating,
 
@@ -813,9 +913,410 @@ async function notifyReviewSubmitted(
   });
 }
 
+/*
+ * Subscription notifications
+ */
+
+async function notifySubscriptionCreated(
+  subscription
+) {
+  const current =
+    toPlainObject(
+      subscription
+    );
+
+  const userId =
+    getReferenceId(
+      current.user
+    );
+
+  const subscriptionId =
+    getReferenceId(
+      current._id
+    );
+
+  if (
+    !userId ||
+    !subscriptionId
+  ) {
+    return null;
+  }
+
+  const subscriptionNumber =
+    getSubscriptionNumber(
+      current
+    );
+
+  const planName =
+    getPlanName(current);
+
+  const billingDate =
+    formatDate(
+      current.nextBillingAt
+    );
+
+  return createNotificationSafely({
+    userId,
+
+    type:
+      "subscription_created",
+
+    title:
+      "Subscription activated",
+
+    message:
+      `${subscriptionNumber} for ${planName} is active.${
+        billingDate
+          ? ` The next billing date is ${billingDate}.`
+          : ""
+      }`,
+
+    action:
+      "subscriptions",
+
+    subscriptionId,
+
+    metadata: {
+      subscriptionNumber,
+      planName,
+
+      status:
+        current.status,
+
+      paymentStatus:
+        current.paymentStatus,
+
+      nextBillingAt:
+        current.nextBillingAt,
+    },
+
+    dedupeKey:
+      `subscription:${subscriptionId}:created`,
+  });
+}
+
+async function processSubscriptionNotificationChanges({
+  subscription,
+  previous = null,
+  isNew = false,
+}) {
+  const current =
+    toPlainObject(
+      subscription
+    );
+
+  const previousSubscription =
+    toPlainObject(
+      previous
+    );
+
+  const userId =
+    getReferenceId(
+      current.user
+    );
+
+  const subscriptionId =
+    getReferenceId(
+      current._id
+    );
+
+  if (
+    !userId ||
+    !subscriptionId
+  ) {
+    return;
+  }
+
+  if (isNew) {
+    await notifySubscriptionCreated(
+      current
+    );
+
+    return;
+  }
+
+  const subscriptionNumber =
+    getSubscriptionNumber(
+      current
+    );
+
+  const planName =
+    getPlanName(current);
+
+  const statusChanged =
+    previousSubscription.status !==
+    current.status;
+
+  const paymentStatusChanged =
+    previousSubscription
+      .paymentStatus !==
+    current.paymentStatus;
+
+  const previousBillingDate =
+    previousSubscription
+      .nextBillingAt
+      ? new Date(
+          previousSubscription
+            .nextBillingAt
+        ).getTime()
+      : null;
+
+  const currentBillingDate =
+    current.nextBillingAt
+      ? new Date(
+          current.nextBillingAt
+        ).getTime()
+      : null;
+
+  const billingDateChanged =
+    previousBillingDate !==
+    currentBillingDate;
+
+  const updateToken =
+    getUpdateToken(current);
+
+  if (statusChanged) {
+    if (
+      current.status ===
+      "paused"
+    ) {
+      await createNotificationSafely({
+        userId,
+
+        type:
+          "subscription_paused",
+
+        title:
+          "Subscription paused",
+
+        message:
+          `${subscriptionNumber} for ${planName} was paused. Recurring deliveries will remain stopped until it is resumed.`,
+
+        action:
+          "subscriptions",
+
+        subscriptionId,
+
+        metadata: {
+          subscriptionNumber,
+          planName,
+          status:
+            current.status,
+        },
+
+        dedupeKey:
+          `subscription:${subscriptionId}:paused:${updateToken}`,
+      });
+    }
+
+    if (
+      current.status ===
+      "active"
+    ) {
+      const resumed =
+        previousSubscription.status ===
+        "paused";
+
+      await createNotificationSafely({
+        userId,
+
+        type:
+          resumed
+            ? "subscription_resumed"
+            : "subscription_activated",
+
+        title:
+          resumed
+            ? "Subscription resumed"
+            : "Subscription activated",
+
+        message:
+          resumed
+            ? `${subscriptionNumber} for ${planName} was resumed. Recurring deliveries are active again.`
+            : `${subscriptionNumber} for ${planName} is now active.`,
+
+        action:
+          "subscriptions",
+
+        subscriptionId,
+
+        metadata: {
+          subscriptionNumber,
+          planName,
+          status:
+            current.status,
+        },
+
+        dedupeKey:
+          `subscription:${subscriptionId}:${resumed ? "resumed" : "activated"}:${updateToken}`,
+      });
+    }
+
+    if (
+      current.status ===
+      "cancelled"
+    ) {
+      const reason =
+        cleanText(
+          current
+            .cancellationReason
+        );
+
+      await createNotificationSafely({
+        userId,
+
+        type:
+          "subscription_cancelled",
+
+        title:
+          "Subscription cancelled",
+
+        message:
+          `${subscriptionNumber} for ${planName} was cancelled.${
+            reason
+              ? ` Reason: ${reason}.`
+              : ""
+          } Future recurring deliveries will not be created.`,
+
+        action:
+          "subscriptions",
+
+        subscriptionId,
+
+        metadata: {
+          subscriptionNumber,
+          planName,
+          status:
+            current.status,
+
+          cancellationReason:
+            reason,
+        },
+
+        dedupeKey:
+          `subscription:${subscriptionId}:cancelled`,
+      });
+    }
+
+    if (
+      current.status ===
+      "expired"
+    ) {
+      await createNotificationSafely({
+        userId,
+
+        type:
+          "subscription_expired",
+
+        title:
+          "Subscription expired",
+
+        message:
+          `${subscriptionNumber} for ${planName} has expired. Choose a new plan to continue recurring deliveries.`,
+
+        action:
+          "subscriptions",
+
+        subscriptionId,
+
+        metadata: {
+          subscriptionNumber,
+          planName,
+          status:
+            current.status,
+        },
+
+        dedupeKey:
+          `subscription:${subscriptionId}:expired`,
+      });
+    }
+  }
+
+  if (
+    paymentStatusChanged &&
+    current.paymentStatus ===
+      "failed"
+  ) {
+    await createNotificationSafely({
+      userId,
+
+      type:
+        "subscription_payment_failed",
+
+      title:
+        "Subscription payment failed",
+
+      message:
+        `The recurring payment or mandate for ${subscriptionNumber} could not be completed. Please review the payment method for your ${planName}.`,
+
+      action:
+        "subscriptions",
+
+      subscriptionId,
+
+      metadata: {
+        subscriptionNumber,
+        planName,
+
+        paymentStatus:
+          current.paymentStatus,
+      },
+
+      dedupeKey:
+        `subscription:${subscriptionId}:payment-failed:${updateToken}`,
+    });
+  }
+
+  if (
+    billingDateChanged &&
+    ![
+      "cancelled",
+      "expired",
+    ].includes(current.status)
+  ) {
+    const billingDate =
+      formatDate(
+        current.nextBillingAt
+      );
+
+    await createNotificationSafely({
+      userId,
+
+      type:
+        "subscription_billing_updated",
+
+      title:
+        "Billing date updated",
+
+      message:
+        billingDate
+          ? `The next billing date for ${subscriptionNumber} is now ${billingDate}.`
+          : `The next billing date for ${subscriptionNumber} was updated.`,
+
+      action:
+        "subscriptions",
+
+      subscriptionId,
+
+      metadata: {
+        subscriptionNumber,
+        planName,
+
+        nextBillingAt:
+          current.nextBillingAt,
+      },
+
+      dedupeKey:
+        `subscription:${subscriptionId}:billing:${currentBillingDate || updateToken}`,
+    });
+  }
+}
+
 module.exports = {
   createNotification,
   createNotificationSafely,
   notifyReviewSubmitted,
+  notifySubscriptionCreated,
   processOrderNotificationChanges,
+  processSubscriptionNotificationChanges,
 };

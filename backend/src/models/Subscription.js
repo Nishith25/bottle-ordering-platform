@@ -1,12 +1,17 @@
 const mongoose = require("mongoose");
 
+const {
+  processSubscriptionNotificationChanges,
+} = require(
+  "../services/notificationService"
+);
+
 const subscriptionItemSchema =
   new mongoose.Schema(
     {
       product: {
         type:
-          mongoose.Schema.Types
-            .ObjectId,
+          mongoose.Schema.Types.ObjectId,
 
         ref: "Product",
         required: true,
@@ -121,8 +126,7 @@ const couponSnapshotSchema =
     {
       couponId: {
         type:
-          mongoose.Schema.Types
-            .ObjectId,
+          mongoose.Schema.Types.ObjectId,
 
         ref: "Coupon",
         default: null,
@@ -214,8 +218,7 @@ const subscriptionSchema =
 
       user: {
         type:
-          mongoose.Schema.Types
-            .ObjectId,
+          mongoose.Schema.Types.ObjectId,
 
         ref: "User",
         required: true,
@@ -224,8 +227,7 @@ const subscriptionSchema =
 
       plan: {
         type:
-          mongoose.Schema.Types
-            .ObjectId,
+          mongoose.Schema.Types.ObjectId,
 
         ref: "SubscriptionPlan",
         required: true,
@@ -336,14 +338,15 @@ const subscriptionSchema =
       },
 
       coupon: {
-        type: couponSnapshotSchema,
+        type:
+          couponSnapshotSchema,
+
         default: null,
       },
 
       couponUsage: {
         type:
-          mongoose.Schema.Types
-            .ObjectId,
+          mongoose.Schema.Types.ObjectId,
 
         ref: "CouponUsage",
         default: null,
@@ -383,7 +386,8 @@ const subscriptionSchema =
           "cancelled",
         ],
 
-        default: "demo_confirmed",
+        default:
+          "demo_confirmed",
       },
 
       paymentReference: {
@@ -431,9 +435,6 @@ const subscriptionSchema =
     }
   );
 
-/*
- * Do not use `next` in this hook.
- */
 subscriptionSchema.pre(
   "validate",
 
@@ -482,6 +483,269 @@ subscriptionSchema.pre(
   }
 );
 
+const SUBSCRIPTION_NOTIFICATION_FIELDS =
+  [
+    "status",
+    "paymentStatus",
+    "nextBillingAt",
+  ];
+
+function dateValue(value) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp =
+    new Date(value).getTime();
+
+  return Number.isFinite(
+    timestamp
+  )
+    ? timestamp
+    : null;
+}
+
+function hasSubscriptionNotificationDifference(
+  current,
+  previous
+) {
+  if (!current) {
+    return false;
+  }
+
+  if (!previous) {
+    return true;
+  }
+
+  return (
+    current.status !==
+      previous.status ||
+    current.paymentStatus !==
+      previous.paymentStatus ||
+    dateValue(
+      current.nextBillingAt
+    ) !==
+      dateValue(
+        previous.nextBillingAt
+      )
+  );
+}
+
+function wait(milliseconds) {
+  return new Promise(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
+}
+
+function scheduleSubscriptionNotification({
+  model,
+  subscriptionId,
+  previous,
+  isNew,
+}) {
+  const run =
+    async () => {
+      /*
+       * Subscriptions may be saved inside a
+       * MongoDB transaction. Wait until the
+       * committed document becomes visible
+       * before generating the notification.
+       */
+      const retryDelays = [
+        25,
+        75,
+        150,
+        300,
+        600,
+      ];
+
+      for (
+        const delay of
+        retryDelays
+      ) {
+        await wait(delay);
+
+        const committedSubscription =
+          await model
+            .findById(
+              subscriptionId
+            )
+            .lean();
+
+        if (
+          !committedSubscription
+        ) {
+          continue;
+        }
+
+        if (
+          isNew ||
+          hasSubscriptionNotificationDifference(
+            committedSubscription,
+            previous
+          )
+        ) {
+          await processSubscriptionNotificationChanges({
+            subscription:
+              committedSubscription,
+
+            previous,
+            isNew,
+          });
+
+          return;
+        }
+      }
+    };
+
+  void run().catch(
+    (error) => {
+      console.error(
+        "Unable to process subscription notification:",
+        error.message
+      );
+    }
+  );
+}
+
+subscriptionSchema.pre(
+  "save",
+
+  async function captureSubscriptionNotificationState() {
+    const isNewDocument =
+      this.isNew;
+
+    const shouldTrack =
+      isNewDocument ||
+      SUBSCRIPTION_NOTIFICATION_FIELDS.some(
+        (field) =>
+          this.isModified(field)
+      );
+
+    if (!shouldTrack) {
+      return;
+    }
+
+    let previous = null;
+
+    if (!isNewDocument) {
+      let query =
+        this.constructor
+          .findById(this._id)
+          .lean();
+
+      const session =
+        this.$session();
+
+      if (session) {
+        query =
+          query.session(session);
+      }
+
+      previous =
+        await query;
+    }
+
+    this.$locals
+      .subscriptionNotificationState =
+      {
+        isNewDocument,
+        previous,
+      };
+  }
+);
+
+subscriptionSchema.post(
+  "save",
+
+  function processSavedSubscription(
+    savedSubscription
+  ) {
+    const state =
+      savedSubscription.$locals
+        .subscriptionNotificationState;
+
+    if (!state) {
+      return;
+    }
+
+    scheduleSubscriptionNotification({
+      model:
+        savedSubscription
+          .constructor,
+
+      subscriptionId:
+        savedSubscription._id,
+
+      previous:
+        state.previous,
+
+      isNew:
+        state.isNewDocument,
+    });
+
+    delete savedSubscription
+      .$locals
+      .subscriptionNotificationState;
+  }
+);
+
+subscriptionSchema.pre(
+  "findOneAndUpdate",
+
+  async function captureUpdatedSubscriptionState() {
+    let query =
+      this.model
+        .findOne(
+          this.getQuery()
+        )
+        .lean();
+
+    const session =
+      this.getOptions()
+        .session;
+
+    if (session) {
+      query =
+        query.session(session);
+    }
+
+    this
+      ._previousSubscriptionForNotification =
+      await query;
+  }
+);
+
+subscriptionSchema.post(
+  "findOneAndUpdate",
+
+  function processUpdatedSubscription() {
+    const previous =
+      this
+        ._previousSubscriptionForNotification;
+
+    if (!previous?._id) {
+      return;
+    }
+
+    scheduleSubscriptionNotification({
+      model:
+        this.model,
+
+      subscriptionId:
+        previous._id,
+
+      previous,
+      isNew: false,
+    });
+  }
+);
+
 subscriptionSchema.index({
   user: 1,
   createdAt: -1,
@@ -497,7 +761,18 @@ subscriptionSchema.index({
   createdAt: -1,
 });
 
-module.exports = mongoose.model(
-  "Subscription",
-  subscriptionSchema
-);
+subscriptionSchema.index({
+  status: 1,
+  nextBillingAt: 1,
+});
+
+subscriptionSchema.index({
+  paymentStatus: 1,
+  updatedAt: -1,
+});
+
+module.exports =
+  mongoose.model(
+    "Subscription",
+    subscriptionSchema
+  );

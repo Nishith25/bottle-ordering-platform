@@ -13,8 +13,16 @@ const NOTIFICATION_TYPES = [
   "refund_processed",
   "refund_failed",
   "review_submitted",
+
   "subscription_created",
+  "subscription_activated",
+  "subscription_paused",
+  "subscription_resumed",
   "subscription_cancelled",
+  "subscription_expired",
+  "subscription_payment_failed",
+  "subscription_billing_updated",
+
   "system",
 ];
 
@@ -79,6 +87,7 @@ const notificationSchema =
 
         ref: "Subscription",
         default: null,
+        index: true,
       },
 
       metadata: {
@@ -116,6 +125,11 @@ notificationSchema.index({
   createdAt: -1,
 });
 
+notificationSchema.index({
+  subscription: 1,
+  createdAt: -1,
+});
+
 notificationSchema.index(
   {
     dedupeKey: 1,
@@ -126,7 +140,8 @@ notificationSchema.index(
   }
 );
 
-module.exports = mongoose.model(
-  "Notification",
-  notificationSchema
-);
+module.exports =
+  mongoose.model(
+    "Notification",
+    notificationSchema
+  );
