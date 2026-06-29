@@ -13,8 +13,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
 import { useOrders } from "../../context/OrderContext";
+
 import type {
   CustomerOrder,
+  DeliveryStatus,
   OrderStatus,
 } from "../../services/api";
 
@@ -25,9 +27,7 @@ type RefundStatus =
   | "failed";
 
 type RefundAwareOrder = CustomerOrder & {
-  paymentGateway?:
-    | ""
-    | "razorpay";
+  paymentGateway?: "" | "razorpay";
 
   refundStatus?: RefundStatus;
   refundId?: string;
@@ -44,19 +44,27 @@ const STATUS_LABELS: Record<
   placed: "Placed",
   confirmed: "Confirmed",
   preparing: "Preparing",
-  out_for_delivery:
-    "Out for delivery",
+  out_for_delivery: "Out for delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
+};
+
+const DELIVERY_STATUS_LABELS: Record<
+  DeliveryStatus,
+  string
+> = {
+  unassigned: "Waiting for delivery partner",
+  assigned: "Delivery partner assigned",
+  picked_up: "Order picked up",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  cancelled: "Delivery cancelled",
 };
 
 function getRefundStatus(
   order: RefundAwareOrder
 ): RefundStatus {
-  return (
-    order.refundStatus ??
-    "not_required"
-  );
+  return order.refundStatus ?? "not_required";
 }
 
 function formatRefundDate(
@@ -66,13 +74,53 @@ function formatRefundDate(
     return "";
   }
 
-  return new Date(
-    value
-  ).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return new Date(value).toLocaleDateString(
+    "en-IN",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
+function shouldShowDeliveryTracking(
+  order: RefundAwareOrder
+) {
+  if (
+    order.orderStatus === "cancelled" ||
+    order.orderStatus === "delivered"
+  ) {
+    return false;
+  }
+
+  return (
+    order.deliveryStatus === "assigned" ||
+    order.deliveryStatus === "picked_up" ||
+    order.deliveryStatus ===
+      "out_for_delivery" ||
+    order.orderStatus === "out_for_delivery"
+  );
+}
+
+function getTrackingButtonLabel(
+  order: RefundAwareOrder
+) {
+  if (
+    order.deliveryStatus ===
+      "out_for_delivery" ||
+    order.orderStatus === "out_for_delivery"
+  ) {
+    return "Track delivery & view OTP";
+  }
+
+  if (
+    order.deliveryStatus === "picked_up"
+  ) {
+    return "Track picked-up order";
+  }
+
+  return "Track delivery";
 }
 
 export default function OrdersScreen() {
@@ -92,6 +140,18 @@ export default function OrdersScreen() {
     cancelOrder,
   } = useOrders();
 
+  const openDeliveryTracking = (
+  order: RefundAwareOrder
+) => {
+  router.push({
+    pathname: "/delivery-order",
+
+    params: {
+      orderId: order._id,
+    },
+  });
+};
+
   const requestCancellation = (
     order: RefundAwareOrder
   ) => {
@@ -104,8 +164,7 @@ export default function OrdersScreen() {
       };
 
     const refundMessage =
-      order.paymentMethod ===
-        "online" &&
+      order.paymentMethod === "online" &&
       order.paymentStatus === "paid"
         ? " A full Razorpay refund will be requested after cancellation."
         : "";
@@ -137,6 +196,7 @@ export default function OrdersScreen() {
         {
           text: "Cancel order",
           style: "destructive",
+
           onPress: () => {
             void performCancellation();
           },
@@ -212,8 +272,9 @@ export default function OrdersScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          Track current deliveries, refunds
-          and previous bottle orders.
+          Track current deliveries, view
+          delivery OTPs, refunds and previous
+          bottle orders.
         </Text>
       </View>
 
@@ -294,12 +355,13 @@ export default function OrdersScreen() {
           const canCancel = [
             "placed",
             "confirmed",
-          ].includes(
-            item.orderStatus
-          );
+          ].includes(item.orderStatus);
 
           const refundStatus =
             getRefundStatus(item);
+
+          const showDeliveryTracking =
+            shouldShowDeliveryTracking(item);
 
           return (
             <View style={styles.orderCard}>
@@ -342,7 +404,9 @@ export default function OrdersScreen() {
                 {item.items.map(
                   (orderItem) => (
                     <View
-                      key={orderItem.productId}
+                      key={
+                        orderItem.productId
+                      }
                       style={styles.itemRow}
                     >
                       <View
@@ -376,7 +440,9 @@ export default function OrdersScreen() {
               </View>
 
               <View
-                style={styles.orderInformation}
+                style={
+                  styles.orderInformation
+                }
               >
                 <InformationRow
                   icon="calendar-outline"
@@ -408,6 +474,27 @@ export default function OrdersScreen() {
                       : `Online payment · ${item.paymentStatus}`
                   }
                 />
+
+                {item.deliveryStatus &&
+                item.deliveryStatus !==
+                  "unassigned" ? (
+                  <InformationRow
+                    icon="bicycle-outline"
+                    text={
+                      DELIVERY_STATUS_LABELS[
+                        item.deliveryStatus
+                      ]
+                    }
+                  />
+                ) : null}
+
+                {item.deliveryPartnerSnapshot
+                  ?.fullName ? (
+                  <InformationRow
+                    icon="person-outline"
+                    text={`Delivery partner: ${item.deliveryPartnerSnapshot.fullName}`}
+                  />
+                ) : null}
               </View>
 
               {item.orderStatus ===
@@ -433,6 +520,65 @@ export default function OrdersScreen() {
                   ₹{item.total}
                 </Text>
               </View>
+
+              {showDeliveryTracking ? (
+                <Pressable
+                  onPress={() =>
+                    openDeliveryTracking(
+                      item
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.trackingButton,
+                    pressed &&
+                      styles.pressed,
+                  ]}
+                >
+                  <View
+                    style={
+                      styles.trackingIcon
+                    }
+                  >
+                    <Ionicons
+                      name="navigate-outline"
+                      size={19}
+                      color="#FFFFFF"
+                    />
+                  </View>
+
+                  <View
+                    style={
+                      styles.trackingContent
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.trackingButtonText
+                      }
+                    >
+                      {getTrackingButtonLabel(
+                        item
+                      )}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.trackingDescription
+                      }
+                    >
+                      View delivery status and
+                      customer verification
+                      code
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                </Pressable>
+              ) : null}
 
               {canCancel ? (
                 <Pressable
@@ -502,24 +648,28 @@ function RefundNotice({
   }
 
   const amount =
-    order.refundAmount ??
-    order.total;
+    order.refundAmount ?? order.total;
 
   const config = {
     pending: {
       icon: "time-outline" as const,
       title: "Refund processing",
+
       description:
         `A refund of ₹${amount} has been requested through Razorpay.`,
+
       container:
         styles.refundPending,
+
       iconColor: "#86651B",
     },
 
     processed: {
       icon:
         "checkmark-circle-outline" as const,
+
       title: "Refund completed",
+
       description:
         `₹${amount} was refunded${
           order.refundProcessedAt
@@ -528,20 +678,27 @@ function RefundNotice({
               )}`
             : ""
         }.`,
+
       container:
         styles.refundProcessed,
+
       iconColor: "#2D714D",
     },
 
     failed: {
       icon:
         "alert-circle-outline" as const,
-      title: "Refund needs attention",
+
+      title:
+        "Refund needs attention",
+
       description:
         order.refundFailureReason ||
         "The automatic refund could not be completed. The support team can retry it.",
+
       container:
         styles.refundFailed,
+
       iconColor: "#9B4949",
     },
   }[status];
@@ -618,7 +775,9 @@ function InformationRow({
   icon,
   text,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
   text: string;
 }) {
   return (
@@ -853,6 +1012,44 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  trackingButton: {
+    minHeight: 63,
+    paddingHorizontal: 13,
+    borderRadius: 17,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 14,
+  },
+
+  trackingIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor:
+      "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  trackingContent: {
+    flex: 1,
+    marginHorizontal: 11,
+  },
+
+  trackingButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  trackingDescription: {
+    color: "#DCEADF",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 3,
+  },
+
   cancelButton: {
     minHeight: 43,
     borderRadius: 14,
@@ -948,6 +1145,10 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+    transform: [
+      {
+        scale: 0.98,
+      },
+    ],
   },
 });
