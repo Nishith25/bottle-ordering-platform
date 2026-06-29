@@ -242,6 +242,21 @@ export default function PlansScreen() {
     });
   };
 
+  const openSubscriptionPayment = (
+    subscription:
+      CustomerSubscription
+  ) => {
+    router.push({
+      pathname:
+        "/subscription-payment",
+
+      params: {
+        subscriptionId:
+          subscription._id,
+      },
+    });
+  };
+
   const openEditSubscription = (
     subscription:
       CustomerSubscription
@@ -572,6 +587,11 @@ export default function PlansScreen() {
                     subscription
                   )
                 }
+                onManagePayment={() =>
+                  openSubscriptionPayment(
+                    subscription
+                  )
+                }
                 onEdit={() =>
                   openEditSubscription(
                     subscription
@@ -772,6 +792,7 @@ function SubscriptionCard({
   resuming,
   skipping,
   onViewDetails,
+  onManagePayment,
   onEdit,
   onPause,
   onResume,
@@ -787,6 +808,7 @@ function SubscriptionCard({
   skipping: boolean;
 
   onViewDetails: () => void;
+  onManagePayment: () => void;
   onEdit: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -801,7 +823,7 @@ function SubscriptionCard({
     subscription.status ===
     "paused";
 
-  const canEdit =
+  const canManage =
     isActive || isPaused;
 
   const processing =
@@ -1099,7 +1121,52 @@ function SubscriptionCard({
         />
       </Pressable>
 
-      {canEdit ? (
+      {canManage ? (
+        <Pressable
+          disabled={processing}
+          onPress={
+            onManagePayment
+          }
+          style={({ pressed }) => [
+            styles.paymentButton,
+
+            processing &&
+              styles.disabledButton,
+
+            pressed &&
+              !processing &&
+              styles.pressed,
+          ]}
+        >
+          <View
+            style={
+              styles.detailsButtonLeft
+            }
+          >
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={17}
+              color="#FFFFFF"
+            />
+
+            <Text
+              style={
+                styles.paymentButtonText
+              }
+            >
+              Manage recurring payment
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={17}
+            color="#FFFFFF"
+          />
+        </Pressable>
+      ) : null}
+
+      {canManage ? (
         <Pressable
           disabled={processing}
           onPress={onEdit}
@@ -1771,6 +1838,25 @@ const styles =
 
     detailsButtonText: {
       color: "#245C42",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    paymentButton: {
+      minHeight: 47,
+      marginTop: 9,
+      paddingHorizontal: 13,
+      borderRadius: 14,
+      backgroundColor:
+        "#245C42",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    paymentButtonText: {
+      color: "#FFFFFF",
       fontSize: 9,
       fontWeight: "900",
     },

@@ -13,6 +13,7 @@ const adminCouponRoutes = require("./routes/adminCoupons");
 const adminDeliveryPartnerRoutes = require("./routes/adminDeliveryPartners");
 const adminInventoryRoutes = require("./routes/adminInventory");
 const adminOrderRoutes = require("./routes/adminOrders");
+const adminSubscriptionChargeRoutes = require("./routes/adminSubscriptionCharges");
 const adminSubscriptionDetailsRoutes = require("./routes/adminSubscriptionDetails");
 const adminSubscriptionRoutes = require("./routes/adminSubscriptions");
 const adminUserRoutes = require("./routes/adminUsers");
@@ -24,6 +25,8 @@ const notificationRoutes = require("./routes/notifications");
 const orderReviewRoutes = require("./routes/orderReviews");
 const orderRoutes = require("./routes/orders");
 const productRoutes = require("./routes/products");
+const razorpaySubscriptionRoutes = require("./routes/razorpaySubscriptions");
+const razorpaySubscriptionWebhookRoutes = require("./routes/razorpaySubscriptionWebhook");
 const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
 const subscriptionEditRoutes = require("./routes/subscriptionEdits");
 const subscriptionRoutes = require("./routes/subscriptions");
@@ -36,7 +39,9 @@ const {
   router: razorpayPaymentRoutes,
   razorpayWebhookHandler,
   startPaymentExpiryWorker,
-} = require("./routes/razorpayPayments");
+} = require(
+  "./routes/razorpayPayments"
+);
 
 const {
   startSubscriptionDeliveryWorker,
@@ -46,11 +51,18 @@ const {
 
 const app = express();
 
-app.set("trust proxy", 1);
-app.disable("x-powered-by");
+app.set(
+  "trust proxy",
+  1
+);
+
+app.disable(
+  "x-powered-by"
+);
 
 const PORT = Number(
-  process.env.PORT || 5001
+  process.env.PORT ||
+    5001
 );
 
 const allowedOrigins =
@@ -106,12 +118,20 @@ app.use(
 
       error.statusCode = 403;
 
-      return callback(error);
+      return callback(
+        error
+      );
     },
 
     credentials: true,
   })
 );
+
+/*
+ * Webhooks requiring the original
+ * unparsed request body must be
+ * registered before express.json().
+ */
 
 app.post(
   "/api/payments/razorpay/webhook",
@@ -124,7 +144,14 @@ app.post(
   }),
 
   razorpayRefundWebhookMiddleware,
+
   razorpayWebhookHandler
+);
+
+app.use(
+  "/api/webhooks/razorpay/subscriptions",
+
+  razorpaySubscriptionWebhookRoutes
 );
 
 app.use(
@@ -143,30 +170,35 @@ if (
   process.env.NODE_ENV !==
   "test"
 ) {
-  app.use(morgan("dev"));
+  app.use(
+    morgan("dev")
+  );
 }
 
 app.get(
   "/api/health",
 
   (req, res) => {
-    return res.status(200).json({
-      success: true,
+    return res
+      .status(200)
+      .json({
+        success: true,
 
-      message:
-        "Backend is running.",
+        message:
+          "Backend is running.",
 
-      environment:
-        process.env.NODE_ENV ||
-        "development",
+        environment:
+          process.env.NODE_ENV ||
+          "development",
 
-      database:
-        mongoose.connection.name ||
-        null,
+        database:
+          mongoose.connection
+            .name ||
+          null,
 
-      timestamp:
-        new Date().toISOString(),
-    });
+        timestamp:
+          new Date().toISOString(),
+      });
   }
 );
 
@@ -203,6 +235,11 @@ app.use(
 app.use(
   "/api/notifications",
   notificationRoutes
+);
+
+app.use(
+  "/api/subscriptions",
+  razorpaySubscriptionRoutes
 );
 
 app.use(
@@ -246,6 +283,11 @@ app.use(
 );
 
 app.use(
+  "/api/admin/subscription-charges",
+  adminSubscriptionChargeRoutes
+);
+
+app.use(
   "/api/admin/subscriptions",
   adminSubscriptionDetailsRoutes
 );
@@ -270,14 +312,21 @@ app.use(
   adminRoutes
 );
 
-app.use((req, res) => {
-  return res.status(404).json({
-    success: false,
+app.use(
+  (
+    req,
+    res
+  ) => {
+    return res
+      .status(404)
+      .json({
+        success: false,
 
-    message:
-      `Route not found: ${req.method} ${req.originalUrl}`,
-  });
-});
+        message:
+          `Route not found: ${req.method} ${req.originalUrl}`,
+      });
+  }
+);
 
 app.use(
   (
@@ -286,7 +335,9 @@ app.use(
     res,
     next
   ) => {
-    console.error(error);
+    console.error(
+      error
+    );
 
     if (
       error.code === 11000
@@ -295,14 +346,17 @@ app.use(
         Object.keys(
           error.keyPattern ||
             {}
-        )[0] || "field";
+        )[0] ||
+        "field";
 
-      return res.status(409).json({
-        success: false,
+      return res
+        .status(409)
+        .json({
+          success: false,
 
-        message:
-          `A record already exists with this ${duplicateField}.`,
-      });
+          message:
+            `A record already exists with this ${duplicateField}.`,
+        });
     }
 
     const statusCode =
@@ -320,7 +374,8 @@ app.use(
         success: false,
 
         message:
-          statusCode === 500
+          statusCode ===
+          500
             ? "An unexpected server error occurred."
             : error.message,
 
