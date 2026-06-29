@@ -38,7 +38,8 @@ function formatDate(
     return "Never";
   }
 
-  const parsedDate = new Date(value);
+  const parsedDate =
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -58,6 +59,21 @@ function formatDate(
       minute: "2-digit",
     }
   );
+}
+
+function formatRating(
+  rating: number,
+  reviewCount: number
+) {
+  if (
+    !reviewCount ||
+    !Number.isFinite(rating) ||
+    rating <= 0
+  ) {
+    return "No ratings";
+  }
+
+  return `${rating.toFixed(1)} ★`;
 }
 
 function getErrorMessage(
@@ -80,41 +96,49 @@ export default function DeliveryPartnersPage() {
     []
   );
 
-  const [form, setForm] =
-    useState<PartnerForm>(
-      EMPTY_FORM
-    );
+  const [
+    form,
+    setForm,
+  ] = useState<PartnerForm>(
+    EMPTY_FORM
+  );
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
 
   const [
     updatingId,
     setUpdatingId,
-  ] =
-    useState<string | null>(
-      null
-    );
+  ] = useState<string | null>(
+    null
+  );
 
-  const [error, setError] =
-    useState<string | null>(
-      null
-    );
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null
+  );
 
-  const [success, setSuccess] =
-    useState<string | null>(
-      null
-    );
+  const [
+    success,
+    setSuccess,
+  ] = useState<string | null>(
+    null
+  );
 
   const loadPartners =
     useCallback(async () => {
       if (!token) {
         setPartners([]);
         setLoading(false);
-
         return;
       }
 
@@ -171,6 +195,86 @@ export default function DeliveryPartnersPage() {
         ),
       [partners]
     );
+
+  const completedDeliveries =
+    useMemo(
+      () =>
+        partners.reduce(
+          (
+            total,
+            partner
+          ) =>
+            total +
+            Number(
+              partner.completedDeliveryCount ??
+                0
+            ),
+          0
+        ),
+      [partners]
+    );
+
+  const totalReviews =
+    useMemo(
+      () =>
+        partners.reduce(
+          (
+            total,
+            partner
+          ) =>
+            total +
+            Number(
+              partner.reviewCount ??
+                0
+            ),
+          0
+        ),
+      [partners]
+    );
+
+  const overallRating =
+    useMemo(() => {
+      if (
+        totalReviews === 0
+      ) {
+        return 0;
+      }
+
+      const weightedRatingTotal =
+        partners.reduce(
+          (
+            total,
+            partner
+          ) => {
+            const reviewCount =
+              Number(
+                partner.reviewCount ??
+                  0
+              );
+
+            const rating =
+              Number(
+                partner.averageDeliveryRating ??
+                  0
+              );
+
+            return (
+              total +
+              rating *
+                reviewCount
+            );
+          },
+          0
+        );
+
+      return (
+        weightedRatingTotal /
+        totalReviews
+      );
+    }, [
+      partners,
+      totalReviews,
+    ]);
 
   const normalisedPhone =
     form.phone.replace(
@@ -253,8 +357,11 @@ export default function DeliveryPartnersPage() {
           );
 
         setPartners(
-          (currentPartners) => [
+          (
+            currentPartners
+          ) => [
             partner,
+
             ...currentPartners.filter(
               (
                 currentPartner
@@ -306,20 +413,13 @@ export default function DeliveryPartnersPage() {
         );
 
         setSuccess(null);
-
         return;
       }
-
-      const actionLabel =
-        nextActive
-          ? "enable"
-          : "disable";
 
       const confirmed =
         window.confirm(
           `${
-            actionLabel ===
-            "enable"
+            nextActive
               ? "Enable"
               : "Disable"
           } ${partner.fullName}'s delivery account?`
@@ -337,12 +437,6 @@ export default function DeliveryPartnersPage() {
       setSuccess(null);
 
       try {
-        /*
-         * fullName, email and phone are
-         * included so this works even when
-         * DeliveryPartnerPayload requires
-         * those fields.
-         */
         const updatedPartner =
           await updateDeliveryPartner(
             token,
@@ -403,10 +497,10 @@ export default function DeliveryPartnersPage() {
           </h2>
 
           <p>
-            Create delivery
-            accounts, control access
-            and review active
-            assignments.
+            Create delivery accounts,
+            control access, review active
+            assignments and monitor partner
+            ratings.
           </p>
         </div>
 
@@ -449,8 +543,27 @@ export default function DeliveryPartnersPage() {
 
         <Metric
           label="Active assignments"
+          value={activeAssignments}
+        />
+
+        <Metric
+          label="Completed deliveries"
+          value={completedDeliveries}
+        />
+
+        <Metric
+          label="Customer reviews"
+          value={totalReviews}
+        />
+
+        <Metric
+          label="Overall rating"
           value={
-            activeAssignments
+            totalReviews > 0
+              ? `${overallRating.toFixed(
+                  1
+                )} ★`
+              : "No ratings"
           }
         />
       </div>
@@ -466,11 +579,10 @@ export default function DeliveryPartnersPage() {
           </h3>
 
           <p>
-            The partner can use
-            their email address or
-            mobile number to log in
-            to the delivery
-            dashboard.
+            The partner can use their
+            email address or mobile
+            number to log in to the
+            delivery dashboard.
           </p>
 
           <form
@@ -507,7 +619,9 @@ export default function DeliveryPartnersPage() {
 
               <input
                 type="email"
-                value={form.email}
+                value={
+                  form.email
+                }
                 onChange={(
                   event
                 ) => {
@@ -530,7 +644,9 @@ export default function DeliveryPartnersPage() {
                 type="tel"
                 inputMode="numeric"
                 maxLength={10}
-                value={form.phone}
+                value={
+                  form.phone
+                }
                 onChange={(
                   event
                 ) => {
@@ -542,7 +658,10 @@ export default function DeliveryPartnersPage() {
                         /\D/g,
                         ""
                       )
-                      .slice(0, 10)
+                      .slice(
+                        0,
+                        10
+                      )
                   );
                 }}
                 placeholder="10-digit mobile number"
@@ -609,8 +728,7 @@ export default function DeliveryPartnersPage() {
               </div>
 
               <h3>
-                No delivery
-                partners
+                No delivery partners
               </h3>
 
               <p>
@@ -626,6 +744,24 @@ export default function DeliveryPartnersPage() {
                   const isUpdating =
                     updatingId ===
                     partner.id;
+
+                  const reviewCount =
+                    Number(
+                      partner.reviewCount ??
+                        0
+                    );
+
+                  const completedCount =
+                    Number(
+                      partner.completedDeliveryCount ??
+                        0
+                    );
+
+                  const rating =
+                    Number(
+                      partner.averageDeliveryRating ??
+                        0
+                    );
 
                   return (
                     <article
@@ -692,6 +828,39 @@ export default function DeliveryPartnersPage() {
 
                         <div>
                           <span>
+                            Completed deliveries
+                          </span>
+
+                          <strong>
+                            {completedCount}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Delivery rating
+                          </span>
+
+                          <strong>
+                            {formatRating(
+                              rating,
+                              reviewCount
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Customer reviews
+                          </span>
+
+                          <strong>
+                            {reviewCount}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
                             Last login
                           </span>
 
@@ -742,13 +911,17 @@ function Metric({
   value,
 }: {
   label: string;
-  value: number;
+  value: number | string;
 }) {
   return (
     <div className="delivery-partner-metric">
-      <span>{label}</span>
+      <span>
+        {label}
+      </span>
 
-      <strong>{value}</strong>
+      <strong>
+        {value}
+      </strong>
     </div>
   );
 }
