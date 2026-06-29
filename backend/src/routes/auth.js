@@ -1,5 +1,3 @@
-// backend/src/routes/auth.js
-
 const express = require("express");
 const jwt = require("jsonwebtoken");
 
@@ -90,10 +88,6 @@ function validateRegistration({
   return errors;
 }
 
-/**
- * POST /api/auth/register
- * Creates a new customer account.
- */
 router.post(
   "/register",
   async (req, res, next) => {
@@ -193,10 +187,6 @@ router.post(
   }
 );
 
-/**
- * POST /api/auth/login
- * Logs in using email or mobile number.
- */
 router.post(
   "/login",
   async (req, res, next) => {
@@ -289,10 +279,6 @@ router.post(
   }
 );
 
-/**
- * GET /api/auth/me
- * Returns the currently authenticated user.
- */
 router.get(
   "/me",
   protect,

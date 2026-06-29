@@ -15,6 +15,10 @@ const {
   retryOrderRefund,
 } = require("../services/orderRefund");
 
+const {
+  generateDeliveryOtp,
+} = require("../services/deliveryOtp");
+
 const router = express.Router();
 
 router.use(protect);
@@ -41,14 +45,10 @@ const ALLOWED_TRANSITIONS = {
   ],
 
   preparing: [
-    "out_for_delivery",
     "cancelled",
   ],
 
-  out_for_delivery: [
-    "delivered",
-  ],
-
+  out_for_delivery: [],
   delivered: [],
   cancelled: [],
 };
@@ -64,13 +64,15 @@ function escapeRegex(value) {
   );
 }
 
-async function findPopulatedOrder(
-  orderId
-) {
+async function findPopulatedOrder(orderId) {
   return Order.findById(orderId)
     .populate(
       "user",
       "fullName email phone role"
+    )
+    .populate(
+      "deliveryPartner",
+      "fullName email phone role active"
     )
     .lean();
 }
@@ -160,7 +162,19 @@ router.get(
           },
 
           {
+            "deliveryPartnerSnapshot.fullName":
+              searchRegex,
+          },
+
+          {
             user: {
+              $in:
+                matchingUserIds,
+            },
+          },
+
+          {
+            deliveryPartner: {
               $in:
                 matchingUserIds,
             },
@@ -176,6 +190,10 @@ router.get(
           .populate(
             "user",
             "fullName email phone role"
+          )
+          .populate(
+            "deliveryPartner",
+            "fullName email phone role active"
           )
           .sort({
             createdAt: -1,
@@ -360,7 +378,7 @@ router.patch(
             )
           ) {
             const error = new Error(
-              `Order cannot move from ${order.orderStatus} to ${nextStatus}.`
+              `Order cannot move from ${order.orderStatus} to ${nextStatus}. Delivery pickup, out-for-delivery and completion are controlled by the assigned delivery partner.`
             );
 
             error.statusCode = 400;
@@ -369,22 +387,6 @@ router.patch(
 
           order.orderStatus =
             nextStatus;
-
-          if (
-            nextStatus ===
-            "delivered"
-          ) {
-            order.deliveredAt =
-              new Date();
-
-            if (
-              order.paymentMethod ===
-              "cod"
-            ) {
-              order.paymentStatus =
-                "paid";
-            }
-          }
 
           await order.save({
             session,
@@ -416,6 +418,155 @@ router.patch(
           success: false,
           message:
             "Order not found.",
+        });
+      }
+
+      return next(error);
+    } finally {
+      await session.endSession();
+    }
+  }
+);
+
+router.patch(
+  "/:orderId/delivery-partner",
+  async (req, res, next) => {
+    const session =
+      await mongoose.startSession();
+
+    try {
+      const deliveryPartnerId = cleanText(
+        req.body.deliveryPartnerId
+      );
+
+      if (!deliveryPartnerId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please select a delivery partner.",
+        });
+      }
+
+      let updatedOrderId = null;
+
+      await session.withTransaction(
+        async () => {
+          const order =
+            await Order.findById(
+              req.params.orderId
+            ).session(session);
+
+          if (!order) {
+            const error = new Error(
+              "Order not found."
+            );
+            error.statusCode = 404;
+            throw error;
+          }
+
+          if (
+            [
+              "delivered",
+              "cancelled",
+            ].includes(
+              order.orderStatus
+            )
+          ) {
+            const error = new Error(
+              "Delivered or cancelled orders cannot be assigned."
+            );
+            error.statusCode = 400;
+            throw error;
+          }
+
+          if (
+            order.orderStatus ===
+            "placed"
+          ) {
+            const error = new Error(
+              "Confirm the order before assigning a delivery partner."
+            );
+            error.statusCode = 400;
+            throw error;
+          }
+
+          const partner =
+            await User.findOne({
+              _id: deliveryPartnerId,
+              role: "delivery",
+              active: true,
+            }).session(session);
+
+          if (!partner) {
+            const error = new Error(
+              "The selected delivery partner is unavailable."
+            );
+            error.statusCode = 404;
+            throw error;
+          }
+
+          order.deliveryPartner =
+            partner._id;
+
+          order.deliveryPartnerSnapshot = {
+            fullName:
+              partner.fullName,
+            email:
+              partner.email,
+            phone:
+              partner.phone,
+          };
+
+          order.deliveryStatus =
+            "assigned";
+
+          order.deliveryAssignedAt =
+            new Date();
+
+          order.pickedUpAt = null;
+          order.outForDeliveryAt = null;
+          order.deliveryCompletedAt = null;
+
+          if (
+            order.orderStatus ===
+            "out_for_delivery"
+          ) {
+            order.orderStatus =
+              "preparing";
+          }
+
+          generateDeliveryOtp(order);
+
+          await order.save({
+            session,
+          });
+
+          updatedOrderId =
+            order._id;
+        }
+      );
+
+      const updatedOrder =
+        await findPopulatedOrder(
+          updatedOrderId
+        );
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Delivery partner assigned successfully. A new customer delivery OTP was generated.",
+        data: {
+          order: updatedOrder,
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Order or delivery partner not found.",
         });
       }
 

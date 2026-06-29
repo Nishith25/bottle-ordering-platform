@@ -98,6 +98,15 @@ const couponSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const deliveryPartnerSnapshotSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, default: "", trim: true },
+    email: { type: String, default: "", trim: true, lowercase: true },
+    phone: { type: String, default: "", trim: true },
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
@@ -175,6 +184,51 @@ const orderSchema = new mongoose.Schema(
     cancellationReason: { type: String, default: "", trim: true },
     cancelledAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+
+    deliveryPartner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    deliveryPartnerSnapshot: {
+      type: deliveryPartnerSnapshotSchema,
+      default: null,
+    },
+    deliveryStatus: {
+      type: String,
+      enum: [
+        "unassigned",
+        "assigned",
+        "picked_up",
+        "out_for_delivery",
+        "delivered",
+        "cancelled",
+      ],
+      default: "unassigned",
+      index: true,
+    },
+    deliveryAssignedAt: { type: Date, default: null },
+    pickedUpAt: { type: Date, default: null },
+    outForDeliveryAt: { type: Date, default: null },
+    deliveryCompletedAt: { type: Date, default: null },
+    deliveryOtpSalt: {
+      type: String,
+      default: "",
+      trim: true,
+      select: false,
+    },
+    deliveryOtpHash: {
+      type: String,
+      default: "",
+      trim: true,
+      select: false,
+    },
+    deliveryOtpGeneratedAt: { type: Date, default: null },
+    deliveryOtpVerifiedAt: { type: Date, default: null },
+    deliveryOtpAttempts: { type: Number, default: 0, min: 0 },
+    deliveryOtpLockedUntil: { type: Date, default: null },
+
     refundStatus: {
       type: String,
       enum: ["not_required", "pending", "processed", "failed"],
@@ -217,6 +271,14 @@ orderSchema.pre("validate", function ensureLegacyTotals(next) {
     this.couponDiscount = 0;
   }
 
+  if (this.orderStatus === "cancelled") {
+    this.deliveryStatus = "cancelled";
+  }
+
+  if (this.orderStatus === "delivered") {
+    this.deliveryStatus = "delivered";
+  }
+
   next();
 });
 
@@ -226,5 +288,6 @@ orderSchema.index({ paymentGatewayOrderId: 1 });
 orderSchema.index({ refundId: 1 });
 orderSchema.index({ refundStatus: 1, updatedAt: -1 });
 orderSchema.index({ "coupon.code": 1, createdAt: -1 });
+orderSchema.index({ deliveryPartner: 1, deliveryStatus: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -1,0 +1,462 @@
+.delivery-shell {
+  min-height: 100vh;
+  color: #203128;
+  background: #f7f7f2;
+}
+
+.delivery-topbar {
+  min-height: 78px;
+  padding: 14px clamp(18px, 4vw, 52px);
+  border-bottom: 1px solid #dfe5de;
+  background: rgba(255, 255, 255, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+}
+
+.delivery-brand-row,
+.delivery-account-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.delivery-brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: #245c42;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.delivery-brand-row span,
+.delivery-account-row span {
+  display: block;
+  color: #7a867f;
+  font-size: 8px;
+}
+
+.delivery-brand-row strong,
+.delivery-account-row strong {
+  display: block;
+  margin-top: 3px;
+  color: #203128;
+  font-size: 11px;
+}
+
+.delivery-account-row {
+  text-align: right;
+}
+
+.delivery-account-row button,
+.delivery-hero button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  color: #245c42;
+  background: #e8efe9;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.delivery-page-container {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 60px;
+}
+
+.delivery-hero {
+  padding: clamp(22px, 4vw, 36px);
+  border-radius: 28px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.16), transparent 38%),
+    #245c42;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.delivery-hero span {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #dcebe1;
+}
+
+.delivery-hero h1 {
+  margin: 8px 0 0;
+  font-size: clamp(26px, 4vw, 38px);
+}
+
+.delivery-hero p {
+  max-width: 590px;
+  margin: 9px 0 0;
+  color: #deebe2;
+  font-size: 10px;
+  line-height: 17px;
+}
+
+.delivery-hero button {
+  color: #245c42;
+  background: #ffffff;
+}
+
+.delivery-alert {
+  padding: 12px 14px;
+  margin-top: 14px;
+  border-radius: 14px;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.delivery-error {
+  color: #924848;
+  background: #faecec;
+}
+
+.delivery-success {
+  color: #2b6847;
+  background: #e5f2e8;
+}
+
+.delivery-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.delivery-metric-card {
+  padding: 17px;
+  border: 1px solid #dfe5de;
+  border-radius: 19px;
+  background: #ffffff;
+}
+
+.delivery-metric-card span,
+.delivery-metric-card strong {
+  display: block;
+}
+
+.delivery-metric-card span {
+  color: #708078;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.delivery-metric-card strong {
+  margin-top: 10px;
+  color: #203128;
+  font-size: 24px;
+}
+
+.delivery-filter-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 18px 0 13px;
+}
+
+.delivery-filter-row button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #dce3dc;
+  border-radius: 999px;
+  color: #56655c;
+  background: #ffffff;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.delivery-filter-row .delivery-filter-active {
+  color: #ffffff;
+  border-color: #245c42;
+  background: #245c42;
+}
+
+.delivery-order-list {
+  display: grid;
+  gap: 14px;
+}
+
+.delivery-order-card {
+  padding: 19px;
+  border: 1px solid #dfe5de;
+  border-radius: 23px;
+  background: #ffffff;
+}
+
+.delivery-order-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e8ece7;
+}
+
+.delivery-number-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.delivery-number-row strong {
+  color: #203128;
+  font-size: 13px;
+}
+
+.delivery-order-heading > div > span {
+  display: block;
+  margin-top: 5px;
+  color: #7a867f;
+  font-size: 8px;
+}
+
+.delivery-status {
+  padding: 6px 9px;
+  border-radius: 10px;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.delivery-status.status-assigned {
+  color: #3f6293;
+  background: #e9f0fa;
+}
+
+.delivery-status.status-picked_up {
+  color: #86651b;
+  background: #faf1d8;
+}
+
+.delivery-status.status-out_for_delivery {
+  color: #6e4d88;
+  background: #f0e7f8;
+}
+
+.delivery-status.status-delivered {
+  color: #28704a;
+  background: #e5f2e8;
+}
+
+.delivery-order-total {
+  color: #203128;
+  font-size: 17px;
+}
+
+.delivery-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.delivery-info-grid > div,
+.delivery-address-block,
+.delivery-items-block {
+  padding: 13px;
+  border-radius: 15px;
+  background: #f5f7f3;
+}
+
+.delivery-info-grid span,
+.delivery-address-block > span,
+.delivery-items-block > span {
+  display: block;
+  color: #7a867f;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.delivery-info-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: #2d3d34;
+  font-size: 10px;
+}
+
+.delivery-info-grid p,
+.delivery-address-block p,
+.delivery-items-block p {
+  margin: 5px 0 0;
+  color: #68766e;
+  font-size: 8px;
+  line-height: 14px;
+}
+
+.delivery-address-block,
+.delivery-items-block {
+  margin-top: 10px;
+}
+
+.delivery-items-block > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.delivery-items-block strong {
+  color: #2d3d34;
+  font-size: 8px;
+}
+
+.delivery-action-block {
+  padding-top: 14px;
+}
+
+.delivery-action-block > button,
+.delivery-otp-form button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 14px;
+  color: #ffffff;
+  background: #245c42;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.delivery-action-block button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.delivery-otp-form {
+  padding: 14px;
+  border-radius: 17px;
+  background: #edf4ef;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.delivery-otp-form span {
+  color: #294534;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.delivery-otp-form p {
+  margin: 4px 0 0;
+  color: #6c7971;
+  font-size: 8px;
+  line-height: 13px;
+}
+
+.delivery-otp-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cad8cd;
+  border-radius: 13px;
+  outline: none;
+  color: #203128;
+  background: #ffffff;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 5px;
+}
+
+.delivery-complete-message {
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #2b6847;
+  background: #e5f2e8;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.delivery-empty-state {
+  min-height: 280px;
+  border: 1px solid #dfe5de;
+  border-radius: 24px;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+  padding: 30px;
+}
+
+.delivery-empty-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  color: #245c42;
+  background: #e6efe8;
+  font-size: 23px;
+  font-weight: 900;
+}
+
+.delivery-empty-state h2 {
+  margin: 14px 0 0;
+  color: #203128;
+  font-size: 17px;
+}
+
+.delivery-empty-state p {
+  margin: 7px 0 0;
+  color: #748078;
+  font-size: 9px;
+}
+
+@media (max-width: 820px) {
+  .delivery-metric-grid,
+  .delivery-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .delivery-otp-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .delivery-topbar,
+  .delivery-hero,
+  .delivery-order-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .delivery-account-row {
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .delivery-metric-grid,
+  .delivery-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .delivery-hero button,
+  .delivery-action-block > button,
+  .delivery-otp-form button {
+    width: 100%;
+  }
+}

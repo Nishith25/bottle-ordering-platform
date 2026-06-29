@@ -1,5 +1,3 @@
-// admin-dashboard/src/context/AuthContext.tsx
-
 import {
   createContext,
   type ReactNode,
@@ -11,12 +9,12 @@ import {
 } from "react";
 
 import {
-  fetchAdminUser,
-  loginAdmin,
+  fetchDashboardUser,
+  loginDashboardUser,
   type AdminUser,
 } from "../services/api";
 
-const ADMIN_TOKEN_KEY =
+const DASHBOARD_TOKEN_KEY =
   "bottle_ordering_admin_token";
 
 type AuthContextValue = {
@@ -39,6 +37,14 @@ type AuthContextValue = {
 const AuthContext = createContext<
   AuthContextValue | undefined
 >(undefined);
+
+export function getDashboardHome(
+  user: AdminUser | null
+) {
+  return user?.role === "delivery"
+    ? "/delivery"
+    : "/dashboard";
+}
 
 export function AuthProvider({
   children,
@@ -64,7 +70,7 @@ export function AuthProvider({
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(
-      ADMIN_TOKEN_KEY
+      DASHBOARD_TOKEN_KEY
     );
 
     setToken(null);
@@ -75,7 +81,7 @@ export function AuthProvider({
     async function restoreSession() {
       const savedToken =
         localStorage.getItem(
-          ADMIN_TOKEN_KEY
+          DASHBOARD_TOKEN_KEY
         );
 
       if (!savedToken) {
@@ -84,13 +90,13 @@ export function AuthProvider({
       }
 
       try {
-        const adminUser =
-          await fetchAdminUser(
+        const dashboardUser =
+          await fetchDashboardUser(
             savedToken
           );
 
         setToken(savedToken);
-        setUser(adminUser);
+        setUser(dashboardUser);
       } catch {
         clearSession();
       } finally {
@@ -111,13 +117,13 @@ export function AuthProvider({
 
       try {
         const session =
-          await loginAdmin(
+          await loginDashboardUser(
             identifier,
             password
           );
 
         localStorage.setItem(
-          ADMIN_TOKEN_KEY,
+          DASHBOARD_TOKEN_KEY,
           session.token
         );
 

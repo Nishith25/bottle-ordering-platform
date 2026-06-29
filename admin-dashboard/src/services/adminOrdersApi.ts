@@ -23,12 +23,21 @@ export type AdminOrderRefundStatus =
   | "processed"
   | "failed";
 
+export type AdminDeliveryStatus =
+  | "unassigned"
+  | "assigned"
+  | "picked_up"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled";
+
 export type AdminOrderUser = {
   _id: string;
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin";
+  role: "customer" | "admin" | "delivery";
+  active?: boolean;
 };
 
 export type AdminOrderItem = {
@@ -96,6 +105,23 @@ export type AdminOrder = {
   cancellationReason: string;
   cancelledAt: string | null;
   deliveredAt: string | null;
+
+  deliveryPartner?:
+    | AdminOrderUser
+    | string
+    | null;
+
+  deliveryPartnerSnapshot?: {
+    fullName: string;
+    email: string;
+    phone: string;
+  } | null;
+
+  deliveryStatus?: AdminDeliveryStatus;
+  deliveryAssignedAt?: string | null;
+  pickedUpAt?: string | null;
+  outForDeliveryAt?: string | null;
+  deliveryCompletedAt?: string | null;
 
   refundStatus?:
     AdminOrderRefundStatus;

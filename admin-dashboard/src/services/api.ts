@@ -1,5 +1,3 @@
-// admin-dashboard/src/services/api.ts
-
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL ??
   "http://localhost:5001"
@@ -15,12 +13,18 @@ type ApiRequestOptions =
     token?: string | null;
   };
 
+export type DashboardRole =
+  | "admin"
+  | "delivery";
+
 export type AdminUser = {
   id: string;
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin";
+  role:
+    | "customer"
+    | DashboardRole;
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -266,7 +270,7 @@ async function apiRequest<T>(
   }
 }
 
-export async function loginAdmin(
+export async function loginDashboardUser(
   identifier: string,
   password: string
 ): Promise<AdminSession> {
@@ -284,18 +288,22 @@ export async function loginAdmin(
     );
 
   if (
-    response.data.user.role !==
-    "admin"
+    ![
+      "admin",
+      "delivery",
+    ].includes(
+      response.data.user.role
+    )
   ) {
     throw new Error(
-      "This account does not have administrator access."
+      "This account does not have dashboard access."
     );
   }
 
   return response.data;
 }
 
-export async function fetchAdminUser(
+export async function fetchDashboardUser(
   token: string
 ): Promise<AdminUser> {
   const response =
@@ -307,16 +315,26 @@ export async function fetchAdminUser(
     );
 
   if (
-    response.data.user.role !==
-    "admin"
+    ![
+      "admin",
+      "delivery",
+    ].includes(
+      response.data.user.role
+    )
   ) {
     throw new Error(
-      "This account does not have administrator access."
+      "This account does not have dashboard access."
     );
   }
 
   return response.data.user;
 }
+
+export const loginAdmin =
+  loginDashboardUser;
+
+export const fetchAdminUser =
+  fetchDashboardUser;
 
 export async function fetchAdminDashboard(
   token: string

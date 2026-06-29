@@ -1,5 +1,3 @@
-// admin-dashboard/src/pages/LoginPage.tsx
-
 import {
   type FormEvent,
   useEffect,
@@ -11,12 +9,16 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import { useAdminAuth } from "../context/AuthContext";
+import {
+  getDashboardHome,
+  useAdminAuth,
+} from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
 
   const {
+    user,
     isAuthenticated,
     authenticating,
     error,
@@ -41,10 +43,10 @@ export default function LoginPage() {
     clearError();
   }, [clearError]);
 
-  if (isAuthenticated) {
+  if (isAuthenticated && user) {
     return (
       <Navigate
-        to="/dashboard"
+        to={getDashboardHome(user)}
         replace
       />
     );
@@ -70,7 +72,7 @@ export default function LoginPage() {
     );
 
     if (successful) {
-      navigate("/dashboard", {
+      navigate("/", {
         replace: true,
       });
     }
@@ -85,14 +87,15 @@ export default function LoginPage() {
           </span>
 
           <h1>
-            Manage fresh bottles from one
-            dashboard.
+            Manage and deliver fresh bottles
+            from one secure dashboard.
           </h1>
 
           <p>
-            Control bottle prices,
-            availability, delivery areas and
-            recurring plans.
+            Administrators control products,
+            orders and delivery assignments.
+            Delivery partners handle only the
+            orders assigned to them.
           </p>
 
           <div className="login-feature-grid">
@@ -106,14 +109,14 @@ export default function LoginPage() {
             <div>
               <strong>Orders</strong>
               <span>
-                Track customer purchases
+                Assign and track deliveries
               </span>
             </div>
 
             <div>
-              <strong>Plans</strong>
+              <strong>Secure OTP</strong>
               <span>
-                Control recurring deliveries
+                Confirm delivery at the doorstep
               </span>
             </div>
           </div>
@@ -130,14 +133,14 @@ export default function LoginPage() {
           </div>
 
           <span className="form-eyebrow">
-            ADMIN ACCESS
+            DASHBOARD ACCESS
           </span>
 
           <h2>Welcome back</h2>
 
           <p className="form-description">
-            Log in using your administrator
-            email address or mobile number.
+            Log in using your administrator or
+            delivery-partner account.
           </p>
 
           <label className="form-field">
@@ -214,8 +217,8 @@ export default function LoginPage() {
           </button>
 
           <p className="login-security-note">
-            Access is restricted to accounts
-            with the admin role.
+            Access is restricted to administrator
+            and delivery-partner accounts.
           </p>
         </form>
       </section>

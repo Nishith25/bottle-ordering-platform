@@ -7,8 +7,11 @@ import {
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
+import DeliveryLayout from "./layout/DeliveryLayout";
 import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
+import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
+import DeliveryPartnersPage from "./pages/DeliveryPartnersPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
@@ -23,7 +26,11 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        <Route element={<ProtectedRoute />}>
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["admin"]} />
+          }
+        >
           <Route element={<AdminLayout />}>
             <Route
               index
@@ -33,6 +40,10 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route
+              path="/delivery-partners"
+              element={<DeliveryPartnersPage />}
+            />
             <Route path="/coupons" element={<CouponsPage />} />
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="/plans" element={<PlansPage />} />
@@ -45,8 +56,21 @@ export default function App() {
         </Route>
 
         <Route
+          element={
+            <ProtectedRoute allowedRoles={["delivery"]} />
+          }
+        >
+          <Route element={<DeliveryLayout />}>
+            <Route
+              path="/delivery"
+              element={<DeliveryDashboardPage />}
+            />
+          </Route>
+        </Route>
+
+        <Route
           path="*"
-          element={<Navigate to="/dashboard" replace />}
+          element={<Navigate to="/" replace />}
         />
       </Routes>
     </BrowserRouter>

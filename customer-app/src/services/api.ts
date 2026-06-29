@@ -97,6 +97,15 @@ type SingleOrderResponse = ApiBaseResponse & {
   };
 };
 
+
+
+type CustomerDeliveryTrackingResponse = ApiBaseResponse & {
+  data: {
+    order: CustomerOrder;
+    deliveryOtp: string;
+  };
+};
+
 type SubscriptionPlansResponse = ApiBaseResponse & {
   count: number;
   data: {
@@ -162,7 +171,7 @@ export type AuthUser = {
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin";
+  role: "customer" | "admin" | "delivery";
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -209,6 +218,31 @@ export type RefundStatus =
   | "pending"
   | "processed"
   | "failed";
+
+
+
+export type DeliveryStatus =
+  | "unassigned"
+  | "assigned"
+  | "picked_up"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled";
+
+export type DeliveryPartnerSummary = {
+  _id?: string;
+  id?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role?: "delivery";
+  active?: boolean;
+};
+
+export type CustomerDeliveryTracking = {
+  order: CustomerOrder;
+  deliveryOtp: string;
+};
 
 export type StoredCouponSnapshot = {
   couponId?: string | null;
@@ -271,6 +305,19 @@ export type CustomerOrder = {
   paymentReference: string;
   paidAt?: string | null;
   orderStatus: OrderStatus;
+  deliveryPartner?: DeliveryPartnerSummary | string | null;
+  deliveryPartnerSnapshot?: {
+    fullName: string;
+    email: string;
+    phone: string;
+  } | null;
+  deliveryStatus?: DeliveryStatus;
+  deliveryAssignedAt?: string | null;
+  pickedUpAt?: string | null;
+  outForDeliveryAt?: string | null;
+  deliveryCompletedAt?: string | null;
+  deliveryOtpGeneratedAt?: string | null;
+  deliveryOtpVerifiedAt?: string | null;
   cancellationReason: string;
   cancelledAt: string | null;
   deliveredAt: string | null;
@@ -743,6 +790,22 @@ export async function cancelCustomerOrder(
   );
 
   return response.data.order;
+}
+
+
+export async function fetchCustomerDeliveryTracking(
+  token: string,
+  orderId: string
+): Promise<CustomerDeliveryTracking> {
+  const response =
+    await apiRequest<CustomerDeliveryTrackingResponse>(
+      `/api/delivery/orders/customer/${encodeURIComponent(
+        orderId
+      )}`,
+      { token }
+    );
+
+  return response.data;
 }
 
 export async function fetchSubscriptionPlans(): Promise<
