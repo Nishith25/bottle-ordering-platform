@@ -19,6 +19,7 @@ import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
+import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
 
 export default function App() {
   return (
@@ -52,6 +53,10 @@ export default function App() {
               element={<SubscriptionsPage />}
             />
             <Route path="/users" element={<UsersPage />} />
+            <Route
+  path="/reviews"
+  element={<DeliveryReviewsPage />}
+/>
           </Route>
         </Route>
 

@@ -6,6 +6,9 @@ const {
 } = require("../middleware/auth");
 
 const Order = require("../models/Order");
+const OrderReview = require(
+  "../models/OrderReview"
+);
 const User = require("../models/User");
 
 const router = express.Router();
@@ -18,47 +21,99 @@ function cleanText(value) {
 }
 
 function normaliseEmail(value) {
-  return cleanText(value).toLowerCase();
+  return cleanText(
+    value
+  ).toLowerCase();
 }
 
 function normalisePhone(value) {
-  return String(value || "").replace(/\D/g, "");
+  return String(value || "").replace(
+    /\D/g,
+    ""
+  );
 }
 
-function validatePartnerInput(input, { partial = false } = {}) {
+function validatePartnerInput(
+  input,
+  {
+    partial = false,
+  } = {}
+) {
   const errors = [];
 
-  const fullName = cleanText(input.fullName);
-  const email = normaliseEmail(input.email);
-  const phone = normalisePhone(input.phone);
-  const password = String(input.password || "");
+  const fullName = cleanText(
+    input.fullName
+  );
 
-  if (!partial || input.fullName !== undefined) {
+  const email = normaliseEmail(
+    input.email
+  );
+
+  const phone = normalisePhone(
+    input.phone
+  );
+
+  const password = String(
+    input.password || ""
+  );
+
+  if (
+    !partial ||
+    input.fullName !== undefined
+  ) {
     if (fullName.length < 2) {
-      errors.push("Full name must contain at least 2 characters.");
+      errors.push(
+        "Full name must contain at least 2 characters."
+      );
     }
   }
 
-  if (!partial || input.email !== undefined) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push("Please provide a valid email address.");
+  if (
+    !partial ||
+    input.email !== undefined
+  ) {
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email
+      )
+    ) {
+      errors.push(
+        "Please provide a valid email address."
+      );
     }
   }
 
-  if (!partial || input.phone !== undefined) {
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      errors.push("Please provide a valid 10-digit Indian mobile number.");
+  if (
+    !partial ||
+    input.phone !== undefined
+  ) {
+    if (
+      !/^[6-9]\d{9}$/.test(
+        phone
+      )
+    ) {
+      errors.push(
+        "Please provide a valid 10-digit Indian mobile number."
+      );
     }
   }
 
-  if (!partial || input.password !== undefined) {
-    if (password.length < 8) {
-      errors.push("Password must contain at least 8 characters.");
+  if (
+    !partial ||
+    input.password !== undefined
+  ) {
+    if (
+      password.length < 8
+    ) {
+      errors.push(
+        "Password must contain at least 8 characters."
+      );
     }
   }
 
   return {
     errors,
+
     values: {
       fullName,
       email,
@@ -68,226 +123,505 @@ function validatePartnerInput(input, { partial = false } = {}) {
   };
 }
 
-async function buildPartnerPayload(partners) {
-  const partnerIds = partners.map((partner) => partner._id);
+async function buildPartnerPayload(
+  partners
+) {
+  if (
+    !Array.isArray(partners) ||
+    partners.length === 0
+  ) {
+    return [];
+  }
 
-  const activeAssignments = await Order.aggregate([
-    {
-      $match: {
-        deliveryPartner: {
-          $in: partnerIds,
-        },
-        orderStatus: {
-          $nin: ["delivered", "cancelled"],
+  const partnerIds =
+    partners.map(
+      (partner) =>
+        partner._id
+    );
+
+  const [
+    activeAssignments,
+    completedDeliveries,
+    reviewStatistics,
+  ] = await Promise.all([
+    Order.aggregate([
+      {
+        $match: {
+          deliveryPartner: {
+            $in:
+              partnerIds,
+          },
+
+          orderStatus: {
+            $nin: [
+              "delivered",
+              "cancelled",
+            ],
+          },
         },
       },
-    },
-    {
-      $group: {
-        _id: "$deliveryPartner",
-        count: { $sum: 1 },
+
+      {
+        $group: {
+          _id:
+            "$deliveryPartner",
+
+          count: {
+            $sum: 1,
+          },
+        },
       },
-    },
+    ]),
+
+    Order.aggregate([
+      {
+        $match: {
+          deliveryPartner: {
+            $in:
+              partnerIds,
+          },
+
+          orderStatus:
+            "delivered",
+
+          deliveryStatus:
+            "delivered",
+        },
+      },
+
+      {
+        $group: {
+          _id:
+            "$deliveryPartner",
+
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]),
+
+    OrderReview.aggregate([
+      {
+        $match: {
+          deliveryPartner: {
+            $in:
+              partnerIds,
+          },
+        },
+      },
+
+      {
+        $group: {
+          _id:
+            "$deliveryPartner",
+
+          reviewCount: {
+            $sum: 1,
+          },
+
+          averageDeliveryRating: {
+            $avg:
+              "$deliveryRating",
+          },
+        },
+      },
+    ]),
   ]);
 
-  const assignmentCounts = new Map(
-    activeAssignments.map((item) => [
-      String(item._id),
-      item.count,
-    ])
-  );
+  const assignmentCounts =
+    new Map(
+      activeAssignments.map(
+        (item) => [
+          String(item._id),
+          item.count,
+        ]
+      )
+    );
 
-  return partners.map((partner) => ({
-    ...partner.toPublicJSON(),
-    activeAssignmentCount:
-      assignmentCounts.get(String(partner._id)) || 0,
-  }));
+  const completedCounts =
+    new Map(
+      completedDeliveries.map(
+        (item) => [
+          String(item._id),
+          item.count,
+        ]
+      )
+    );
+
+  const reviewStats =
+    new Map(
+      reviewStatistics.map(
+        (item) => [
+          String(item._id),
+
+          {
+            reviewCount:
+              item.reviewCount,
+
+            averageDeliveryRating:
+              Number(
+                (
+                  item.averageDeliveryRating ||
+                  0
+                ).toFixed(1)
+              ),
+          },
+        ]
+      )
+    );
+
+  return partners.map(
+    (partner) => {
+      const partnerId =
+        String(
+          partner._id
+        );
+
+      const ratingData =
+        reviewStats.get(
+          partnerId
+        ) || {
+          reviewCount: 0,
+          averageDeliveryRating: 0,
+        };
+
+      return {
+        ...partner.toPublicJSON(),
+
+        activeAssignmentCount:
+          assignmentCounts.get(
+            partnerId
+          ) || 0,
+
+        completedDeliveryCount:
+          completedCounts.get(
+            partnerId
+          ) || 0,
+
+        reviewCount:
+          ratingData.reviewCount,
+
+        averageDeliveryRating:
+          ratingData.averageDeliveryRating,
+      };
+    }
+  );
 }
 
-router.get("/", async (req, res, next) => {
-  try {
-    const partners = await User.find({
-      role: "delivery",
-    }).sort({
-      active: -1,
-      fullName: 1,
-      createdAt: -1,
-    });
+router.get(
+  "/",
+  async (req, res, next) => {
+    try {
+      const partners =
+        await User.find({
+          role: "delivery",
+        }).sort({
+          active: -1,
+          fullName: 1,
+          createdAt: -1,
+        });
 
-    const data = await buildPartnerPayload(partners);
+      const data =
+        await buildPartnerPayload(
+          partners
+        );
 
-    return res.status(200).json({
-      success: true,
-      count: data.length,
-      data: {
-        partners: data,
-      },
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
+      return res.status(200).json({
+        success: true,
+        count: data.length,
 
-router.post("/", async (req, res, next) => {
-  try {
-    const { errors, values } = validatePartnerInput(req.body);
-
-    if (errors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: errors[0],
-        errors,
-      });
-    }
-
-    const existingUser = await User.findOne({
-      $or: [
-        { email: values.email },
-        { phone: values.phone },
-      ],
-    }).lean();
-
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message:
-          existingUser.email === values.email
-            ? "An account already exists with this email address."
-            : "An account already exists with this mobile number.",
-      });
-    }
-
-    const partner = await User.create({
-      fullName: values.fullName,
-      email: values.email,
-      phone: values.phone,
-      password: values.password,
-      role: "delivery",
-      active: req.body.active !== false,
-    });
-
-    const [responsePartner] = await buildPartnerPayload([partner]);
-
-    return res.status(201).json({
-      success: true,
-      message: "Delivery partner created successfully.",
-      data: {
-        partner: responsePartner,
-      },
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.patch("/:partnerId", async (req, res, next) => {
-  try {
-    const { errors, values } = validatePartnerInput(req.body, {
-      partial: true,
-    });
-
-    if (errors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: errors[0],
-        errors,
-      });
-    }
-
-    const partner = await User.findOne({
-      _id: req.params.partnerId,
-      role: "delivery",
-    });
-
-    if (!partner) {
-      return res.status(404).json({
-        success: false,
-        message: "Delivery partner not found.",
-      });
-    }
-
-    if (req.body.active === false && partner.active) {
-      const activeAssignment = await Order.exists({
-        deliveryPartner: partner._id,
-        orderStatus: {
-          $nin: ["delivered", "cancelled"],
+        data: {
+          partners: data,
         },
       });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
 
-      if (activeAssignment) {
+router.post(
+  "/",
+  async (req, res, next) => {
+    try {
+      const {
+        errors,
+        values,
+      } = validatePartnerInput(
+        req.body
+      );
+
+      if (
+        errors.length > 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: errors[0],
+          errors,
+        });
+      }
+
+      const existingUser =
+        await User.findOne({
+          $or: [
+            {
+              email:
+                values.email,
+            },
+
+            {
+              phone:
+                values.phone,
+            },
+          ],
+        }).lean();
+
+      if (existingUser) {
         return res.status(409).json({
+          success: false,
+
+          message:
+            existingUser.email ===
+            values.email
+              ? "An account already exists with this email address."
+              : "An account already exists with this mobile number.",
+        });
+      }
+
+      const partner =
+        await User.create({
+          fullName:
+            values.fullName,
+
+          email:
+            values.email,
+
+          phone:
+            values.phone,
+
+          password:
+            values.password,
+
+          role:
+            "delivery",
+
+          active:
+            req.body.active !==
+            false,
+        });
+
+      const [
+        responsePartner,
+      ] =
+        await buildPartnerPayload(
+          [partner]
+        );
+
+      return res.status(201).json({
+        success: true,
+
+        message:
+          "Delivery partner created successfully.",
+
+        data: {
+          partner:
+            responsePartner,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+router.patch(
+  "/:partnerId",
+  async (req, res, next) => {
+    try {
+      const {
+        errors,
+        values,
+      } = validatePartnerInput(
+        req.body,
+        {
+          partial: true,
+        }
+      );
+
+      if (
+        errors.length > 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: errors[0],
+          errors,
+        });
+      }
+
+      const partner =
+        await User.findOne({
+          _id:
+            req.params.partnerId,
+
+          role:
+            "delivery",
+        });
+
+      if (!partner) {
+        return res.status(404).json({
           success: false,
           message:
-            "Reassign this partner's active orders before disabling the account.",
+            "Delivery partner not found.",
         });
       }
-    }
 
-    if (req.body.email !== undefined) {
-      const duplicateEmail = await User.exists({
-        _id: { $ne: partner._id },
-        email: values.email,
+      if (
+        req.body.active ===
+          false &&
+        partner.active
+      ) {
+        const activeAssignment =
+          await Order.exists({
+            deliveryPartner:
+              partner._id,
+
+            orderStatus: {
+              $nin: [
+                "delivered",
+                "cancelled",
+              ],
+            },
+          });
+
+        if (activeAssignment) {
+          return res.status(409).json({
+            success: false,
+
+            message:
+              "Reassign this partner's active orders before disabling the account.",
+          });
+        }
+      }
+
+      if (
+        req.body.email !==
+        undefined
+      ) {
+        const duplicateEmail =
+          await User.exists({
+            _id: {
+              $ne:
+                partner._id,
+            },
+
+            email:
+              values.email,
+          });
+
+        if (duplicateEmail) {
+          return res.status(409).json({
+            success: false,
+
+            message:
+              "An account already exists with this email address.",
+          });
+        }
+
+        partner.email =
+          values.email;
+      }
+
+      if (
+        req.body.phone !==
+        undefined
+      ) {
+        const duplicatePhone =
+          await User.exists({
+            _id: {
+              $ne:
+                partner._id,
+            },
+
+            phone:
+              values.phone,
+          });
+
+        if (duplicatePhone) {
+          return res.status(409).json({
+            success: false,
+
+            message:
+              "An account already exists with this mobile number.",
+          });
+        }
+
+        partner.phone =
+          values.phone;
+      }
+
+      if (
+        req.body.fullName !==
+        undefined
+      ) {
+        partner.fullName =
+          values.fullName;
+      }
+
+      if (
+        req.body.password !==
+          undefined &&
+        values.password
+      ) {
+        partner.password =
+          values.password;
+      }
+
+      if (
+        req.body.active !==
+        undefined
+      ) {
+        partner.active =
+          Boolean(
+            req.body.active
+          );
+      }
+
+      await partner.save();
+
+      const [
+        responsePartner,
+      ] =
+        await buildPartnerPayload(
+          [partner]
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Delivery partner updated successfully.",
+
+        data: {
+          partner:
+            responsePartner,
+        },
       });
-
-      if (duplicateEmail) {
-        return res.status(409).json({
+    } catch (error) {
+      if (
+        error.name ===
+        "CastError"
+      ) {
+        return res.status(404).json({
           success: false,
-          message: "An account already exists with this email address.",
+          message:
+            "Delivery partner not found.",
         });
       }
 
-      partner.email = values.email;
+      return next(error);
     }
-
-    if (req.body.phone !== undefined) {
-      const duplicatePhone = await User.exists({
-        _id: { $ne: partner._id },
-        phone: values.phone,
-      });
-
-      if (duplicatePhone) {
-        return res.status(409).json({
-          success: false,
-          message: "An account already exists with this mobile number.",
-        });
-      }
-
-      partner.phone = values.phone;
-    }
-
-    if (req.body.fullName !== undefined) {
-      partner.fullName = values.fullName;
-    }
-
-    if (req.body.password !== undefined && values.password) {
-      partner.password = values.password;
-    }
-
-    if (req.body.active !== undefined) {
-      partner.active = Boolean(req.body.active);
-    }
-
-    await partner.save();
-
-    const [responsePartner] = await buildPartnerPayload([partner]);
-
-    return res.status(200).json({
-      success: true,
-      message: "Delivery partner updated successfully.",
-      data: {
-        partner: responsePartner,
-      },
-    });
-  } catch (error) {
-    if (error.name === "CastError") {
-      return res.status(404).json({
-        success: false,
-        message: "Delivery partner not found.",
-      });
-    }
-
-    return next(error);
   }
-});
+);
 
 module.exports = router;

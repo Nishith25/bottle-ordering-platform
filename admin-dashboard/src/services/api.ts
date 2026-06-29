@@ -13,12 +13,12 @@ type ApiRequestOptions =
     token?: string | null;
   };
 
-export type DashboardRole =
+export type UserRole =
+  | "customer"
   | "admin"
   | "delivery";
 
-export type UserRole =
-  | "customer"
+export type DashboardRole =
   | "admin"
   | "delivery";
 
@@ -155,6 +155,29 @@ function isDashboardRole(
   );
 }
 
+function normaliseProduct(
+  product: AdminProduct
+): AdminProduct {
+  return {
+    ...product,
+
+    imageUrl:
+      product.imageUrl ?? "",
+
+    ingredients:
+      product.ingredients ?? [],
+
+    stockQuantity:
+      product.stockQuantity ?? 0,
+
+    lowStockThreshold:
+      product.lowStockThreshold ?? 10,
+
+    sortOrder:
+      product.sortOrder ?? 0,
+  };
+}
+
 async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
@@ -180,7 +203,10 @@ async function apiRequest<T>(
     Accept: "application/json",
   };
 
-  if (requestOptions.body) {
+  if (
+    requestOptions.body &&
+    !(requestOptions.body instanceof FormData)
+  ) {
     requestHeaders[
       "Content-Type"
     ] = "application/json";
@@ -223,7 +249,9 @@ async function apiRequest<T>(
 
     try {
       payload = responseText
-        ? JSON.parse(responseText)
+        ? JSON.parse(
+            responseText
+          )
         : ({
             success:
               response.ok,
@@ -281,16 +309,31 @@ async function apiRequest<T>(
 }
 
 /**
- * Logs in an administrator or delivery
- * partner to the operations dashboard.
+ * Logs an administrator or delivery
+ * partner into the operations dashboard.
  *
- * Customer accounts are blocked from
- * accessing the operations dashboard.
+ * Normal customer accounts cannot enter
+ * the operations dashboard.
  */
 export async function loginDashboardUser(
   identifier: string,
   password: string
 ): Promise<AdminSession> {
+  const cleanedIdentifier =
+    identifier.trim();
+
+  if (!cleanedIdentifier) {
+    throw new Error(
+      "Enter your email address or mobile number."
+    );
+  }
+
+  if (!password) {
+    throw new Error(
+      "Enter your password."
+    );
+  }
+
   const response =
     await apiRequest<LoginResponse>(
       "/api/auth/login",
@@ -298,7 +341,9 @@ export async function loginDashboardUser(
         method: "POST",
 
         body: JSON.stringify({
-          identifier,
+          identifier:
+            cleanedIdentifier,
+
           password,
         }),
       }
@@ -306,6 +351,15 @@ export async function loginDashboardUser(
 
   const session =
     response.data;
+
+  if (
+    !session?.token ||
+    !session.user
+  ) {
+    throw new Error(
+      "The server returned an incomplete login response."
+    );
+  }
 
   if (
     !isDashboardRole(
@@ -327,12 +381,18 @@ export async function loginDashboardUser(
 }
 
 /**
- * Restores and validates the currently
- * logged-in dashboard user.
+ * Restores and verifies the currently
+ * authenticated dashboard account.
  */
 export async function fetchDashboardUser(
   token: string
 ): Promise<AdminUser> {
+  if (!token.trim()) {
+    throw new Error(
+      "Dashboard authentication token is missing."
+    );
+  }
+
   const response =
     await apiRequest<CurrentUserResponse>(
       "/api/auth/me",
@@ -343,6 +403,12 @@ export async function fetchDashboardUser(
 
   const dashboardUser =
     response.data.user;
+
+  if (!dashboardUser) {
+    throw new Error(
+      "The server returned an incomplete account response."
+    );
+  }
 
   if (
     !isDashboardRole(
@@ -364,10 +430,8 @@ export async function fetchDashboardUser(
 }
 
 /**
- * Compatibility exports.
- *
- * Existing AuthContext files can continue
- * importing loginAdmin and fetchAdminUser.
+ * Compatibility aliases for the existing
+ * dashboard AuthContext.
  */
 export const loginAdmin =
   loginDashboardUser;
@@ -401,21 +465,7 @@ export async function fetchAdminProducts(
     );
 
   return response.data.products.map(
-    (product) => ({
-      ...product,
-
-      stockQuantity:
-        product.stockQuantity ??
-        0,
-
-      lowStockThreshold:
-        product.lowStockThreshold ??
-        10,
-
-      sortOrder:
-        product.sortOrder ??
-        0,
-    })
+    normaliseProduct
   );
 }
 
@@ -437,28 +487,15 @@ async function updateInventory(
         method: "PATCH",
         token,
 
-        body:
-          JSON.stringify(
-            payload
-          ),
+        body: JSON.stringify(
+          payload
+        ),
       }
     );
 
-  return {
-    ...response.data.product,
-
-    stockQuantity:
-      response.data.product
-        .stockQuantity ?? 0,
-
-    lowStockThreshold:
-      response.data.product
-        .lowStockThreshold ?? 10,
-
-    sortOrder:
-      response.data.product
-        .sortOrder ?? 0,
-  };
+  return normaliseProduct(
+    response.data.product
+  );
 }
 
 export async function createAdminProduct(
@@ -478,10 +515,9 @@ export async function createAdminProduct(
         method: "POST",
         token,
 
-        body:
-          JSON.stringify(
-            cataloguePayload
-          ),
+        body: JSON.stringify(
+          cataloguePayload
+        ),
       }
     );
 
@@ -524,28 +560,16 @@ export async function updateAdminProduct(
           method: "PATCH",
           token,
 
-          body:
-            JSON.stringify(
-              cataloguePayload
-            ),
+          body: JSON.stringify(
+            cataloguePayload
+          ),
         }
       );
 
-    latestProduct = {
-      ...response.data.product,
-
-      stockQuantity:
+    latestProduct =
+      normaliseProduct(
         response.data.product
-          .stockQuantity ?? 0,
-
-      lowStockThreshold:
-        response.data.product
-          .lowStockThreshold ?? 10,
-
-      sortOrder:
-        response.data.product
-          .sortOrder ?? 0,
-    };
+      );
   }
 
   if (
@@ -590,6 +614,16 @@ export async function adjustAdminProductStock(
     );
   }
 
+  if (
+    !Number.isInteger(
+      adjustment
+    )
+  ) {
+    throw new Error(
+      "Stock adjustment must be a whole number."
+    );
+  }
+
   return updateInventory(
     token,
     productId,
@@ -614,21 +648,9 @@ export async function archiveAdminProduct(
       }
     );
 
-  return {
-    ...response.data.product,
-
-    stockQuantity:
-      response.data.product
-        .stockQuantity ?? 0,
-
-    lowStockThreshold:
-      response.data.product
-        .lowStockThreshold ?? 10,
-
-    sortOrder:
-      response.data.product
-        .sortOrder ?? 0,
-  };
+  return normaliseProduct(
+    response.data.product
+  );
 }
 
 export {

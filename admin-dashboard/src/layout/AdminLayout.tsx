@@ -19,6 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/plans": "Subscription plan management",
   "/subscriptions": "Customer subscription management",
   "/users": "Customer account management",
+  "/reviews": "Customer review management",
 };
 
 export default function AdminLayout() {
@@ -84,6 +85,13 @@ export default function AdminLayout() {
             label="Delivery partners"
             onClick={closeMobileMenu}
           />
+
+          <NavigationLink
+  to="/reviews"
+  icon="★"
+  label="Reviews"
+  onClick={closeMobileMenu}
+/>
 
           <NavigationLink
             to="/coupons"

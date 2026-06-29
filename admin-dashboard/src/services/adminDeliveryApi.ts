@@ -26,7 +26,11 @@ export type DeliveryPartner = {
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
+
   activeAssignmentCount: number;
+  completedDeliveryCount: number;
+  reviewCount: number;
+  averageDeliveryRating: number;
 };
 
 export type DeliveryPartnerPayload = {

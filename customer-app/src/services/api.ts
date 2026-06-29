@@ -17,6 +17,11 @@ type ApiRequestOptions = RequestInit & {
   token?: string | null;
 };
 
+export type UserRole =
+  | "customer"
+  | "admin"
+  | "delivery";
+
 type BackendProduct = {
   _id: string;
   productId: string;
@@ -38,103 +43,151 @@ type BackendProduct = {
   sortOrder?: number;
 };
 
-type ProductsResponse = ApiBaseResponse & {
-  count: number;
-  data: BackendProduct[];
-};
-
-type LocationCheckResponse = ApiBaseResponse & {
-  serviceable: boolean;
-  data: ServiceableLocation | null;
-};
-
-type AuthResponse = ApiBaseResponse & {
-  data: AuthSession;
-};
-
-type CurrentUserResponse = ApiBaseResponse & {
-  data: {
-    user: AuthUser;
+type ProductsResponse =
+  ApiBaseResponse & {
+    count: number;
+    data: BackendProduct[];
   };
-};
 
-type CouponValidationResponse = ApiBaseResponse & {
-  data: {
-    coupon: CouponQuote;
+type LocationCheckResponse =
+  ApiBaseResponse & {
+    serviceable: boolean;
+    data: ServiceableLocation | null;
   };
-};
 
-type CreateOrderResponse = ApiBaseResponse & {
-  data: {
-    order: CustomerOrder;
+type AuthResponse =
+  ApiBaseResponse & {
+    data: AuthSession;
   };
-};
 
-type RazorpayInitiateResponse = ApiBaseResponse & {
-  data: {
-    paymentSession: RazorpayPaymentSession;
+type CurrentUserResponse =
+  ApiBaseResponse & {
+    data: {
+      user: AuthUser;
+    };
   };
-};
 
-type RazorpayStatusResponse = ApiBaseResponse & {
-  data: {
-    status: RazorpayPaymentSessionStatus;
-    order: CustomerOrder | null;
-    message?: string;
+type CouponValidationResponse =
+  ApiBaseResponse & {
+    data: {
+      coupon: CouponQuote;
+    };
   };
-};
 
-type MyOrdersResponse = ApiBaseResponse & {
-  count: number;
-  data: {
-    orders: CustomerOrder[];
+type CreateOrderResponse =
+  ApiBaseResponse & {
+    data: {
+      order: CustomerOrder;
+    };
   };
-};
 
-type SingleOrderResponse = ApiBaseResponse & {
-  data: {
-    order: CustomerOrder;
+type RazorpayInitiateResponse =
+  ApiBaseResponse & {
+    data: {
+      paymentSession: RazorpayPaymentSession;
+    };
   };
-};
 
-
-
-type CustomerDeliveryTrackingResponse = ApiBaseResponse & {
-  data: {
-    order: CustomerOrder;
-    deliveryOtp: string;
+type RazorpayStatusResponse =
+  ApiBaseResponse & {
+    data: {
+      status: RazorpayPaymentSessionStatus;
+      order: CustomerOrder | null;
+      message?: string;
+    };
   };
-};
 
-type SubscriptionPlansResponse = ApiBaseResponse & {
-  count: number;
-  data: {
-    plans: SubscriptionPlan[];
+type MyOrdersResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      orders: CustomerOrder[];
+    };
   };
-};
 
-type CreateSubscriptionResponse = ApiBaseResponse & {
-  data: {
-    subscription: CustomerSubscription;
+type SingleOrderResponse =
+  ApiBaseResponse & {
+    data: {
+      order: CustomerOrder;
+    };
   };
-};
 
-type MySubscriptionsResponse = ApiBaseResponse & {
-  count: number;
-  data: {
-    subscriptions: CustomerSubscription[];
+type CustomerDeliveryTrackingResponse =
+  ApiBaseResponse & {
+    data: {
+      order: CustomerOrder;
+      deliveryOtp: string;
+    };
   };
-};
 
-type SingleSubscriptionResponse = ApiBaseResponse & {
-  data: {
-    subscription: CustomerSubscription;
+type MyOrderReviewsResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      reviews: OrderReview[];
+    };
   };
-};
 
-export type CouponContext = "order" | "subscription";
-export type CouponDiscountType = "fixed" | "percentage";
-export type CouponAppliesTo = "order" | "subscription" | "both";
+type SingleOrderReviewResponse =
+  ApiBaseResponse & {
+    data: {
+      review: OrderReview;
+    };
+  };
+
+type OrderReviewLookupResponse =
+  ApiBaseResponse & {
+    data: {
+      review: OrderReview | null;
+    };
+  };
+
+type SubscriptionPlansResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      plans: SubscriptionPlan[];
+    };
+  };
+
+type CreateSubscriptionResponse =
+  ApiBaseResponse & {
+    data: {
+      subscription: CustomerSubscription;
+    };
+  };
+
+type MySubscriptionsResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      subscriptions: CustomerSubscription[];
+    };
+  };
+
+type SingleSubscriptionResponse =
+  ApiBaseResponse & {
+    data: {
+      subscription: CustomerSubscription;
+    };
+  };
+
+export type CouponContext =
+  | "order"
+  | "subscription";
+
+export type CouponDiscountType =
+  | "fixed"
+  | "percentage";
+
+export type CouponAppliesTo =
+  | "order"
+  | "subscription"
+  | "both";
 
 export type CouponQuote = {
   code: string;
@@ -171,7 +224,7 @@ export type AuthUser = {
   fullName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin" | "delivery";
+  role: UserRole;
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -197,7 +250,10 @@ export type LoginInput = {
   password: string;
 };
 
-export type OrderPaymentMethod = "cod" | "online";
+export type OrderPaymentMethod =
+  | "cod"
+  | "online";
+
 export type OrderPaymentStatus =
   | "pending"
   | "paid"
@@ -212,14 +268,15 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
-export type OrderPaymentGateway = "" | "razorpay";
+export type OrderPaymentGateway =
+  | ""
+  | "razorpay";
+
 export type RefundStatus =
   | "not_required"
   | "pending"
   | "processed"
   | "failed";
-
-
 
 export type DeliveryStatus =
   | "unassigned"
@@ -248,11 +305,19 @@ export type StoredCouponSnapshot = {
   couponId?: string | null;
   code: string;
   description: string;
-  discountType: "" | CouponDiscountType;
+
+  discountType:
+    | ""
+    | CouponDiscountType;
+
   discountValue: number;
   maxDiscountAmount: number;
   minimumOrder: number;
-  appliesTo: "" | CouponAppliesTo;
+
+  appliesTo:
+    | ""
+    | CouponAppliesTo;
+
   eligibleAmount: number;
   discountAmount: number;
 };
@@ -288,29 +353,50 @@ export type OrderDeliverySchedule = {
 export type CustomerOrder = {
   _id: string;
   orderNumber: string;
-  user: string;
+
+  user:
+    | string
+    | {
+        _id?: string;
+        id?: string;
+        fullName?: string;
+        phone?: string;
+      };
+
   items: CustomerOrderItem[];
+
   deliveryAddress: OrderDeliveryAddress;
   deliverySchedule: OrderDeliverySchedule;
+
   subtotal: number;
   deliveryFee: number;
+
   amountBeforeDiscount?: number;
   couponDiscount?: number;
   coupon?: StoredCouponSnapshot | null;
+
   total: number;
+
   paymentMethod: OrderPaymentMethod;
   paymentGateway?: OrderPaymentGateway;
   paymentGatewayOrderId?: string;
   paymentStatus: OrderPaymentStatus;
   paymentReference: string;
   paidAt?: string | null;
+
   orderStatus: OrderStatus;
-  deliveryPartner?: DeliveryPartnerSummary | string | null;
+
+  deliveryPartner?:
+    | DeliveryPartnerSummary
+    | string
+    | null;
+
   deliveryPartnerSnapshot?: {
     fullName: string;
     email: string;
     phone: string;
   } | null;
+
   deliveryStatus?: DeliveryStatus;
   deliveryAssignedAt?: string | null;
   pickedUpAt?: string | null;
@@ -318,21 +404,77 @@ export type CustomerOrder = {
   deliveryCompletedAt?: string | null;
   deliveryOtpGeneratedAt?: string | null;
   deliveryOtpVerifiedAt?: string | null;
+
   cancellationReason: string;
   cancelledAt: string | null;
   deliveredAt: string | null;
+
   refundStatus?: RefundStatus;
   refundId?: string;
   refundAmount?: number;
+  refundAmountPaise?: number;
   refundRequestedAt?: string | null;
   refundProcessedAt?: string | null;
   refundFailedAt?: string | null;
   refundFailureReason?: string;
+  refundAttemptCount?: number;
+
   inventoryReserved?: boolean;
   inventoryRestored?: boolean;
   inventoryRestoredAt?: string | null;
+
   createdAt: string;
   updatedAt: string;
+};
+
+export type OrderReviewPerson = {
+  _id?: string;
+  id?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role?: UserRole;
+  active?: boolean;
+};
+
+export type OrderReview = {
+  _id: string;
+
+  order: string;
+  orderNumber: string;
+
+  user:
+    | string
+    | OrderReviewPerson;
+
+  customerSnapshot: {
+    fullName: string;
+    email: string;
+    phone: string;
+  };
+
+  deliveryPartner:
+    | string
+    | OrderReviewPerson;
+
+  deliveryPartnerSnapshot: {
+    fullName: string;
+    email: string;
+    phone: string;
+  };
+
+  orderRating: number;
+  deliveryRating: number;
+  comment: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateOrderReviewInput = {
+  orderRating: number;
+  deliveryRating: number;
+  comment?: string;
 };
 
 export type CreateOrderInput = {
@@ -340,6 +482,7 @@ export type CreateOrderInput = {
     productId: string;
     quantity: number;
   }>;
+
   deliveryAddress: {
     fullName: string;
     phone: string;
@@ -348,11 +491,13 @@ export type CreateOrderInput = {
     areaDetails: string;
     landmark: string;
   };
+
   deliverySchedule: {
     deliveryDateId: string;
     deliveryDateLabel: string;
     deliverySlot: string;
   };
+
   paymentMethod: OrderPaymentMethod;
   couponCode?: string;
 };
@@ -380,6 +525,7 @@ export type InitiateRazorpayPaymentInput = {
     productId: string;
     quantity: number;
   }>;
+
   deliveryAddress: {
     fullName: string;
     phone: string;
@@ -388,11 +534,13 @@ export type InitiateRazorpayPaymentInput = {
     areaDetails: string;
     landmark: string;
   };
+
   deliverySchedule: {
     deliveryDateId: string;
     deliveryDateLabel: string;
     deliverySlot: string;
   };
+
   couponCode?: string;
   returnUrl: string;
 };
@@ -403,7 +551,10 @@ export type RazorpayPaymentStatusResult = {
   message: string;
 };
 
-export type SubscriptionBillingCycle = "weekly" | "monthly";
+export type SubscriptionBillingCycle =
+  | "weekly"
+  | "monthly";
+
 export type SubscriptionPaymentMethod =
   | "upi_autopay"
   | "card_mandate";
@@ -496,12 +647,15 @@ export type CustomerSubscription = {
 
 export type CreateSubscriptionInput = {
   planId: string;
+
   items: Array<{
     productId: string;
     quantity: number;
   }>;
+
   preferredDay: string;
   preferredSlot: string;
+
   deliveryAddress: {
     fullName: string;
     phone: string;
@@ -510,86 +664,144 @@ export type CreateSubscriptionInput = {
     areaDetails: string;
     landmark: string;
   };
+
   couponCode?: string;
   paymentMethod: SubscriptionPaymentMethod;
 };
+
+function hasFormDataBody(
+  body: RequestInit["body"]
+) {
+  return (
+    typeof FormData !== "undefined" &&
+    body instanceof FormData
+  );
+}
 
 async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const controller = new AbortController();
+  const controller =
+    new AbortController();
 
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, 12000);
 
-  const { token, headers, ...requestOptions } = options;
+  const {
+    token,
+    headers,
+    ...requestOptions
+  } = options;
 
-  const requestHeaders: Record<string, string> = {
+  const requestHeaders: Record<
+    string,
+    string
+  > = {
     Accept: "application/json",
   };
 
-  if (requestOptions.body) {
-    requestHeaders["Content-Type"] = "application/json";
+  if (
+    requestOptions.body &&
+    !hasFormDataBody(
+      requestOptions.body
+    )
+  ) {
+    requestHeaders[
+      "Content-Type"
+    ] = "application/json";
   }
 
   if (token) {
-    requestHeaders.Authorization = `Bearer ${token}`;
+    requestHeaders.Authorization =
+      `Bearer ${token}`;
   }
 
   if (headers) {
     Object.assign(
       requestHeaders,
-      headers as Record<string, string>
+      headers as Record<
+        string,
+        string
+      >
     );
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...requestOptions,
-      headers: requestHeaders,
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      `${API_BASE_URL}${path}`,
+      {
+        ...requestOptions,
+        headers: requestHeaders,
+        signal: controller.signal,
+      }
+    );
 
-    const responseText = await response.text();
-    let payload: ApiBaseResponse & T;
+    const responseText =
+      await response.text();
+
+    let payload:
+      ApiBaseResponse & T;
 
     try {
       payload = responseText
         ? JSON.parse(responseText)
-        : ({ success: response.ok } as ApiBaseResponse & T);
+        : ({
+            success: response.ok,
+          } as ApiBaseResponse & T);
     } catch {
-      throw new Error("The server returned an invalid response.");
+      throw new Error(
+        "The server returned an invalid response."
+      );
     }
 
-    if (!response.ok || payload.success === false) {
+    if (
+      !response.ok ||
+      payload.success === false
+    ) {
       throw new Error(
-        payload.message ?? "Unable to complete the request."
+        payload.message ??
+          "Unable to complete the request."
       );
     }
 
     return payload;
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("The server took too long to respond.");
+    if (
+      error instanceof Error &&
+      error.name === "AbortError"
+    ) {
+      throw new Error(
+        "The server took too long to respond."
+      );
     }
 
-    if (error instanceof TypeError) {
-      throw new Error("Unable to connect to the backend.");
+    if (
+      error instanceof TypeError
+    ) {
+      throw new Error(
+        "Unable to connect to the backend."
+      );
     }
 
-    if (error instanceof Error) {
+    if (
+      error instanceof Error
+    ) {
       throw error;
     }
 
-    throw new Error("Unable to complete the request.");
+    throw new Error(
+      "Unable to complete the request."
+    );
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-function normaliseProduct(product: BackendProduct): Product {
+function normaliseProduct(
+  product: BackendProduct
+): Product {
   return {
     id: product.productId,
     databaseId: product._id,
@@ -604,57 +816,125 @@ function normaliseProduct(product: BackendProduct): Product {
     liquidColor: product.liquidColor,
     cardColor: product.cardColor,
     accentColor: product.accentColor,
-    subscriptionEligible: product.subscriptionEligible,
+    subscriptionEligible:
+      product.subscriptionEligible,
     available: product.available,
-    stockQuantity: product.stockQuantity ?? 0,
-    lowStockThreshold: product.lowStockThreshold ?? 10,
-    sortOrder: product.sortOrder ?? 0,
+    stockQuantity:
+      product.stockQuantity ?? 0,
+    lowStockThreshold:
+      product.lowStockThreshold ?? 10,
+    sortOrder:
+      product.sortOrder ?? 0,
   };
 }
 
-export async function fetchProducts(): Promise<Product[]> {
-  const response = await apiRequest<ProductsResponse>(
-    "/api/products"
+function requireToken(
+  token: string
+) {
+  if (!token.trim()) {
+    throw new Error(
+      "Authentication is required. Please log in."
+    );
+  }
+}
+
+function requireIdentifier(
+  value: string,
+  message: string
+) {
+  if (!value.trim()) {
+    throw new Error(message);
+  }
+}
+
+export async function fetchProducts(): Promise<
+  Product[]
+> {
+  const response =
+    await apiRequest<ProductsResponse>(
+      "/api/products"
+    );
+
+  return response.data.map(
+    normaliseProduct
   );
-  return response.data.map(normaliseProduct);
 }
 
 export async function checkServiceablePincode(
   pincode: string
 ): Promise<PincodeCheckResult> {
-  const normalisedPincode = pincode.replace(/\D/g, "");
+  const normalisedPincode =
+    pincode.replace(/\D/g, "");
 
-  if (normalisedPincode.length !== 6) {
-    throw new Error("Please enter a valid six-digit pincode.");
+  if (
+    normalisedPincode.length !== 6
+  ) {
+    throw new Error(
+      "Please enter a valid six-digit pincode."
+    );
   }
 
-  const response = await apiRequest<LocationCheckResponse>(
-    `/api/locations/check/${normalisedPincode}`
-  );
+  const response =
+    await apiRequest<LocationCheckResponse>(
+      `/api/locations/check/${normalisedPincode}`
+    );
 
   return {
-    serviceable: response.serviceable,
+    serviceable:
+      response.serviceable,
+
     message:
       response.message ??
       (response.serviceable
         ? "Delivery is available."
         : "Delivery is not available."),
-    location: response.data,
+
+    location:
+      response.data,
   };
 }
 
-export async function validateCoupon(input: {
-  code: string;
-  context: CouponContext;
-  eligibleAmount: number;
-}): Promise<CouponQuote> {
-  const response = await apiRequest<CouponValidationResponse>(
-    "/api/coupons/validate",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    }
-  );
+export async function validateCoupon(
+  input: {
+    code: string;
+    context: CouponContext;
+    eligibleAmount: number;
+  }
+): Promise<CouponQuote> {
+  const code =
+    input.code
+      .trim()
+      .toUpperCase();
+
+  if (!code) {
+    throw new Error(
+      "Enter a coupon code."
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      input.eligibleAmount
+    ) ||
+    input.eligibleAmount <= 0
+  ) {
+    throw new Error(
+      "A valid order amount is required to apply a coupon."
+    );
+  }
+
+  const response =
+    await apiRequest<CouponValidationResponse>(
+      "/api/coupons/validate",
+      {
+        method: "POST",
+
+        body: JSON.stringify({
+          ...input,
+          code,
+        }),
+      }
+    );
 
   return response.data.coupon;
 }
@@ -662,13 +942,14 @@ export async function validateCoupon(input: {
 export async function registerCustomer(
   input: RegisterInput
 ): Promise<AuthSession> {
-  const response = await apiRequest<AuthResponse>(
-    "/api/auth/register",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    }
-  );
+  const response =
+    await apiRequest<AuthResponse>(
+      "/api/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.data;
 }
@@ -676,13 +957,14 @@ export async function registerCustomer(
 export async function loginCustomer(
   input: LoginInput
 ): Promise<AuthSession> {
-  const response = await apiRequest<AuthResponse>(
-    "/api/auth/login",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    }
-  );
+  const response =
+    await apiRequest<AuthResponse>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.data;
 }
@@ -690,10 +972,15 @@ export async function loginCustomer(
 export async function fetchCurrentUser(
   token: string
 ): Promise<AuthUser> {
-  const response = await apiRequest<CurrentUserResponse>(
-    "/api/auth/me",
-    { token }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<CurrentUserResponse>(
+      "/api/auth/me",
+      {
+        token,
+      }
+    );
 
   return response.data.user;
 }
@@ -702,14 +989,17 @@ export async function createCustomerOrder(
   token: string,
   input: CreateOrderInput
 ): Promise<CustomerOrder> {
-  const response = await apiRequest<CreateOrderResponse>(
-    "/api/orders",
-    {
-      method: "POST",
-      token,
-      body: JSON.stringify(input),
-    }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<CreateOrderResponse>(
+      "/api/orders",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.data.order;
 }
@@ -718,14 +1008,17 @@ export async function initiateRazorpayPayment(
   token: string,
   input: InitiateRazorpayPaymentInput
 ): Promise<RazorpayPaymentSession> {
-  const response = await apiRequest<RazorpayInitiateResponse>(
-    "/api/payments/razorpay/initiate",
-    {
-      method: "POST",
-      token,
-      body: JSON.stringify(input),
-    }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<RazorpayInitiateResponse>(
+      "/api/payments/razorpay/initiate",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.data.paymentSession;
 }
@@ -734,31 +1027,43 @@ export async function fetchRazorpayPaymentStatus(
   token: string,
   sessionToken: string
 ): Promise<RazorpayPaymentStatusResult> {
-  if (!sessionToken.trim()) {
-    throw new Error("Payment session token is missing.");
-  }
+  requireToken(token);
 
-  const response = await apiRequest<RazorpayStatusResponse>(
-    `/api/payments/razorpay/status/${encodeURIComponent(
-      sessionToken
-    )}`,
-    { token }
+  requireIdentifier(
+    sessionToken,
+    "Payment session token is missing."
   );
+
+  const response =
+    await apiRequest<RazorpayStatusResponse>(
+      `/api/payments/razorpay/status/${encodeURIComponent(
+        sessionToken.trim()
+      )}`,
+      {
+        token,
+      }
+    );
 
   return {
     status: response.data.status,
     order: response.data.order,
-    message: response.data.message ?? "",
+    message:
+      response.data.message ?? "",
   };
 }
 
 export async function fetchMyOrders(
   token: string
 ): Promise<CustomerOrder[]> {
-  const response = await apiRequest<MyOrdersResponse>(
-    "/api/orders/my",
-    { token }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<MyOrdersResponse>(
+      "/api/orders/my",
+      {
+        token,
+      }
+    );
 
   return response.data.orders;
 }
@@ -767,10 +1072,22 @@ export async function fetchOrderById(
   token: string,
   orderId: string
 ): Promise<CustomerOrder> {
-  const response = await apiRequest<SingleOrderResponse>(
-    `/api/orders/${encodeURIComponent(orderId)}`,
-    { token }
+  requireToken(token);
+
+  requireIdentifier(
+    orderId,
+    "Order ID is missing."
   );
+
+  const response =
+    await apiRequest<SingleOrderResponse>(
+      `/api/orders/${encodeURIComponent(
+        orderId.trim()
+      )}`,
+      {
+        token,
+      }
+    );
 
   return response.data.order;
 }
@@ -778,42 +1095,176 @@ export async function fetchOrderById(
 export async function cancelCustomerOrder(
   token: string,
   orderId: string,
-  reason = "Cancelled by customer"
+  reason =
+    "Cancelled by customer"
 ): Promise<CustomerOrder> {
-  const response = await apiRequest<SingleOrderResponse>(
-    `/api/orders/${encodeURIComponent(orderId)}/cancel`,
-    {
-      method: "PATCH",
-      token,
-      body: JSON.stringify({ reason }),
-    }
+  requireToken(token);
+
+  requireIdentifier(
+    orderId,
+    "Order ID is missing."
   );
+
+  const response =
+    await apiRequest<SingleOrderResponse>(
+      `/api/orders/${encodeURIComponent(
+        orderId.trim()
+      )}/cancel`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          reason:
+            reason.trim() ||
+            "Cancelled by customer",
+        }),
+      }
+    );
 
   return response.data.order;
 }
-
 
 export async function fetchCustomerDeliveryTracking(
   token: string,
   orderId: string
 ): Promise<CustomerDeliveryTracking> {
+  requireToken(token);
+
+  requireIdentifier(
+    orderId,
+    "Order ID is missing."
+  );
+
   const response =
     await apiRequest<CustomerDeliveryTrackingResponse>(
       `/api/delivery/orders/customer/${encodeURIComponent(
-        orderId
+        orderId.trim()
       )}`,
-      { token }
+      {
+        token,
+      }
     );
 
   return response.data;
 }
 
+export async function fetchMyOrderReviews(
+  token: string
+): Promise<OrderReview[]> {
+  requireToken(token);
+
+  const response =
+    await apiRequest<MyOrderReviewsResponse>(
+      "/api/order-reviews/my",
+      {
+        token,
+      }
+    );
+
+  return response.data.reviews;
+}
+
+export async function fetchOrderReview(
+  token: string,
+  orderId: string
+): Promise<OrderReview | null> {
+  requireToken(token);
+
+  requireIdentifier(
+    orderId,
+    "Order ID is missing."
+  );
+
+  const response =
+    await apiRequest<OrderReviewLookupResponse>(
+      `/api/order-reviews/order/${encodeURIComponent(
+        orderId.trim()
+      )}`,
+      {
+        token,
+      }
+    );
+
+  return response.data.review;
+}
+
+export async function createOrderReview(
+  token: string,
+  orderId: string,
+  input: CreateOrderReviewInput
+): Promise<OrderReview> {
+  requireToken(token);
+
+  requireIdentifier(
+    orderId,
+    "Order ID is missing."
+  );
+
+  if (
+    !Number.isInteger(
+      input.orderRating
+    ) ||
+    input.orderRating < 1 ||
+    input.orderRating > 5
+  ) {
+    throw new Error(
+      "Order rating must be between 1 and 5 stars."
+    );
+  }
+
+  if (
+    !Number.isInteger(
+      input.deliveryRating
+    ) ||
+    input.deliveryRating < 1 ||
+    input.deliveryRating > 5
+  ) {
+    throw new Error(
+      "Delivery rating must be between 1 and 5 stars."
+    );
+  }
+
+  const comment =
+    input.comment?.trim() ?? "";
+
+  if (comment.length > 500) {
+    throw new Error(
+      "Review comments cannot exceed 500 characters."
+    );
+  }
+
+  const response =
+    await apiRequest<SingleOrderReviewResponse>(
+      `/api/order-reviews/${encodeURIComponent(
+        orderId.trim()
+      )}`,
+      {
+        method: "POST",
+        token,
+
+        body: JSON.stringify({
+          orderRating:
+            input.orderRating,
+
+          deliveryRating:
+            input.deliveryRating,
+
+          comment,
+        }),
+      }
+    );
+
+  return response.data.review;
+}
+
 export async function fetchSubscriptionPlans(): Promise<
   SubscriptionPlan[]
 > {
-  const response = await apiRequest<SubscriptionPlansResponse>(
-    "/api/subscriptions/plans"
-  );
+  const response =
+    await apiRequest<SubscriptionPlansResponse>(
+      "/api/subscriptions/plans"
+    );
 
   return response.data.plans;
 }
@@ -822,14 +1273,17 @@ export async function createCustomerSubscription(
   token: string,
   input: CreateSubscriptionInput
 ): Promise<CustomerSubscription> {
-  const response = await apiRequest<CreateSubscriptionResponse>(
-    "/api/subscriptions",
-    {
-      method: "POST",
-      token,
-      body: JSON.stringify(input),
-    }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<CreateSubscriptionResponse>(
+      "/api/subscriptions",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
 
   return response.data.subscription;
 }
@@ -837,10 +1291,15 @@ export async function createCustomerSubscription(
 export async function fetchMySubscriptions(
   token: string
 ): Promise<CustomerSubscription[]> {
-  const response = await apiRequest<MySubscriptionsResponse>(
-    "/api/subscriptions/my",
-    { token }
-  );
+  requireToken(token);
+
+  const response =
+    await apiRequest<MySubscriptionsResponse>(
+      "/api/subscriptions/my",
+      {
+        token,
+      }
+    );
 
   return response.data.subscriptions;
 }
@@ -849,10 +1308,22 @@ export async function fetchSubscriptionById(
   token: string,
   subscriptionId: string
 ): Promise<CustomerSubscription> {
-  const response = await apiRequest<SingleSubscriptionResponse>(
-    `/api/subscriptions/${encodeURIComponent(subscriptionId)}`,
-    { token }
+  requireToken(token);
+
+  requireIdentifier(
+    subscriptionId,
+    "Subscription ID is missing."
   );
+
+  const response =
+    await apiRequest<SingleSubscriptionResponse>(
+      `/api/subscriptions/${encodeURIComponent(
+        subscriptionId.trim()
+      )}`,
+      {
+        token,
+      }
+    );
 
   return response.data.subscription;
 }
@@ -860,20 +1331,36 @@ export async function fetchSubscriptionById(
 export async function cancelCustomerSubscription(
   token: string,
   subscriptionId: string,
-  reason = "Cancelled by customer"
+  reason =
+    "Cancelled by customer"
 ): Promise<CustomerSubscription> {
-  const response = await apiRequest<SingleSubscriptionResponse>(
-    `/api/subscriptions/${encodeURIComponent(
-      subscriptionId
-    )}/cancel`,
-    {
-      method: "PATCH",
-      token,
-      body: JSON.stringify({ reason }),
-    }
+  requireToken(token);
+
+  requireIdentifier(
+    subscriptionId,
+    "Subscription ID is missing."
   );
+
+  const response =
+    await apiRequest<SingleSubscriptionResponse>(
+      `/api/subscriptions/${encodeURIComponent(
+        subscriptionId.trim()
+      )}/cancel`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          reason:
+            reason.trim() ||
+            "Cancelled by customer",
+        }),
+      }
+    );
 
   return response.data.subscription;
 }
 
-export { API_BASE_URL };
+export {
+  API_BASE_URL,
+};

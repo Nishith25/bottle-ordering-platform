@@ -1,0 +1,250 @@
+.review-metric-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.review-metric-card {
+  min-height: 104px;
+  padding: 17px;
+  border: 1px solid #dfe5de;
+  border-radius: 19px;
+  background: #ffffff;
+}
+
+.review-metric-card span,
+.review-metric-card strong {
+  display: block;
+}
+
+.review-metric-card span {
+  color: #718078;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.review-metric-card strong {
+  margin-top: 13px;
+  color: #203128;
+  font-size: 23px;
+}
+
+.review-toolbar {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.review-search-form {
+  display: flex;
+  gap: 10px;
+}
+
+.review-search-form input {
+  flex: 1;
+}
+
+.review-search-form input,
+.review-search-form select {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dfe5de;
+  border-radius: 14px;
+  outline: none;
+  color: #203128;
+  background: #f7f8f5;
+  font-size: 9px;
+}
+
+.review-search-form input:focus,
+.review-search-form select:focus {
+  border-color: #6c967c;
+  box-shadow: 0 0 0 3px
+    rgba(86, 132, 102, 0.11);
+}
+
+.reviews-panel {
+  padding: 15px;
+}
+
+.delivery-review-list {
+  display: grid;
+  gap: 13px;
+}
+
+.delivery-review-card {
+  padding: 18px;
+  border: 1px solid #e1e6df;
+  border-radius: 21px;
+  background: #ffffff;
+}
+
+.review-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e8ece7;
+}
+
+.review-order-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.review-order-row strong {
+  color: #203128;
+  font-size: 13px;
+}
+
+.review-order-row span {
+  padding: 6px 9px;
+  border-radius: 10px;
+  color: #2b704c;
+  background: #e5f2e8;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.review-card-header small {
+  display: block;
+  margin-top: 6px;
+  color: #7c8880;
+  font-size: 8px;
+}
+
+.admin-star-display {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.admin-star-filled,
+.admin-star-empty {
+  font-size: 16px;
+}
+
+.admin-star-filled {
+  color: #dfa329;
+}
+
+.admin-star-empty {
+  color: #c5ccc7;
+}
+
+.review-people-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.review-people-grid > div {
+  min-height: 112px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f5f7f3;
+}
+
+.review-people-grid span,
+.review-people-grid strong,
+.review-people-grid small {
+  display: block;
+}
+
+.review-people-grid span {
+  color: #75827a;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+}
+
+.review-people-grid strong {
+  margin-top: 9px;
+  color: #2b3b32;
+  font-size: 11px;
+}
+
+.review-people-grid small {
+  margin-top: 5px;
+  color: #6e7b73;
+  font-size: 8px;
+}
+
+.review-rating-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.review-rating-grid > div {
+  padding: 13px;
+  border: 1px solid #e3e8e2;
+  border-radius: 15px;
+  background: #fbfcfa;
+}
+
+.review-rating-grid span {
+  display: block;
+  margin-bottom: 8px;
+  color: #617168;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.review-comment {
+  padding: 14px;
+  margin-top: 12px;
+  border-radius: 15px;
+  color: #47584f;
+  background: #edf5ef;
+  font-size: 9px;
+  line-height: 16px;
+}
+
+.review-no-comment {
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 14px;
+  color: #859089;
+  background: #f5f7f4;
+  font-size: 8px;
+}
+
+@media (max-width: 1000px) {
+  .review-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .review-search-form {
+    flex-direction: column;
+  }
+
+  .review-people-grid,
+  .review-rating-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-card-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 500px) {
+  .review-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
