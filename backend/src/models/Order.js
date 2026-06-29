@@ -11,7 +11,8 @@ const orderItemSchema =
     {
       product: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "Product",
         required: true,
@@ -152,7 +153,8 @@ const couponSnapshotSchema =
     {
       couponId: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "Coupon",
         default: null,
@@ -271,11 +273,50 @@ const orderSchema =
 
       user: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "User",
         required: true,
         index: true,
+      },
+
+      orderSource: {
+        type: String,
+
+        enum: [
+          "one_time",
+          "subscription",
+        ],
+
+        default: "one_time",
+        index: true,
+      },
+
+      subscription: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref: "Subscription",
+        index: true,
+      },
+
+      subscriptionNumber: {
+        type: String,
+        default: "",
+        trim: true,
+        uppercase: true,
+      },
+
+      subscriptionCycleKey: {
+        type: String,
+        trim: true,
+      },
+
+      subscriptionBillingAt: {
+        type: Date,
+        default: null,
       },
 
       items: {
@@ -344,7 +385,8 @@ const orderSchema =
 
       couponUsage: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "CouponUsage",
         default: null,
@@ -441,7 +483,8 @@ const orderSchema =
 
       deliveryPartner: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "User",
         default: null,
@@ -666,6 +709,30 @@ orderSchema.pre(
       this.couponDiscount < 0
     ) {
       this.couponDiscount = 0;
+    }
+
+    if (
+      this.orderSource ===
+      "subscription"
+    ) {
+      if (!this.subscription) {
+        this.invalidate(
+          "subscription",
+          "A recurring order must reference a subscription."
+        );
+      }
+
+      if (
+        !String(
+          this.subscriptionCycleKey ||
+            ""
+        ).trim()
+      ) {
+        this.invalidate(
+          "subscriptionCycleKey",
+          "A recurring order must include its billing-cycle key."
+        );
+      }
     }
 
     if (
@@ -980,6 +1047,22 @@ orderSchema.index({
   deliveryStatus: 1,
   createdAt: -1,
 });
+
+orderSchema.index({
+  orderSource: 1,
+  createdAt: -1,
+});
+
+orderSchema.index(
+  {
+    subscription: 1,
+    subscriptionCycleKey: 1,
+  },
+  {
+    unique: true,
+    sparse: true,
+  }
+);
 
 module.exports =
   mongoose.model(

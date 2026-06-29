@@ -35,6 +35,12 @@ const {
   startPaymentExpiryWorker,
 } = require("./routes/razorpayPayments");
 
+const {
+  startSubscriptionDeliveryWorker,
+} = require(
+  "./services/subscriptionDelivery"
+);
+
 const app = express();
 
 app.set("trust proxy", 1);
@@ -143,6 +149,7 @@ app.get(
   (req, res) => {
     return res.status(200).json({
       success: true,
+
       message:
         "Backend is running.",
 
@@ -323,6 +330,8 @@ async function startServer() {
         );
 
         startPaymentExpiryWorker();
+
+        startSubscriptionDeliveryWorker();
       }
     );
   } catch (error) {

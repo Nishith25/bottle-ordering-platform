@@ -1,5 +1,3 @@
-// backend/src/routes/adminSubscriptions.js
-
 const express = require("express");
 
 const {
@@ -12,6 +10,14 @@ const Subscription = require(
 );
 
 const User = require("../models/User");
+
+const {
+  generateDueSubscriptionDeliveries,
+  generateSubscriptionDelivery,
+  getDueSubscriptionDeliveriesPreview,
+} = require(
+  "../services/subscriptionDelivery"
+);
 
 const router = express.Router();
 
@@ -43,7 +49,9 @@ const ALLOWED_TRANSITIONS = {
 };
 
 function cleanText(value) {
-  return String(value ?? "").trim();
+  return String(
+    value ?? ""
+  ).trim();
 }
 
 function escapeRegex(value) {
@@ -53,25 +61,197 @@ function escapeRegex(value) {
   );
 }
 
+function parseLimit(
+  value,
+  fallback = 50
+) {
+  const parsedValue =
+    Number.parseInt(
+      String(value ?? ""),
+      10
+    );
+
+  if (
+    !Number.isFinite(parsedValue) ||
+    parsedValue < 1
+  ) {
+    return fallback;
+  }
+
+  return Math.min(
+    parsedValue,
+    100
+  );
+}
+
+/**
+ * GET
+ * /api/admin/subscriptions/due-deliveries
+ */
+router.get(
+  "/due-deliveries",
+  async (req, res, next) => {
+    try {
+      const preview =
+        await getDueSubscriptionDeliveriesPreview({
+          dueAt:
+            new Date(),
+
+          limit:
+            parseLimit(
+              req.query.limit,
+              50
+            ),
+        });
+
+      return res.status(200).json({
+        success: true,
+        count: preview.count,
+
+        data: preview,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
+ * POST
+ * /api/admin/subscriptions/generate-due-deliveries
+ */
+router.post(
+  "/generate-due-deliveries",
+  async (req, res, next) => {
+    try {
+      const result =
+        await generateDueSubscriptionDeliveries({
+          dueAt:
+            new Date(),
+
+          limit:
+            parseLimit(
+              req.body.limit,
+              25
+            ),
+        });
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          result.createdCount > 0
+            ? `${result.createdCount} recurring delivery order${
+                result.createdCount ===
+                1
+                  ? ""
+                  : "s"
+              } generated successfully.`
+            : "No due subscription deliveries required generation.",
+
+        data: result,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
+ * POST
+ * /api/admin/subscriptions/:subscriptionId/generate-delivery
+ *
+ * force=true allows the administrator to
+ * generate the upcoming cycle before its due date.
+ */
+router.post(
+  "/:subscriptionId/generate-delivery",
+  async (req, res, next) => {
+    try {
+      const force =
+        req.body.force === true;
+
+      const result =
+        await generateSubscriptionDelivery({
+          subscriptionId:
+            req.params.subscriptionId,
+
+          dueAt:
+            new Date(),
+
+          force,
+        });
+
+      if (
+        result.status ===
+        "failed"
+      ) {
+        return res.status(409).json({
+          success: false,
+
+          message:
+            result.reason,
+
+          data: {
+            result,
+          },
+        });
+      }
+
+      return res
+        .status(
+          result.status ===
+            "created"
+            ? 201
+            : 200
+        )
+        .json({
+          success: true,
+
+          message:
+            result.status ===
+            "created"
+              ? "Recurring delivery order generated successfully."
+              : result.reason,
+
+          data: {
+            result,
+          },
+        });
+    } catch (error) {
+      if (
+        error.name ===
+        "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+
+          message:
+            "Subscription not found.",
+        });
+      }
+
+      return next(error);
+    }
+  }
+);
+
 /**
  * GET /api/admin/subscriptions
- *
- * Query parameters:
- * status=active
- * search=subscription number, plan, customer,
- * email, phone or delivery address
  */
 router.get(
   "/",
   async (req, res, next) => {
     try {
-      const status = cleanText(
-        req.query.status
-      ).toLowerCase();
+      const status =
+        cleanText(
+          req.query.status
+        ).toLowerCase();
 
-      const search = cleanText(
-        req.query.search
-      );
+      const search =
+        cleanText(
+          req.query.search
+        );
 
       const filter = {};
 
@@ -86,6 +266,7 @@ router.get(
         ) {
           return res.status(400).json({
             success: false,
+
             message:
               "Invalid subscription status filter.",
           });
@@ -108,11 +289,15 @@ router.get(
                 fullName:
                   searchRegex,
               },
+
               {
-                email: searchRegex,
+                email:
+                  searchRegex,
               },
+
               {
-                phone: searchRegex,
+                phone:
+                  searchRegex,
               },
             ],
           })
@@ -121,7 +306,8 @@ router.get(
 
         const matchingUserIds =
           matchingUsers.map(
-            (user) => user._id
+            (user) =>
+              user._id
           );
 
         filter.$or = [
@@ -129,39 +315,51 @@ router.get(
             subscriptionNumber:
               searchRegex,
           },
+
           {
-            planId: searchRegex,
+            planId:
+              searchRegex,
           },
+
           {
-            planName: searchRegex,
+            planName:
+              searchRegex,
           },
+
           {
             preferredDay:
               searchRegex,
           },
+
           {
             "deliveryAddress.fullName":
               searchRegex,
           },
+
           {
             "deliveryAddress.phone":
               searchRegex,
           },
+
           {
             "deliveryAddress.pincode":
               searchRegex,
           },
+
           {
             "deliveryAddress.area":
               searchRegex,
           },
+
           {
             "deliveryAddress.city":
               searchRegex,
           },
+
           {
             user: {
-              $in: matchingUserIds,
+              $in:
+                matchingUserIds,
             },
           },
         ];
@@ -176,6 +374,10 @@ router.get(
             "user",
             "fullName email phone role active"
           )
+          .populate(
+            "lastDeliveryOrder",
+            "orderNumber orderStatus deliveryStatus createdAt"
+          )
           .sort({
             createdAt: -1,
           })
@@ -185,7 +387,9 @@ router.get(
         Subscription.aggregate([
           {
             $group: {
-              _id: "$status",
+              _id:
+                "$status",
+
               count: {
                 $sum: 1,
               },
@@ -196,27 +400,39 @@ router.get(
 
       const statusCounts =
         SUBSCRIPTION_STATUSES.reduce(
-          (result, subscriptionStatus) => {
-            result[subscriptionStatus] = 0;
+          (
+            result,
+            subscriptionStatus
+          ) => {
+            result[
+              subscriptionStatus
+            ] = 0;
+
             return result;
           },
           {}
         );
 
-      for (const item of statusBreakdown) {
+      for (
+        const item of
+        statusBreakdown
+      ) {
         if (
           SUBSCRIPTION_STATUSES.includes(
             item._id
           )
         ) {
-          statusCounts[item._id] =
+          statusCounts[
+            item._id
+          ] =
             item.count;
         }
       }
 
       return res.status(200).json({
         success: true,
-        count: subscriptions.length,
+        count:
+          subscriptions.length,
 
         data: {
           subscriptions,
@@ -237,13 +453,15 @@ router.patch(
   "/:subscriptionId/status",
   async (req, res, next) => {
     try {
-      const nextStatus = cleanText(
-        req.body.status
-      ).toLowerCase();
+      const nextStatus =
+        cleanText(
+          req.body.status
+        ).toLowerCase();
 
-      const reason = cleanText(
-        req.body.reason
-      );
+      const reason =
+        cleanText(
+          req.body.reason
+        );
 
       if (
         !SUBSCRIPTION_STATUSES.includes(
@@ -252,6 +470,7 @@ router.patch(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Please select a valid subscription status.",
         });
@@ -265,6 +484,7 @@ router.patch(
       if (!subscription) {
         return res.status(404).json({
           success: false,
+
           message:
             "Subscription not found.",
         });
@@ -281,6 +501,10 @@ router.patch(
             .populate(
               "user",
               "fullName email phone role active"
+            )
+            .populate(
+              "lastDeliveryOrder",
+              "orderNumber orderStatus deliveryStatus createdAt"
             )
             .lean();
 
@@ -310,14 +534,18 @@ router.patch(
         return res.status(400).json({
           success: false,
 
-          message: `Subscription cannot move from ${subscription.status} to ${nextStatus}.`,
+          message:
+            `Subscription cannot move from ${subscription.status} to ${nextStatus}.`,
         });
       }
 
       subscription.status =
         nextStatus;
 
-      if (nextStatus === "cancelled") {
+      if (
+        nextStatus ===
+        "cancelled"
+      ) {
         subscription.paymentStatus =
           "cancelled";
 
@@ -329,7 +557,10 @@ router.patch(
           "Cancelled by administrator";
       }
 
-      if (nextStatus === "paused") {
+      if (
+        nextStatus ===
+        "paused"
+      ) {
         subscription.cancellationReason =
           "";
 
@@ -337,7 +568,10 @@ router.patch(
           null;
       }
 
-      if (nextStatus === "active") {
+      if (
+        nextStatus ===
+        "active"
+      ) {
         subscription.cancellationReason =
           "";
 
@@ -353,7 +587,10 @@ router.patch(
         }
       }
 
-      if (nextStatus === "expired") {
+      if (
+        nextStatus ===
+        "expired"
+      ) {
         subscription.cancellationReason =
           reason ||
           "Subscription expired";
@@ -372,6 +609,10 @@ router.patch(
             "user",
             "fullName email phone role active"
           )
+          .populate(
+            "lastDeliveryOrder",
+            "orderNumber orderStatus deliveryStatus createdAt"
+          )
           .lean();
 
       return res.status(200).json({
@@ -387,10 +628,12 @@ router.patch(
       });
     } catch (error) {
       if (
-        error.name === "CastError"
+        error.name ===
+        "CastError"
       ) {
         return res.status(404).json({
           success: false,
+
           message:
             "Subscription not found.",
         });

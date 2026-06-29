@@ -11,7 +11,8 @@ const subscriptionItemSchema =
     {
       product: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "Product",
         required: true,
@@ -126,7 +127,8 @@ const couponSnapshotSchema =
     {
       couponId: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "Coupon",
         default: null,
@@ -218,7 +220,8 @@ const subscriptionSchema =
 
       user: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "User",
         required: true,
@@ -227,7 +230,8 @@ const subscriptionSchema =
 
       plan: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "SubscriptionPlan",
         required: true,
@@ -346,7 +350,8 @@ const subscriptionSchema =
 
       couponUsage: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema.Types
+            .ObjectId,
 
         ref: "CouponUsage",
         default: null,
@@ -428,6 +433,43 @@ const subscriptionSchema =
         type: String,
         default: "",
         trim: true,
+      },
+
+      lastDeliveryOrder: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref: "Order",
+        default: null,
+      },
+
+      lastDeliveryOrderAt: {
+        type: Date,
+        default: null,
+      },
+
+      generatedDeliveryCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      lastDeliveryGenerationAttemptAt: {
+        type: Date,
+        default: null,
+      },
+
+      lastDeliveryGenerationFailedAt: {
+        type: Date,
+        default: null,
+      },
+
+      lastDeliveryGenerationError: {
+        type: String,
+        default: "",
+        trim: true,
+        maxlength: 500,
       },
     },
     {
@@ -550,12 +592,6 @@ function scheduleSubscriptionNotification({
 }) {
   const run =
     async () => {
-      /*
-       * Subscriptions may be saved inside a
-       * MongoDB transaction. Wait until the
-       * committed document becomes visible
-       * before generating the notification.
-       */
       const retryDelays = [
         25,
         75,
@@ -763,6 +799,7 @@ subscriptionSchema.index({
 
 subscriptionSchema.index({
   status: 1,
+  paymentStatus: 1,
   nextBillingAt: 1,
 });
 
