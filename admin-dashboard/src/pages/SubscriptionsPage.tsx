@@ -1,25 +1,158 @@
 import {
-  type FormEvent,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
 
+import {
+  useNavigate,
+} from "react-router-dom";
+
 import DueSubscriptionDeliveriesPanel from "../components/DueSubscriptionDeliveriesPanel";
 
-import { useAdminAuth } from "../context/AuthContext";
+import {
+  useAdminAuth,
+} from "../context/AuthContext";
 
 import {
-  fetchAdminSubscriptions,
   updateAdminSubscriptionStatus,
   type AdminSubscription,
   type AdminSubscriptionStatus,
-  type AdminSubscriptionStatusCounts,
-  type AdminSubscriptionUser,
 } from "../services/adminSubscriptionsApi";
 
 import "./subscriptions.css";
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL ??
+  "http://localhost:5001"
+).replace(/\/$/, "");
+
+type SubscriptionUser = {
+  _id?: string;
+  fullName?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  active?: boolean;
+};
+
+type SubscriptionItem = {
+  _id?: string;
+  product?: string;
+  productId?: string;
+  name?: string;
+  shortName?: string;
+  sizeMl?: number;
+  price?: number;
+  quantity?: number;
+  lineTotal?: number;
+};
+
+type SubscriptionAddress = {
+  fullName?: string;
+  phone?: string;
+  pincode?: string;
+  houseDetails?: string;
+  areaDetails?: string;
+  landmark?: string;
+  area?: string;
+  city?: string;
+};
+
+type SubscriptionRecord =
+  AdminSubscription & {
+    _id: string;
+
+    subscriptionNumber: string;
+
+    user?:
+      | string
+      | SubscriptionUser
+      | null;
+
+    planId?: string;
+    planName: string;
+
+    billingCycle:
+      | "weekly"
+      | "monthly";
+
+    bottleCount: number;
+    deliveriesPerCycle?: number;
+
+    items?: SubscriptionItem[];
+
+    preferredDay?: string;
+    preferredSlot?: string;
+
+    deliveryAddress:
+      SubscriptionAddress;
+
+    originalTotal?: number;
+    discountPercent?: number;
+    savings?: number;
+    amountBeforeCoupon?: number;
+    couponDiscount?: number;
+    totalPerCycle: number;
+    recurringTotalPerCycle?: number;
+
+    coupon?: {
+      code?: string;
+      discountAmount?: number;
+    } | null;
+
+    paymentMethod?: string;
+    paymentStatus?: string;
+    paymentReference?: string;
+
+    status:
+      AdminSubscriptionStatus;
+
+    startDate?: string;
+    nextBillingAt?: string;
+
+    cancellationReason?: string;
+    cancelledAt?: string | null;
+
+    generatedDeliveryCount?: number;
+    lastDeliveryOrderAt?: string | null;
+    lastDeliveryGenerationError?: string;
+
+    createdAt?: string;
+    updatedAt?: string;
+  };
+
+type SubscriptionApiResponse = {
+  success?: boolean;
+  message?: string;
+
+  data?: {
+    subscriptions?:
+      SubscriptionRecord[];
+  };
+
+  subscriptions?:
+    SubscriptionRecord[];
+};
+
+type StatusFilter =
+  | "all"
+  | AdminSubscriptionStatus;
+
+type BillingFilter =
+  | "all"
+  | "weekly"
+  | "monthly";
+
+type PaymentFilter =
+  | "all"
+  | "demo_confirmed"
+  | "active"
+  | "mandate_pending"
+  | "failed"
+  | "cancelled";
 
 const STATUS_LABELS: Record<
   AdminSubscriptionStatus,
@@ -48,17 +181,22 @@ const NEXT_STATUSES: Record<
   ],
 
   cancelled: [],
+
   expired: [],
 };
 
-const EMPTY_COUNTS: AdminSubscriptionStatusCounts = {
-  active: 0,
-  paused: 0,
-  cancelled: 0,
-  expired: 0,
-};
+function getErrorMessage(
+  error: unknown,
+  fallback: string
+) {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
 
-function formatCurrency(value: number) {
+function formatCurrency(
+  value?: number
+) {
   return new Intl.NumberFormat(
     "en-IN",
     {
@@ -66,24 +204,27 @@ function formatCurrency(value: number) {
       currency: "INR",
       maximumFractionDigits: 0,
     }
-  ).format(value);
+  ).format(
+    Number(value || 0)
+  );
 }
 
 function formatDate(
   value?: string | null
 ) {
   if (!value) {
-    return "—";
+    return "Unavailable";
   }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-    return "—";
+    return "Unavailable";
   }
 
   return date.toLocaleString(
@@ -98,37 +239,14 @@ function formatDate(
   );
 }
 
-function getCustomer(
-  subscription: AdminSubscription
-): AdminSubscriptionUser | null {
-  if (
-    subscription.user &&
-    typeof subscription.user ===
-      "object"
-  ) {
-    return subscription.user;
+function formatStatus(
+  value?: string
+) {
+  if (!value) {
+    return "Unavailable";
   }
 
-  return null;
-}
-
-function formatPaymentMethod(
-  paymentMethod: string
-) {
-  if (
-    paymentMethod ===
-    "upi_autopay"
-  ) {
-    return "UPI AutoPay";
-  }
-
-  return "Card mandate";
-}
-
-function formatPaymentStatus(
-  paymentStatus: string
-) {
-  return paymentStatus
+  return value
     .replace(/_/g, " ")
     .replace(
       /\b\w/g,
@@ -137,7 +255,123 @@ function formatPaymentStatus(
     );
 }
 
+function getCustomer(
+  subscription:
+    SubscriptionRecord
+): SubscriptionUser | null {
+  const user =
+    subscription.user;
+
+  if (
+    !user ||
+    typeof user === "string"
+  ) {
+    return null;
+  }
+
+  return user;
+}
+
+function getCustomerName(
+  subscription:
+    SubscriptionRecord
+) {
+  const customer =
+    getCustomer(subscription);
+
+  return (
+    customer?.fullName ||
+    customer?.name ||
+    subscription.deliveryAddress
+      ?.fullName ||
+    "Customer"
+  );
+}
+
+function getCustomerEmail(
+  subscription:
+    SubscriptionRecord
+) {
+  const customer =
+    getCustomer(subscription);
+
+  return (
+    customer?.email ||
+    "Email unavailable"
+  );
+}
+
+function getCustomerPhone(
+  subscription:
+    SubscriptionRecord
+) {
+  const customer =
+    getCustomer(subscription);
+
+  return (
+    customer?.phone ||
+    subscription.deliveryAddress
+      ?.phone ||
+    "Unavailable"
+  );
+}
+
+function getAddressText(
+  subscription:
+    SubscriptionRecord
+) {
+  const address =
+    subscription.deliveryAddress;
+
+  if (!address) {
+    return "Delivery address unavailable";
+  }
+
+  return [
+    address.houseDetails,
+    address.areaDetails,
+
+    address.landmark
+      ? `Near ${address.landmark}`
+      : "",
+
+    address.area,
+    address.city,
+    address.pincode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getSubscriptionsFromPayload(
+  payload:
+    SubscriptionApiResponse
+) {
+  if (
+    Array.isArray(
+      payload.data
+        ?.subscriptions
+    )
+  ) {
+    return payload.data
+      .subscriptions;
+  }
+
+  if (
+    Array.isArray(
+      payload.subscriptions
+    )
+  ) {
+    return payload.subscriptions;
+  }
+
+  return [];
+}
+
 export default function SubscriptionsPage() {
+  const navigate =
+    useNavigate();
+
   const {
     token,
   } = useAdminAuth();
@@ -145,32 +379,10 @@ export default function SubscriptionsPage() {
   const [
     subscriptions,
     setSubscriptions,
-  ] = useState<
-    AdminSubscription[]
-  >([]);
-
-  const [
-    statusCounts,
-    setStatusCounts,
   ] =
-    useState<AdminSubscriptionStatusCounts>(
-      EMPTY_COUNTS
-    );
-
-  const [
-    statusFilter,
-    setStatusFilter,
-  ] = useState("all");
-
-  const [
-    search,
-    setSearch,
-  ] = useState("");
-
-  const [
-    submittedSearch,
-    setSubmittedSearch,
-  ] = useState("");
+    useState<
+      SubscriptionRecord[]
+    >([]);
 
   const [
     loading,
@@ -178,132 +390,363 @@ export default function SubscriptionsPage() {
   ] = useState(true);
 
   const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
+
+  const [
     updatingSubscriptionId,
     setUpdatingSubscriptionId,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const [
     error,
     setError,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const [
     success,
     setSuccess,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    searchTerm,
+    setSearchTerm,
+  ] = useState("");
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      "all"
+    );
+
+  const [
+    billingFilter,
+    setBillingFilter,
+  ] =
+    useState<BillingFilter>(
+      "all"
+    );
+
+  const [
+    paymentFilter,
+    setPaymentFilter,
+  ] =
+    useState<PaymentFilter>(
+      "all"
+    );
 
   const loadSubscriptions =
-    useCallback(async () => {
-      if (!token) {
-        setSubscriptions([]);
-        setStatusCounts(
-          EMPTY_COUNTS
-        );
-        setLoading(false);
-
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result =
-          await fetchAdminSubscriptions(
-            token,
-            {
-              status:
-                statusFilter,
-
-              search:
-                submittedSearch,
-            }
+    useCallback(
+      async (
+        showMainLoader =
+          false
+      ) => {
+        if (!token) {
+          setSubscriptions(
+            []
           );
 
-        setSubscriptions(
-          result.subscriptions
-        );
+          setLoading(false);
 
-        setStatusCounts(
-          result.statusCounts
-        );
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load subscriptions."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, [
-      token,
-      statusFilter,
-      submittedSearch,
-    ]);
+          return;
+        }
+
+        if (
+          showMainLoader
+        ) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+
+        setError(null);
+
+        try {
+          const controller =
+            new AbortController();
+
+          const timeoutId =
+            window.setTimeout(
+              () => {
+                controller.abort();
+              },
+              20000
+            );
+
+          let response:
+            Response;
+
+          try {
+            response =
+              await fetch(
+                `${API_BASE_URL}/api/admin/subscriptions?limit=100`,
+                {
+                  headers: {
+                    Accept:
+                      "application/json",
+
+                    Authorization:
+                      `Bearer ${token}`,
+                  },
+
+                  signal:
+                    controller.signal,
+                }
+              );
+          } finally {
+            window.clearTimeout(
+              timeoutId
+            );
+          }
+
+          const responseText =
+            await response.text();
+
+          let payload:
+            SubscriptionApiResponse;
+
+          try {
+            payload =
+              responseText
+                ? JSON.parse(
+                    responseText
+                  )
+                : {};
+          } catch {
+            throw new Error(
+              "The backend returned an invalid response."
+            );
+          }
+
+          if (
+            !response.ok ||
+            payload.success ===
+              false
+          ) {
+            throw new Error(
+              payload.message ||
+                "Unable to load subscriptions."
+            );
+          }
+
+          setSubscriptions(
+            getSubscriptionsFromPayload(
+              payload
+            )
+          );
+        } catch (
+          requestError
+        ) {
+          if (
+            requestError instanceof
+              Error &&
+            requestError.name ===
+              "AbortError"
+          ) {
+            setError(
+              "The backend took too long to respond."
+            );
+
+            return;
+          }
+
+          if (
+            requestError instanceof
+            TypeError
+          ) {
+            setError(
+              "Unable to connect to the backend."
+            );
+
+            return;
+          }
+
+          setError(
+            getErrorMessage(
+              requestError,
+              "Unable to load subscriptions."
+            )
+          );
+        } finally {
+          setLoading(false);
+          setRefreshing(
+            false
+          );
+        }
+      },
+      [token]
+    );
 
   useEffect(() => {
-    void loadSubscriptions();
-  }, [loadSubscriptions]);
-
-  const totalSubscriptions =
-    useMemo(
-      () =>
-        Object.values(
-          statusCounts
-        ).reduce(
-          (
-            sum,
-            count
-          ) =>
-            sum + count,
-          0
-        ),
-      [statusCounts]
+    void loadSubscriptions(
+      true
     );
+  }, [
+    loadSubscriptions,
+  ]);
 
-  const activeCycleValue =
-    useMemo(
-      () =>
-        subscriptions
-          .filter(
-            (subscription) =>
-              subscription.status ===
-              "active"
-          )
-          .reduce(
-            (
-              sum,
+  const filteredSubscriptions =
+    useMemo(() => {
+      const normalizedSearch =
+        searchTerm
+          .trim()
+          .toLowerCase();
+
+      return subscriptions.filter(
+        (subscription) => {
+          if (
+            statusFilter !==
+              "all" &&
+            subscription.status !==
+              statusFilter
+          ) {
+            return false;
+          }
+
+          if (
+            billingFilter !==
+              "all" &&
+            subscription.billingCycle !==
+              billingFilter
+          ) {
+            return false;
+          }
+
+          if (
+            paymentFilter !==
+              "all" &&
+            subscription.paymentStatus !==
+              paymentFilter
+          ) {
+            return false;
+          }
+
+          if (
+            !normalizedSearch
+          ) {
+            return true;
+          }
+
+          const customer =
+            getCustomer(
               subscription
-            ) =>
-              sum +
-              subscription.totalPerCycle,
-            0
-          ),
-      [subscriptions]
-    );
+            );
 
-  const handleSearch = (
-    event:
-      FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
+          const searchableText =
+            [
+              subscription.subscriptionNumber,
+              subscription.planName,
+              customer?.fullName,
+              customer?.name,
+              customer?.email,
+              customer?.phone,
+              subscription.deliveryAddress
+                ?.fullName,
+              subscription.deliveryAddress
+                ?.phone,
+              subscription.deliveryAddress
+                ?.pincode,
+              subscription.deliveryAddress
+                ?.area,
+              subscription.deliveryAddress
+                ?.city,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
 
-    setSubmittedSearch(
-      search.trim()
-    );
-  };
+          return searchableText.includes(
+            normalizedSearch
+          );
+        }
+      );
+    }, [
+      subscriptions,
+      searchTerm,
+      statusFilter,
+      billingFilter,
+      paymentFilter,
+    ]);
+
+  const summary =
+    useMemo(() => {
+      return subscriptions.reduce(
+        (
+          totals,
+          subscription
+        ) => {
+          totals.total += 1;
+
+          if (
+            subscription.status ===
+            "active"
+          ) {
+            totals.active += 1;
+          }
+
+          if (
+            subscription.status ===
+            "paused"
+          ) {
+            totals.paused += 1;
+          }
+
+          if (
+            subscription.status ===
+            "cancelled"
+          ) {
+            totals.cancelled += 1;
+          }
+
+          if (
+            subscription.status ===
+            "expired"
+          ) {
+            totals.expired += 1;
+          }
+
+          return totals;
+        },
+        {
+          total: 0,
+          active: 0,
+          paused: 0,
+          cancelled: 0,
+          expired: 0,
+        }
+      );
+    }, [subscriptions]);
+
+  const clearFilters =
+    () => {
+      setSearchTerm("");
+      setStatusFilter(
+        "all"
+      );
+      setBillingFilter(
+        "all"
+      );
+      setPaymentFilter(
+        "all"
+      );
+    };
 
   const handleStatusChange =
     async (
       subscription:
-        AdminSubscription,
+        SubscriptionRecord,
 
       nextStatus:
         AdminSubscriptionStatus
@@ -327,7 +770,7 @@ export default function SubscriptionsPage() {
       ) {
         const confirmed =
           window.confirm(
-            `Cancel subscription ${subscription.subscriptionNumber}?`
+            `Cancel ${subscription.subscriptionNumber}? Future recurring deliveries will stop permanently.`
           );
 
         if (!confirmed) {
@@ -336,12 +779,13 @@ export default function SubscriptionsPage() {
 
         const enteredReason =
           window.prompt(
-            "Enter cancellation reason:",
+            "Enter the cancellation reason:",
             "Cancelled by administrator"
           );
 
         if (
-          enteredReason === null
+          enteredReason ===
+          null
         ) {
           return;
         }
@@ -368,6 +812,36 @@ export default function SubscriptionsPage() {
           "Subscription expired";
       }
 
+      if (
+        nextStatus ===
+        "paused"
+      ) {
+        const confirmed =
+          window.confirm(
+            `Pause ${subscription.subscriptionNumber}? Automatic recurring deliveries will stop until it is resumed.`
+          );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      if (
+        nextStatus ===
+        "active" &&
+        subscription.status ===
+          "paused"
+      ) {
+        const confirmed =
+          window.confirm(
+            `Resume ${subscription.subscriptionNumber}? Automatic recurring deliveries will become active again.`
+          );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
       setUpdatingSubscriptionId(
         subscription._id
       );
@@ -376,39 +850,28 @@ export default function SubscriptionsPage() {
       setSuccess(null);
 
       try {
-        const updatedSubscription =
-          await updateAdminSubscriptionStatus(
-            token,
-            subscription._id,
-            nextStatus,
-            reason
-          );
-
-        setSubscriptions(
-          (
-            currentSubscriptions
-          ) =>
-            currentSubscriptions.map(
-              (
-                currentSubscription
-              ) =>
-                currentSubscription._id ===
-                updatedSubscription._id
-                  ? updatedSubscription
-                  : currentSubscription
-            )
+        await updateAdminSubscriptionStatus(
+          token,
+          subscription._id,
+          nextStatus,
+          reason
         );
 
         setSuccess(
           `${subscription.subscriptionNumber} changed to ${STATUS_LABELS[nextStatus]}.`
         );
 
-        await loadSubscriptions();
-      } catch (requestError) {
+        await loadSubscriptions(
+          false
+        );
+      } catch (
+        requestError
+      ) {
         setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to update subscription."
+          getErrorMessage(
+            requestError,
+            "Unable to update the subscription."
+          )
         );
       } finally {
         setUpdatingSubscriptionId(
@@ -421,27 +884,35 @@ export default function SubscriptionsPage() {
     <div className="subscriptions-page">
       <div className="page-heading-row">
         <div>
+          <span className="page-eyebrow">
+            SUBSCRIPTION OPERATIONS
+          </span>
+
           <h2>
             Customer subscriptions
           </h2>
 
           <p>
             Review recurring plans,
-            generate due delivery orders
-            and manage subscription
-            statuses.
+            generate due delivery
+            orders and control
+            subscription statuses.
           </p>
         </div>
 
         <button
           type="button"
           className="secondary-button"
-          disabled={loading}
+          disabled={
+            refreshing
+          }
           onClick={() => {
-            void loadSubscriptions();
+            void loadSubscriptions(
+              false
+            );
           }}
         >
-          {loading
+          {refreshing
             ? "Refreshing..."
             : "Refresh subscriptions"}
         </button>
@@ -462,652 +933,300 @@ export default function SubscriptionsPage() {
       <DueSubscriptionDeliveriesPanel />
 
       <div className="subscription-summary-grid">
-        <article className="subscription-summary-card">
-          <span>
-            Total subscriptions
-          </span>
-
-          <strong>
-            {totalSubscriptions}
-          </strong>
-        </article>
-
-        <article className="subscription-summary-card">
-          <span>
-            Active subscriptions
-          </span>
-
-          <strong>
-            {statusCounts.active}
-          </strong>
-        </article>
-
-        <article className="subscription-summary-card">
-          <span>
-            Visible active cycle value
-          </span>
-
-          <strong>
-            {formatCurrency(
-              activeCycleValue
-            )}
-          </strong>
-        </article>
-      </div>
-
-      <div className="subscription-filter-grid">
-        <SubscriptionMetric
-          label="All"
-          value={
-            totalSubscriptions
-          }
-          active={
-            statusFilter === "all"
-          }
-          onClick={() => {
-            setStatusFilter("all");
-          }}
+        <SummaryCard
+          label="Total subscriptions"
+          value={summary.total}
+          description="All customer plans"
         />
 
-        {(
-          Object.keys(
-            STATUS_LABELS
-          ) as AdminSubscriptionStatus[]
-        ).map((status) => (
-          <SubscriptionMetric
-            key={status}
-            label={
-              STATUS_LABELS[
-                status
-              ]
-            }
-            value={
-              statusCounts[
-                status
-              ]
-            }
-            active={
-              statusFilter ===
-              status
-            }
-            onClick={() => {
-              setStatusFilter(
-                status
-              );
-            }}
-          />
-        ))}
+        <SummaryCard
+          label="Active"
+          value={summary.active}
+          description="Generating future deliveries"
+        />
+
+        <SummaryCard
+          label="Paused"
+          value={summary.paused}
+          description="Recurring deliveries stopped"
+        />
+
+        <SummaryCard
+          label="Cancelled"
+          value={
+            summary.cancelled
+          }
+          description="Permanently stopped plans"
+        />
+
+        <SummaryCard
+          label="Expired"
+          value={summary.expired}
+          description="Completed or expired plans"
+        />
       </div>
 
-      <section className="panel subscriptions-toolbar">
-        <form
-          className="subscription-search-form"
-          onSubmit={
-            handleSearch
-          }
-        >
-          <input
-            value={search}
-            onChange={(
-              event
-            ) => {
-              setSearch(
-                event.target.value
-              );
-            }}
-            placeholder="Search subscription, plan, customer, email or phone"
-          />
-
-          <button
-            type="submit"
-            className="primary-button"
-          >
-            Search
-          </button>
-
-          {submittedSearch ? (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                setSearch("");
-                setSubmittedSearch(
-                  ""
-                );
-              }}
-            >
-              Clear
-            </button>
-          ) : null}
-        </form>
-      </section>
-
-      <section className="panel subscriptions-panel">
-        {loading &&
-        subscriptions.length ===
-          0 ? (
-          <div className="page-state compact">
-            <div className="spinner" />
-
-            <p>
-              Loading customer
-              subscriptions
-            </p>
-          </div>
-        ) : subscriptions.length ===
-          0 ? (
-          <div className="page-state compact">
-            <div className="state-icon">
-              ↻
-            </div>
-
+      <section className="subscription-filter-card">
+        <div className="subscription-filter-heading">
+          <div>
             <h3>
-              No subscriptions found
+              Find subscriptions
             </h3>
 
             <p>
-              No subscriptions match
-              the selected filters.
+              Search by subscription,
+              customer, email, phone,
+              pincode or location.
             </p>
           </div>
-        ) : (
-          <div className="admin-subscription-list">
-            {subscriptions.map(
-              (
-                subscription
-              ) => {
-                const customer =
-                  getCustomer(
-                    subscription
-                  );
 
-                const nextStatuses =
-                  NEXT_STATUSES[
-                    subscription
-                      .status
-                  ];
+          <button
+            type="button"
+            className="text-button"
+            onClick={
+              clearFilters
+            }
+          >
+            Clear filters
+          </button>
+        </div>
 
-                return (
-                  <article
-                    key={
-                      subscription._id
-                    }
-                    className="admin-subscription-card"
-                  >
-                    <div className="admin-subscription-header">
-                      <div>
-                        <div className="subscription-number-row">
-                          <strong>
-                            {
-                              subscription.subscriptionNumber
-                            }
-                          </strong>
+        <div className="subscription-filter-grid">
+          <label>
+            Search
 
-                          <span
-                            className={`subscription-status status-${subscription.status}`}
-                          >
-                            {
-                              STATUS_LABELS[
-                                subscription
-                                  .status
-                              ]
-                            }
-                          </span>
-                        </div>
-
-                        <span className="subscription-created">
-                          Created{" "}
-                          {formatDate(
-                            subscription.createdAt
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="subscription-cycle-total">
-                        <span>
-                          Per cycle
-                        </span>
-
-                        <strong>
-                          {formatCurrency(
-                            subscription.totalPerCycle
-                          )}
-                        </strong>
-
-                        <small>
-                          {
-                            subscription.billingCycle
-                          }
-                        </small>
-                      </div>
-                    </div>
-
-                    <div className="subscription-plan-banner">
-                      <div>
-                        <span>
-                          Subscription
-                          plan
-                        </span>
-
-                        <strong>
-                          {
-                            subscription.planName
-                          }
-                        </strong>
-
-                        <small>
-                          {
-                            subscription.planId
-                          }
-                        </small>
-                      </div>
-
-                      <div className="subscription-plan-numbers">
-                        <div>
-                          <strong>
-                            {
-                              subscription.bottleCount
-                            }
-                          </strong>
-
-                          <span>
-                            Bottles
-                          </span>
-                        </div>
-
-                        <div>
-                          <strong>
-                            {
-                              subscription.deliveriesPerCycle
-                            }
-                          </strong>
-
-                          <span>
-                            Deliveries
-                          </span>
-                        </div>
-
-                        <div>
-                          <strong>
-                            {
-                              subscription.discountPercent
-                            }
-                            %
-                          </strong>
-
-                          <span>
-                            Saving
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="subscription-information-grid">
-                      <div className="subscription-information-section">
-                        <h4>
-                          Customer
-                        </h4>
-
-                        <strong>
-                          {customer?.fullName ??
-                            subscription
-                              .deliveryAddress
-                              .fullName}
-                        </strong>
-
-                        <span>
-                          {customer?.email ??
-                            "Email unavailable"}
-                        </span>
-
-                        <span>
-                          +91{" "}
-                          {customer?.phone ??
-                            subscription
-                              .deliveryAddress
-                              .phone}
-                        </span>
-
-                        {customer?.role ===
-                        "admin" ? (
-                          <small className="customer-admin-label">
-                            Administrator
-                            account
-                          </small>
-                        ) : null}
-                      </div>
-
-                      <div className="subscription-information-section">
-                        <h4>
-                          Delivery
-                          preference
-                        </h4>
-
-                        <strong>
-                          {
-                            subscription.preferredDay
-                          }
-                        </strong>
-
-                        <span>
-                          {
-                            subscription.preferredSlot
-                          }
-                        </span>
-
-                        <span>
-                          {
-                            subscription
-                              .deliveryAddress
-                              .area
-                          }
-                          ,{" "}
-                          {
-                            subscription
-                              .deliveryAddress
-                              .city
-                          }{" "}
-                          –{" "}
-                          {
-                            subscription
-                              .deliveryAddress
-                              .pincode
-                          }
-                        </span>
-                      </div>
-
-                      <div className="subscription-information-section">
-                        <h4>
-                          Billing
-                        </h4>
-
-                        <strong>
-                          Next billing:{" "}
-                          {formatDate(
-                            subscription.nextBillingAt
-                          )}
-                        </strong>
-
-                        <span>
-                          Started:{" "}
-                          {formatDate(
-                            subscription.startDate
-                          )}
-                        </span>
-
-                        <span>
-                          Saved{" "}
-                          {formatCurrency(
-                            subscription.savings
-                          )}{" "}
-                          per cycle
-                        </span>
-                      </div>
-
-                      <div className="subscription-information-section">
-                        <h4>
-                          Payment
-                          mandate
-                        </h4>
-
-                        <strong>
-                          {formatPaymentMethod(
-                            subscription.paymentMethod
-                          )}
-                        </strong>
-
-                        <span>
-                          {formatPaymentStatus(
-                            subscription.paymentStatus
-                          )}
-                        </span>
-
-                        <span>
-                          {subscription.paymentReference ||
-                            "No payment reference"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="subscription-items-section">
-                      <h4>
-                        Selected bottles
-                      </h4>
-
-                      {subscription.items.map(
-                        (
-                          item,
-                          index
-                        ) => (
-                          <div
-                            key={`${item.productId}-${index}`}
-                            className="subscription-item-row"
-                          >
-                            <span>
-                              {
-                                item.quantity
-                              }{" "}
-                              ×{" "}
-                              {item.name}{" "}
-                              <small>
-                                (
-                                {
-                                  item.sizeMl
-                                }{" "}
-                                ml)
-                              </small>
-                            </span>
-
-                            <strong>
-                              {formatCurrency(
-                                item.lineTotal
-                              )}
-                            </strong>
-                          </div>
-                        )
-                      )}
-
-                      <div className="subscription-price-summary">
-                        <div>
-                          <span>
-                            Original total
-                          </span>
-
-                          <strong>
-                            {formatCurrency(
-                              subscription.originalTotal
-                            )}
-                          </strong>
-                        </div>
-
-                        <div>
-                          <span>
-                            Savings
-                          </span>
-
-                          <strong>
-                            −
-                            {formatCurrency(
-                              subscription.savings
-                            )}
-                          </strong>
-                        </div>
-
-                        <div>
-                          <span>
-                            Cycle total
-                          </span>
-
-                          <strong>
-                            {formatCurrency(
-                              subscription.totalPerCycle
-                            )}
-                          </strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="subscription-address-section">
-                      <h4>
-                        Complete delivery
-                        address
-                      </h4>
-
-                      <p>
-                        {
-                          subscription
-                            .deliveryAddress
-                            .houseDetails
-                        }
-                        ,{" "}
-                        {
-                          subscription
-                            .deliveryAddress
-                            .areaDetails
-                        }
-                        {subscription
-                          .deliveryAddress
-                          .landmark
-                          ? `, near ${subscription.deliveryAddress.landmark}`
-                          : ""}
-                        ,{" "}
-                        {
-                          subscription
-                            .deliveryAddress
-                            .area
-                        }
-                        ,{" "}
-                        {
-                          subscription
-                            .deliveryAddress
-                            .city
-                        }{" "}
-                        –{" "}
-                        {
-                          subscription
-                            .deliveryAddress
-                            .pincode
-                        }
-                      </p>
-                    </div>
-
-                    <div className="subscription-action-row">
-                      {nextStatuses.length >
-                      0 ? (
-                        <>
-                          <label>
-                            Update status
-
-                            <select
-                              value=""
-                              disabled={
-                                updatingSubscriptionId ===
-                                subscription._id
-                              }
-                              onChange={(
-                                event
-                              ) => {
-                                const value =
-                                  event
-                                    .target
-                                    .value as AdminSubscriptionStatus;
-
-                                if (
-                                  value
-                                ) {
-                                  void handleStatusChange(
-                                    subscription,
-                                    value
-                                  );
-                                }
-                              }}
-                            >
-                              <option value="">
-                                Select next
-                                status
-                              </option>
-
-                              {nextStatuses.map(
-                                (
-                                  nextStatus
-                                ) => (
-                                  <option
-                                    key={
-                                      nextStatus
-                                    }
-                                    value={
-                                      nextStatus
-                                    }
-                                  >
-                                    {
-                                      STATUS_LABELS[
-                                        nextStatus
-                                      ]
-                                    }
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </label>
-
-                          {updatingSubscriptionId ===
-                          subscription._id ? (
-                            <span className="updating-subscription">
-                              Updating
-                              subscription...
-                            </span>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="terminal-subscription-status">
-                          {subscription.status ===
-                          "cancelled"
-                            ? "Subscription cancelled"
-                            : "Subscription expired"}
-                        </span>
-                      )}
-                    </div>
-
-                    {subscription.cancellationReason ? (
-                      <div className="subscription-reason">
-                        Status reason:{" "}
-                        {
-                          subscription.cancellationReason
-                        }
-                      </div>
-                    ) : null}
-                  </article>
-                );
+            <input
+              type="search"
+              value={searchTerm}
+              placeholder="Search subscription or customer"
+              onChange={(
+                event
+              ) =>
+                setSearchTerm(
+                  event.target
+                    .value
+                )
               }
-            )}
-          </div>
-        )}
+            />
+          </label>
+
+          <label>
+            Status
+
+            <select
+              value={
+                statusFilter
+              }
+              onChange={(
+                event
+              ) =>
+                setStatusFilter(
+                  event.target
+                    .value as StatusFilter
+                )
+              }
+            >
+              <option value="all">
+                All statuses
+              </option>
+
+              <option value="active">
+                Active
+              </option>
+
+              <option value="paused">
+                Paused
+              </option>
+
+              <option value="cancelled">
+                Cancelled
+              </option>
+
+              <option value="expired">
+                Expired
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Billing cycle
+
+            <select
+              value={
+                billingFilter
+              }
+              onChange={(
+                event
+              ) =>
+                setBillingFilter(
+                  event.target
+                    .value as BillingFilter
+                )
+              }
+            >
+              <option value="all">
+                All billing cycles
+              </option>
+
+              <option value="weekly">
+                Weekly
+              </option>
+
+              <option value="monthly">
+                Monthly
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Payment status
+
+            <select
+              value={
+                paymentFilter
+              }
+              onChange={(
+                event
+              ) =>
+                setPaymentFilter(
+                  event.target
+                    .value as PaymentFilter
+                )
+              }
+            >
+              <option value="all">
+                All payment statuses
+              </option>
+
+              <option value="demo_confirmed">
+                Demo confirmed
+              </option>
+
+              <option value="active">
+                Active
+              </option>
+
+              <option value="mandate_pending">
+                Mandate pending
+              </option>
+
+              <option value="failed">
+                Failed
+              </option>
+
+              <option value="cancelled">
+                Cancelled
+              </option>
+            </select>
+          </label>
+        </div>
       </section>
+
+      <div className="subscriptions-toolbar">
+        <div>
+          <h3>
+            Subscription records
+          </h3>
+
+          <p>
+            Showing{" "}
+            {
+              filteredSubscriptions.length
+            }{" "}
+            of{" "}
+            {
+              subscriptions.length
+            }{" "}
+            subscriptions
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="subscriptions-state-card">
+          <div className="spinner" />
+
+          <h3>
+            Loading subscriptions
+          </h3>
+
+          <p>
+            Fetching the latest
+            customer subscription
+            records.
+          </p>
+        </div>
+      ) : filteredSubscriptions.length ===
+        0 ? (
+        <div className="subscriptions-state-card">
+          <h3>
+            No subscriptions found
+          </h3>
+
+          <p>
+            No customer
+            subscriptions match the
+            current filters.
+          </p>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={
+              clearFilters
+            }
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : (
+        <div className="subscriptions-list">
+          {filteredSubscriptions.map(
+            (subscription) => (
+              <SubscriptionCard
+                key={
+                  subscription._id
+                }
+                subscription={
+                  subscription
+                }
+                updating={
+                  updatingSubscriptionId ===
+                  subscription._id
+                }
+                onViewDetails={() =>
+                  navigate(
+                    `/subscriptions/${subscription._id}`
+                  )
+                }
+                onStatusChange={(
+                  nextStatus
+                ) => {
+                  void handleStatusChange(
+                    subscription,
+                    nextStatus
+                  );
+                }}
+              />
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function SubscriptionMetric({
+function SummaryCard({
   label,
   value,
-  active,
-  onClick,
+  description,
 }: {
   label: string;
   value: number;
-  active: boolean;
-  onClick: () => void;
+  description: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`subscription-filter-card ${
-        active
-          ? "subscription-filter-active"
-          : ""
-      }`}
-    >
+    <article className="subscription-summary-card">
       <span>
         {label}
       </span>
@@ -1115,6 +1234,379 @@ function SubscriptionMetric({
       <strong>
         {value}
       </strong>
-    </button>
+
+      <p>
+        {description}
+      </p>
+    </article>
+  );
+}
+
+function SubscriptionCard({
+  subscription,
+  updating,
+  onViewDetails,
+  onStatusChange,
+}: {
+  subscription:
+    SubscriptionRecord;
+
+  updating: boolean;
+
+  onViewDetails:
+    () => void;
+
+  onStatusChange: (
+    status:
+      AdminSubscriptionStatus
+  ) => void;
+}) {
+  const customer =
+    getCustomer(
+      subscription
+    );
+
+  const nextStatuses =
+    NEXT_STATUSES[
+      subscription.status
+    ] || [];
+
+  return (
+    <article className="subscription-card">
+      <div className="subscription-card-top">
+        <div>
+          <span className="subscription-number">
+            {
+              subscription.subscriptionNumber
+            }
+          </span>
+
+          <h3>
+            {
+              subscription.planName
+            }
+          </h3>
+
+          <p>
+            {getCustomerName(
+              subscription
+            )}{" "}
+            ·{" "}
+            {getCustomerEmail(
+              subscription
+            )}
+          </p>
+        </div>
+
+        <span
+          className={`subscription-status subscription-status-${subscription.status}`}
+        >
+          {
+            STATUS_LABELS[
+              subscription.status
+            ]
+          }
+        </span>
+      </div>
+
+      <div className="subscription-card-grid">
+        <SubscriptionInformation
+          label="Customer phone"
+          value={getCustomerPhone(
+            subscription
+          )}
+        />
+
+        <SubscriptionInformation
+          label="Billing cycle"
+          value={formatStatus(
+            subscription.billingCycle
+          )}
+        />
+
+        <SubscriptionInformation
+          label="Bottle count"
+          value={`${subscription.bottleCount} bottles`}
+        />
+
+        <SubscriptionInformation
+          label="Preferred delivery"
+          value={[
+            subscription.preferredDay,
+            subscription.preferredSlot,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        />
+
+        <SubscriptionInformation
+          label="Service area"
+          value={[
+            subscription.deliveryAddress
+              ?.area,
+            subscription.deliveryAddress
+              ?.city,
+            subscription.deliveryAddress
+              ?.pincode,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+        />
+
+        <SubscriptionInformation
+          label="Next billing"
+          value={formatDate(
+            subscription.nextBillingAt
+          )}
+        />
+      </div>
+
+      <div className="subscription-address-box">
+        <span>
+          Delivery address
+        </span>
+
+        <p>
+          {getAddressText(
+            subscription
+          )}
+        </p>
+      </div>
+
+      {subscription.items &&
+      subscription.items.length >
+        0 ? (
+        <div className="subscription-items-box">
+          <span className="subscription-box-label">
+            Selected bottles
+          </span>
+
+          <div className="subscription-item-chips">
+            {subscription.items.map(
+              (item, index) => (
+                <span
+                  key={`${item.productId || item.name}-${index}`}
+                  className="subscription-item-chip"
+                >
+                  {item.quantity ||
+                    0}{" "}
+                  ×{" "}
+                  {item.shortName ||
+                    item.name ||
+                    "Bottle"}
+                </span>
+              )
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="subscription-financial-grid">
+        <SubscriptionInformation
+          label="Original value"
+          value={formatCurrency(
+            subscription.originalTotal
+          )}
+        />
+
+        <SubscriptionInformation
+          label={`Plan saving (${Number(
+            subscription.discountPercent ||
+              0
+          )}%)`}
+          value={`−${formatCurrency(
+            subscription.savings
+          )}`}
+        />
+
+        <SubscriptionInformation
+          label="Coupon saving"
+          value={`−${formatCurrency(
+            subscription.couponDiscount
+          )}`}
+        />
+
+        <SubscriptionInformation
+          label="Per-cycle total"
+          value={formatCurrency(
+            subscription.totalPerCycle
+          )}
+          strong
+        />
+      </div>
+
+      <div className="subscription-payment-box">
+        <div>
+          <span>
+            Payment mandate
+          </span>
+
+          <strong>
+            {formatStatus(
+              subscription.paymentStatus
+            )}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            Payment method
+          </span>
+
+          <strong>
+            {formatStatus(
+              subscription.paymentMethod
+            )}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            Reference
+          </span>
+
+          <strong>
+            {subscription.paymentReference ||
+              "Unavailable"}
+          </strong>
+        </div>
+      </div>
+
+      {subscription.lastDeliveryGenerationError ? (
+        <div className="subscription-generation-error">
+          <strong>
+            Previous recurring order generation failed
+          </strong>
+
+          <p>
+            {
+              subscription.lastDeliveryGenerationError
+            }
+          </p>
+        </div>
+      ) : null}
+
+      {subscription.cancellationReason ? (
+        <div className="subscription-reason-box">
+          <strong>
+            Status reason
+          </strong>
+
+          <p>
+            {
+              subscription.cancellationReason
+            }
+          </p>
+        </div>
+      ) : null}
+
+      <div className="subscription-action-row">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={
+            onViewDetails
+          }
+        >
+          View details
+        </button>
+
+        {nextStatuses.length >
+        0 ? (
+          <label className="subscription-status-control">
+            Update status
+
+            <select
+              value=""
+              disabled={updating}
+              onChange={(
+                event
+              ) => {
+                const value =
+                  event.target
+                    .value as AdminSubscriptionStatus;
+
+                if (value) {
+                  onStatusChange(
+                    value
+                  );
+                }
+              }}
+            >
+              <option value="">
+                {updating
+                  ? "Updating..."
+                  : "Select next status"}
+              </option>
+
+              {nextStatuses.map(
+                (status) => (
+                  <option
+                    key={status}
+                    value={status}
+                  >
+                    {
+                      STATUS_LABELS[
+                        status
+                      ]
+                    }
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+        ) : (
+          <span className="subscription-final-status">
+            No further status
+            changes available
+          </span>
+        )}
+
+        <span className="subscription-created-date">
+          Created{" "}
+          {formatDate(
+            subscription.createdAt
+          )}
+        </span>
+      </div>
+
+      {customer &&
+      customer.active ===
+        false ? (
+        <div className="subscription-customer-warning">
+          This customer account is
+          currently disabled.
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function SubscriptionInformation({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="subscription-information">
+      <span>
+        {label}
+      </span>
+
+      <strong
+        className={
+          strong
+            ? "subscription-information-highlight"
+            : ""
+        }
+      >
+        {value ||
+          "Unavailable"}
+      </strong>
+    </div>
   );
 }

@@ -13,6 +13,7 @@ const adminCouponRoutes = require("./routes/adminCoupons");
 const adminDeliveryPartnerRoutes = require("./routes/adminDeliveryPartners");
 const adminInventoryRoutes = require("./routes/adminInventory");
 const adminOrderRoutes = require("./routes/adminOrders");
+const adminSubscriptionDetailsRoutes = require("./routes/adminSubscriptionDetails");
 const adminSubscriptionRoutes = require("./routes/adminSubscriptions");
 const adminUserRoutes = require("./routes/adminUsers");
 const authRoutes = require("./routes/auth");
@@ -23,9 +24,9 @@ const notificationRoutes = require("./routes/notifications");
 const orderReviewRoutes = require("./routes/orderReviews");
 const orderRoutes = require("./routes/orders");
 const productRoutes = require("./routes/products");
-const subscriptionRoutes = require("./routes/subscriptions");
 const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
 const subscriptionEditRoutes = require("./routes/subscriptionEdits");
+const subscriptionRoutes = require("./routes/subscriptions");
 
 const razorpayRefundWebhookMiddleware = require(
   "./middleware/razorpayRefundWebhook"
@@ -242,6 +243,11 @@ app.use(
 app.use(
   "/api/admin/orders",
   adminOrderRoutes
+);
+
+app.use(
+  "/api/admin/subscriptions",
+  adminSubscriptionDetailsRoutes
 );
 
 app.use(
