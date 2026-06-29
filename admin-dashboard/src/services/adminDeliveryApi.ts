@@ -64,35 +64,93 @@ export type DeliveryOrder = Omit<
     AdminDeliveryStatus;
 };
 
-type PartnersResponse = ApiResponse & {
-  count: number;
+export type DeliveryPerformanceReview = {
+  _id: string;
+  order: string;
+  orderNumber: string;
 
-  data: {
-    partners: DeliveryPartner[];
+  user:
+    | {
+        _id?: string;
+        fullName?: string;
+      }
+    | string
+    | null;
+
+  customerSnapshot: {
+    fullName: string;
+    email: string;
+    phone: string;
   };
+
+  orderRating: number;
+  deliveryRating: number;
+  comment: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
-type PartnerResponse = ApiResponse & {
-  data: {
-    partner: DeliveryPartner;
-  };
+export type DeliveryPerformance = {
+  totalAssigned: number;
+  activeDeliveries: number;
+  completedDeliveries: number;
+  reviewCount: number;
+  averageDeliveryRating: number;
+  fiveStarReviews: number;
+  completionRate: number;
+
+  recentReviews:
+    DeliveryPerformanceReview[];
+
+  recentDeliveries:
+    DeliveryOrder[];
 };
 
-type OrderResponse = ApiResponse & {
-  data: {
-    order: AdminOrder;
+type PartnersResponse =
+  ApiResponse & {
+    count: number;
+
+    data: {
+      partners:
+        DeliveryPartner[];
+    };
   };
-};
+
+type PartnerResponse =
+  ApiResponse & {
+    data: {
+      partner:
+        DeliveryPartner;
+    };
+  };
+
+type OrderResponse =
+  ApiResponse & {
+    data: {
+      order:
+        AdminOrder;
+    };
+  };
 
 type DeliveryOrdersResponse =
   ApiResponse & {
     count: number;
 
     data: {
-      orders: DeliveryOrder[];
+      orders:
+        DeliveryOrder[];
 
       statusCounts:
         DeliveryOrderStatusCounts;
+    };
+  };
+
+type DeliveryPerformanceResponse =
+  ApiResponse & {
+    data: {
+      performance:
+        DeliveryPerformance;
     };
   };
 
@@ -101,53 +159,108 @@ async function request<T>(
   token: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const response = await fetch(
-    `${API_BASE_URL}${path}`,
-    {
-      ...options,
+  const controller =
+    new AbortController();
 
-      headers: {
-        Accept: "application/json",
-
-        "Content-Type":
-          "application/json",
-
-        Authorization:
-          `Bearer ${token}`,
-
-        ...(options.headers ?? {}),
-      },
-    }
-  );
-
-  const responseText =
-    await response.text();
-
-  let payload: T & ApiResponse;
+  const timeoutId =
+    window.setTimeout(() => {
+      controller.abort();
+    }, 12000);
 
   try {
-    payload = responseText
-      ? JSON.parse(responseText)
-      : ({
-          success: response.ok,
-        } as T & ApiResponse);
-  } catch {
+    const response = await fetch(
+      `${API_BASE_URL}${path}`,
+      {
+        ...options,
+
+        headers: {
+          Accept:
+            "application/json",
+
+          ...(options.body
+            ? {
+                "Content-Type":
+                  "application/json",
+              }
+            : {}),
+
+          Authorization:
+            `Bearer ${token}`,
+
+          ...(options.headers ??
+            {}),
+        },
+
+        signal:
+          controller.signal,
+      }
+    );
+
+    const responseText =
+      await response.text();
+
+    let payload:
+      T & ApiResponse;
+
+    try {
+      payload = responseText
+        ? JSON.parse(
+            responseText
+          )
+        : ({
+            success:
+              response.ok,
+          } as T & ApiResponse);
+    } catch {
+      throw new Error(
+        "The server returned an invalid response."
+      );
+    }
+
+    if (
+      !response.ok ||
+      payload.success === false
+    ) {
+      throw new Error(
+        payload.message ??
+          "Unable to complete the request."
+      );
+    }
+
+    return payload;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name ===
+        "AbortError"
+    ) {
+      throw new Error(
+        "The server took too long to respond."
+      );
+    }
+
+    if (
+      error instanceof TypeError
+    ) {
+      throw new Error(
+        "Unable to connect to the backend."
+      );
+    }
+
+    if (
+      error instanceof Error
+    ) {
+      throw error;
+    }
+
     throw new Error(
-      "The server returned an invalid response."
+      "Unable to complete the request."
+    );
+  } finally {
+    window.clearTimeout(
+      timeoutId
     );
   }
-
-  if (
-    !response.ok ||
-    payload.success === false
-  ) {
-    throw new Error(
-      payload.message ??
-        "Unable to complete the request."
-    );
-  }
-
-  return payload;
 }
 
 export async function fetchDeliveryPartners(
@@ -254,6 +367,18 @@ export async function fetchAssignedDeliveryOrders(
   return response.data;
 }
 
+export async function fetchDeliveryPerformance(
+  token: string
+): Promise<DeliveryPerformance> {
+  const response =
+    await request<DeliveryPerformanceResponse>(
+      "/api/delivery/orders/performance",
+      token
+    );
+
+  return response.data.performance;
+}
+
 export async function updateDeliveryOrderStatus(
   token: string,
   orderId: string,
@@ -262,25 +387,27 @@ export async function updateDeliveryOrderStatus(
     | "picked_up"
     | "out_for_delivery"
 ): Promise<DeliveryOrder> {
-  const response = await request<
-    ApiResponse & {
-      data: {
-        order: DeliveryOrder;
-      };
-    }
-  >(
-    `/api/delivery/orders/${encodeURIComponent(
-      orderId
-    )}/status`,
-    token,
-    {
-      method: "PATCH",
+  const response =
+    await request<
+      ApiResponse & {
+        data: {
+          order:
+            DeliveryOrder;
+        };
+      }
+    >(
+      `/api/delivery/orders/${encodeURIComponent(
+        orderId
+      )}/status`,
+      token,
+      {
+        method: "PATCH",
 
-      body: JSON.stringify({
-        deliveryStatus,
-      }),
-    }
-  );
+        body: JSON.stringify({
+          deliveryStatus,
+        }),
+      }
+    );
 
   return response.data.order;
 }
@@ -290,25 +417,27 @@ export async function verifyDeliveryOrderOtp(
   orderId: string,
   otp: string
 ): Promise<DeliveryOrder> {
-  const response = await request<
-    ApiResponse & {
-      data: {
-        order: DeliveryOrder;
-      };
-    }
-  >(
-    `/api/delivery/orders/${encodeURIComponent(
-      orderId
-    )}/verify-otp`,
-    token,
-    {
-      method: "POST",
+  const response =
+    await request<
+      ApiResponse & {
+        data: {
+          order:
+            DeliveryOrder;
+        };
+      }
+    >(
+      `/api/delivery/orders/${encodeURIComponent(
+        orderId
+      )}/verify-otp`,
+      token,
+      {
+        method: "POST",
 
-      body: JSON.stringify({
-        otp,
-      }),
-    }
-  );
+        body: JSON.stringify({
+          otp,
+        }),
+      }
+    );
 
   return response.data.order;
 }

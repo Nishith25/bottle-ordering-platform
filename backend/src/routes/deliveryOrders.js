@@ -6,6 +6,9 @@ const {
 } = require("../middleware/auth");
 
 const Order = require("../models/Order");
+const OrderReview = require(
+  "../models/OrderReview"
+);
 
 const {
   getDeliveryOtp,
@@ -15,6 +18,12 @@ const {
 const router = express.Router();
 
 router.use(protect);
+
+const ACTIVE_DELIVERY_STATUSES = [
+  "assigned",
+  "picked_up",
+  "out_for_delivery",
+];
 
 function cleanText(value) {
   return String(value || "").trim();
@@ -26,10 +35,6 @@ function sanitiseOrder(order) {
       ? order.toObject()
       : { ...order };
 
-  /*
-   * Never expose OTP security values
-   * through an API response.
-   */
   delete value.deliveryOtpSalt;
   delete value.deliveryOtpHash;
 
@@ -39,13 +44,9 @@ function sanitiseOrder(order) {
 /**
  * GET /api/delivery/orders/customer/:orderId
  *
- * Any authenticated account may purchase bottles:
- * - customer
- * - admin
- * - delivery
- *
- * OTP access is controlled by order ownership,
- * not by the user's role.
+ * Any authenticated account may purchase bottles.
+ * OTP visibility is controlled through order
+ * ownership rather than account role.
  */
 router.get(
   "/customer/:orderId",
@@ -54,12 +55,6 @@ router.get(
       const order =
         await Order.findOne({
           _id: req.params.orderId,
-
-          /*
-           * This is the important security rule.
-           * Only the account that placed the order
-           * can view its delivery OTP.
-           */
           user: req.user._id,
         })
           .select(
@@ -73,7 +68,6 @@ router.get(
       if (!order) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found for this account.",
         });
@@ -81,19 +75,13 @@ router.get(
 
       const otpAvailable =
         Boolean(order.deliveryPartner) &&
-        [
-          "assigned",
-          "picked_up",
-          "out_for_delivery",
-        ].includes(
+        ACTIVE_DELIVERY_STATUSES.includes(
           order.deliveryStatus
         ) &&
         ![
           "delivered",
           "cancelled",
-        ].includes(
-          order.orderStatus
-        );
+        ].includes(order.orderStatus);
 
       const deliveryOtp =
         otpAvailable
@@ -104,21 +92,15 @@ router.get(
         success: true,
 
         data: {
-          order:
-            sanitiseOrder(order),
-
+          order: sanitiseOrder(order),
           deliveryOtp,
         },
       });
     } catch (error) {
-      if (
-        error.name === "CastError"
-      ) {
+      if (error.name === "CastError") {
         return res.status(404).json({
           success: false,
-
-          message:
-            "Order not found.",
+          message: "Order not found.",
         });
       }
 
@@ -128,10 +110,263 @@ router.get(
 );
 
 /**
+ * GET /api/delivery/orders/performance
+ *
+ * Returns only the logged-in delivery partner's
+ * own statistics, ratings, recent reviews and
+ * completed-delivery history.
+ *
+ * This route must appear before /:orderId.
+ */
+router.get(
+  "/performance",
+  allowRoles("delivery"),
+  async (req, res, next) => {
+    try {
+      const partnerId =
+        req.user._id;
+
+      const [
+        deliveryStatistics,
+        reviewStatistics,
+        recentReviews,
+        recentDeliveries,
+      ] = await Promise.all([
+        Order.aggregate([
+          {
+            $match: {
+              deliveryPartner:
+                partnerId,
+
+              orderStatus: {
+                $ne: "cancelled",
+              },
+            },
+          },
+
+          {
+            $group: {
+              _id: null,
+
+              totalAssigned: {
+                $sum: 1,
+              },
+
+              activeDeliveries: {
+                $sum: {
+                  $cond: [
+                    {
+                      $in: [
+                        "$deliveryStatus",
+                        ACTIVE_DELIVERY_STATUSES,
+                      ],
+                    },
+
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              completedDeliveries: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$orderStatus",
+                            "delivered",
+                          ],
+                        },
+
+                        {
+                          $eq: [
+                            "$deliveryStatus",
+                            "delivered",
+                          ],
+                        },
+                      ],
+                    },
+
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        OrderReview.aggregate([
+          {
+            $match: {
+              deliveryPartner:
+                partnerId,
+            },
+          },
+
+          {
+            $group: {
+              _id: null,
+
+              reviewCount: {
+                $sum: 1,
+              },
+
+              averageDeliveryRating: {
+                $avg:
+                  "$deliveryRating",
+              },
+
+              fiveStarReviews: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$deliveryRating",
+                        5,
+                      ],
+                    },
+
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        OrderReview.find({
+          deliveryPartner:
+            partnerId,
+        })
+          .populate(
+            "user",
+            "fullName"
+          )
+          .sort({
+            submittedAt: -1,
+            createdAt: -1,
+          })
+          .limit(6)
+          .lean(),
+
+        Order.find({
+          deliveryPartner:
+            partnerId,
+
+          orderStatus:
+            "delivered",
+
+          deliveryStatus:
+            "delivered",
+        })
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .sort({
+            deliveryCompletedAt: -1,
+            deliveredAt: -1,
+            createdAt: -1,
+          })
+          .limit(12)
+          .lean(),
+      ]);
+
+      const deliveryData =
+        deliveryStatistics[0] || {
+          totalAssigned: 0,
+          activeDeliveries: 0,
+          completedDeliveries: 0,
+        };
+
+      const reviewData =
+        reviewStatistics[0] || {
+          reviewCount: 0,
+          averageDeliveryRating: 0,
+          fiveStarReviews: 0,
+        };
+
+      const totalAssigned =
+        Number(
+          deliveryData.totalAssigned ||
+            0
+        );
+
+      const completedDeliveries =
+        Number(
+          deliveryData.completedDeliveries ||
+            0
+        );
+
+      const completionRate =
+        totalAssigned > 0
+          ? Number(
+              (
+                (completedDeliveries /
+                  totalAssigned) *
+                100
+              ).toFixed(1)
+            )
+          : 0;
+
+      return res.status(200).json({
+        success: true,
+
+        data: {
+          performance: {
+            totalAssigned,
+
+            activeDeliveries:
+              Number(
+                deliveryData.activeDeliveries ||
+                  0
+              ),
+
+            completedDeliveries,
+
+            reviewCount:
+              Number(
+                reviewData.reviewCount ||
+                  0
+              ),
+
+            averageDeliveryRating:
+              Number(
+                (
+                  reviewData.averageDeliveryRating ||
+                  0
+                ).toFixed(1)
+              ),
+
+            fiveStarReviews:
+              Number(
+                reviewData.fiveStarReviews ||
+                  0
+              ),
+
+            completionRate,
+
+            recentReviews,
+
+            recentDeliveries,
+          },
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
  * GET /api/delivery/orders/assigned
  *
- * Only delivery partners can view
- * orders assigned to them.
+ * Returns orders assigned to the logged-in
+ * delivery partner.
  */
 router.get(
   "/assigned",
@@ -198,9 +433,6 @@ router.get(
 
 /**
  * GET /api/delivery/orders/:orderId
- *
- * Only the delivery partner assigned
- * to the order can view it here.
  */
 router.get(
   "/:orderId",
@@ -209,8 +441,7 @@ router.get(
     try {
       const order =
         await Order.findOne({
-          _id:
-            req.params.orderId,
+          _id: req.params.orderId,
 
           deliveryPartner:
             req.user._id,
@@ -238,9 +469,7 @@ router.get(
         },
       });
     } catch (error) {
-      if (
-        error.name === "CastError"
-      ) {
+      if (error.name === "CastError") {
         return res.status(404).json({
           success: false,
 
@@ -257,7 +486,6 @@ router.get(
 /**
  * PATCH /api/delivery/orders/:orderId/status
  *
- * Delivery status progression:
  * assigned -> picked_up -> out_for_delivery
  */
 router.patch(
@@ -286,8 +514,7 @@ router.patch(
 
       const order =
         await Order.findOne({
-          _id:
-            req.params.orderId,
+          _id: req.params.orderId,
 
           deliveryPartner:
             req.user._id,
@@ -306,9 +533,7 @@ router.patch(
         [
           "cancelled",
           "delivered",
-        ].includes(
-          order.orderStatus
-        )
+        ].includes(order.orderStatus)
       ) {
         return res.status(400).json({
           success: false,
@@ -401,14 +626,11 @@ router.patch(
             : "Order is now out for delivery.",
 
         data: {
-          order:
-            updatedOrder,
+          order: updatedOrder,
         },
       });
     } catch (error) {
-      if (
-        error.name === "CastError"
-      ) {
+      if (error.name === "CastError") {
         return res.status(404).json({
           success: false,
 
@@ -424,9 +646,6 @@ router.patch(
 
 /**
  * POST /api/delivery/orders/:orderId/verify-otp
- *
- * Only the assigned delivery partner
- * can verify the customer's OTP.
  */
 router.post(
   "/:orderId/verify-otp",
@@ -435,8 +654,7 @@ router.post(
     try {
       const order =
         await Order.findOne({
-          _id:
-            req.params.orderId,
+          _id: req.params.orderId,
 
           deliveryPartner:
             req.user._id,
@@ -559,14 +777,11 @@ router.post(
           "Delivery completed successfully after OTP verification.",
 
         data: {
-          order:
-            updatedOrder,
+          order: updatedOrder,
         },
       });
     } catch (error) {
-      if (
-        error.name === "CastError"
-      ) {
+      if (error.name === "CastError") {
         return res.status(404).json({
           success: false,
 
