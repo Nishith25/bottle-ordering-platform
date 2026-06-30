@@ -8,19 +8,11 @@ import {
   useState,
 } from "react";
 
-import {
-  Platform,
-} from "react-native";
+import { Platform } from "react-native";
 
 import * as Notifications from "expo-notifications";
 
-import {
-  useRouter,
-} from "expo-router";
-
-import {
-  useAuth,
-} from "./AuthContext";
+import { useAuth } from "./AuthContext";
 
 import {
   registerDevicePushToken,
@@ -37,41 +29,25 @@ import {
   type PushPermissionState,
 } from "../services/pushNotificationService";
 
-type NotificationData =
-  Record<
-    string,
-    unknown
-  >;
-
 type PushNotificationContextValue = {
-  permissionState:
-    PushPermissionState;
+  permissionState: PushPermissionState;
 
-  expoPushToken:
-    string | null;
+  expoPushToken: string | null;
 
   lastNotification:
     Notifications.Notification | null;
 
-  error:
-    string | null;
+  error: string | null;
 
-  registering:
-    boolean;
-  testing:
-    boolean;
-  disabling:
-    boolean;
+  registering: boolean;
+  testing: boolean;
+  disabling: boolean;
 
   registerCurrentDevice:
-    () => Promise<
-      string | null
-    >;
+    () => Promise<string | null>;
 
   sendRemoteTest:
-    () => Promise<
-      PushTestResult | null
-    >;
+    () => Promise<PushTestResult | null>;
 
   sendLocalTest:
     () => Promise<void>;
@@ -80,39 +56,24 @@ type PushNotificationContextValue = {
     () => Promise<boolean>;
 };
 
+type RegistrationPromiseRecord = {
+  authToken: string;
+  promise: Promise<string | null>;
+};
+
 const PushNotificationContext =
   createContext<
     PushNotificationContextValue | undefined
   >(undefined);
-
-function cleanText(
-  value: unknown
-) {
-  return String(
-    value ?? ""
-  ).trim();
-}
-
-function getDataValue(
-  data:
-    NotificationData,
-  key: string
-) {
-  return cleanText(
-    data[key]
-  );
-}
 
 export function PushNotificationProvider({
   children,
 }: {
   children: ReactNode;
 }) {
-  const router =
-    useRouter();
-
   const {
     token,
+    loading: authLoading,
     isAuthenticated,
   } = useAuth();
 
@@ -130,9 +91,9 @@ export function PushNotificationProvider({
     expoPushToken,
     setExpoPushToken,
   ] =
-    useState<
-      string | null
-    >(null);
+    useState<string | null>(
+      null
+    );
 
   const [
     lastNotification,
@@ -146,286 +107,110 @@ export function PushNotificationProvider({
     error,
     setError,
   ] =
-    useState<
-      string | null
-    >(null);
+    useState<string | null>(
+      null
+    );
 
   const [
     registering,
     setRegistering,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     testing,
     setTesting,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     disabling,
     setDisabling,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const registrationPromiseRef =
     useRef<
-      Promise<
-        string | null
-      > | null
+      RegistrationPromiseRecord | null
     >(null);
 
   const registeredAuthTokenRef =
-    useRef<
-      string | null
-    >(null);
+    useRef<string | null>(
+      null
+    );
 
   const previousAuthTokenRef =
-    useRef<
-      string | null
-    >(null);
+    useRef<string | null>(
+      null
+    );
+
+  const currentAuthTokenRef =
+    useRef<string | null>(
+      token
+    );
 
   const expoPushTokenRef =
-    useRef<
-      string | null
-    >(null);
+    useRef<string | null>(
+      null
+    );
+
+  /*
+   * Keep the latest authentication and
+   * Expo token values available inside
+   * asynchronous callbacks.
+   */
+  useEffect(() => {
+    currentAuthTokenRef.current =
+      token;
+  }, [token]);
 
   useEffect(() => {
     expoPushTokenRef.current =
       expoPushToken;
   }, [expoPushToken]);
 
-  const openNotificationDestination =
-    useCallback(
-      (
-        data:
-          NotificationData
-      ) => {
-        const route =
-          getDataValue(
-            data,
-            "route"
-          ).toLowerCase();
-
-        const action =
-          getDataValue(
-            data,
-            "action"
-          ).toLowerCase();
-
-        const orderId =
-          getDataValue(
-            data,
-            "orderId"
-          );
-
-        const subscriptionId =
-          getDataValue(
-            data,
-            "subscriptionId"
-          );
-
-        if (
-          route ===
-            "/subscription-payment" &&
-          subscriptionId
-        ) {
-          router.push({
-            pathname:
-              "/subscription-payment",
-
-            params: {
-              subscriptionId,
-            },
-          });
-
-          return;
-        }
-
-        if (
-          (
-            route ===
-              "/subscription-details" ||
-            action ===
-              "subscription_details"
-          ) &&
-          subscriptionId
-        ) {
-          router.push({
-            pathname:
-              "/subscription-details",
-
-            params: {
-              subscriptionId,
-            },
-          });
-
-          return;
-        }
-
-        if (
-          (
-            route ===
-              "/delivery-order" ||
-            action ===
-              "delivery_order"
-          ) &&
-          orderId
-        ) {
-          router.push({
-            pathname:
-              "/delivery-order",
-
-            params: {
-              orderId,
-            },
-          });
-
-          return;
-        }
-
-        if (
-          route === "/orders" ||
-          route ===
-            "/(tabs)/orders" ||
-          action ===
-            "orders" ||
-          action ===
-            "order"
-        ) {
-          router.push(
-            "/orders"
-          );
-
-          return;
-        }
-
-        if (
-          route === "/plans" ||
-          route ===
-            "/(tabs)/plans" ||
-          action ===
-            "subscriptions" ||
-          action ===
-            "subscription"
-        ) {
-          router.push(
-            "/plans"
-          );
-
-          return;
-        }
-
-        router.push(
-          "/notifications"
-        );
-      },
-      [router]
-    );
-
-  const handleNotificationResponse =
-    useCallback(
-      (
-        response:
-          Notifications.NotificationResponse
-      ) => {
-        if (
-          response.actionIdentifier !==
-          Notifications.DEFAULT_ACTION_IDENTIFIER
-        ) {
-          return;
-        }
-
-        const data =
-          response.notification
-            .request.content
-            .data as
-            NotificationData;
-
-        openNotificationDestination(
-          data || {}
-        );
-
-        void clearApplicationBadge();
-
-        try {
-          Notifications.clearLastNotificationResponse();
-        } catch {
-          // Nothing else is required.
-        }
-      },
-      [
-        openNotificationDestination,
-      ]
-    );
-
   /*
-   * Listen for notifications received
-   * while open and notification taps.
+   * Notification-tap navigation is now
+   * handled by NotificationNavigationHandler.
+   *
+   * This listener only stores notifications
+   * received while the application is open.
    */
   useEffect(() => {
     if (
-      Platform.OS ===
-      "web"
+      Platform.OS === "web"
     ) {
       return;
     }
 
     const receivedSubscription =
       Notifications.addNotificationReceivedListener(
-        (
-          notification
-        ) => {
+        (notification) => {
           setLastNotification(
             notification
           );
         }
       );
 
-    const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener(
-        handleNotificationResponse
-      );
-
-    /*
-     * Handle a notification that opened
-     * the app from a completely closed
-     * state.
-     */
-    void Notifications.getLastNotificationResponseAsync()
-      .then(
-        (
-          response
-        ) => {
-          if (response) {
-            handleNotificationResponse(
-              response
-            );
-          }
-        }
-      )
-      .catch(() => {
-        // No previous response is available.
-      });
-
     return () => {
       receivedSubscription.remove();
-      responseSubscription.remove();
     };
-  }, [
-    handleNotificationResponse,
-  ]);
+  }, []);
 
   const registerCurrentDevice =
     useCallback(
-      async () => {
+      async (): Promise<
+        string | null
+      > => {
         if (
-          Platform.OS ===
-          "web"
+          Platform.OS === "web"
         ) {
           setPermissionState(
             "unsupported"
           );
 
           setError(
-            "Remote push notifications must be tested in the Android or iOS app."
+            "Remote push notifications are available only in the Android and iOS applications."
           );
 
           return null;
@@ -450,11 +235,19 @@ export function PushNotificationProvider({
           return expoPushTokenRef.current;
         }
 
+        const existingRegistration =
+          registrationPromiseRef.current;
+
         if (
-          registrationPromiseRef.current
+          existingRegistration &&
+          existingRegistration.authToken ===
+            token
         ) {
-          return registrationPromiseRef.current;
+          return existingRegistration.promise;
         }
+
+        const authTokenAtStart =
+          token;
 
         const registrationPromise =
           (async () => {
@@ -470,10 +263,50 @@ export function PushNotificationProvider({
               const nativeRegistration =
                 await registerForNativePushNotifications();
 
+              /*
+               * The user may have logged out while
+               * native token generation was running.
+               */
+              if (
+                currentAuthTokenRef.current !==
+                authTokenAtStart
+              ) {
+                try {
+                  await unregisterDevicePushToken(
+                    authTokenAtStart,
+                    nativeRegistration.expoPushToken
+                  );
+                } catch {
+                  // Session cleanup must not crash the app.
+                }
+
+                return null;
+              }
+
               await registerDevicePushToken(
-                token,
+                authTokenAtStart,
                 nativeRegistration
               );
+
+              /*
+               * Check again because the backend
+               * request may also take some time.
+               */
+              if (
+                currentAuthTokenRef.current !==
+                authTokenAtStart
+              ) {
+                try {
+                  await unregisterDevicePushToken(
+                    authTokenAtStart,
+                    nativeRegistration.expoPushToken
+                  );
+                } catch {
+                  // Session cleanup must not crash the app.
+                }
+
+                return null;
+              }
 
               setExpoPushToken(
                 nativeRegistration.expoPushToken
@@ -483,7 +316,10 @@ export function PushNotificationProvider({
                 nativeRegistration.expoPushToken;
 
               registeredAuthTokenRef.current =
-                token;
+                authTokenAtStart;
+
+              previousAuthTokenRef.current =
+                authTokenAtStart;
 
               setPermissionState(
                 "granted"
@@ -529,7 +365,8 @@ export function PushNotificationProvider({
               );
 
               setError(
-                registrationError instanceof Error
+                registrationError instanceof
+                  Error
                   ? registrationError.message
                   : "Unable to enable push notifications."
               );
@@ -540,13 +377,26 @@ export function PushNotificationProvider({
                 false
               );
 
-              registrationPromiseRef.current =
-                null;
+              if (
+                registrationPromiseRef
+                  .current
+                  ?.authToken ===
+                authTokenAtStart
+              ) {
+                registrationPromiseRef.current =
+                  null;
+              }
             }
           })();
 
         registrationPromiseRef.current =
-          registrationPromise;
+          {
+            authToken:
+              authTokenAtStart,
+
+            promise:
+              registrationPromise,
+          };
 
         return registrationPromise;
       },
@@ -557,15 +407,18 @@ export function PushNotificationProvider({
     );
 
   /*
-   * Register whenever an authenticated
-   * customer or delivery partner opens
-   * the app.
+   * Automatically register the current
+   * device whenever authentication is
+   * restored or login succeeds.
    *
-   * When they log out during the same
-   * session, remove this device token
-   * from their account.
+   * On logout, remove the device token
+   * from the previous account.
    */
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
     const previousAuthToken =
       previousAuthTokenRef.current;
 
@@ -583,20 +436,29 @@ export function PushNotificationProvider({
 
     if (
       !isAuthenticated &&
-      previousAuthToken &&
-      expoPushTokenRef.current
+      previousAuthToken
     ) {
       const pushTokenToRemove =
         expoPushTokenRef.current;
 
-      void unregisterDevicePushToken(
-        previousAuthToken,
-        pushTokenToRemove
-      )
-        .catch(() => {
-          // Logout should not be blocked.
-        })
-        .finally(() => {
+      const cleanupLoggedOutDevice =
+        async () => {
+          if (
+            pushTokenToRemove
+          ) {
+            try {
+              await unregisterDevicePushToken(
+                previousAuthToken,
+                pushTokenToRemove
+              );
+            } catch {
+              /*
+               * Logout must remain successful even
+               * when the backend is unavailable.
+               */
+            }
+          }
+
           setExpoPushToken(
             null
           );
@@ -610,12 +472,28 @@ export function PushNotificationProvider({
           previousAuthTokenRef.current =
             null;
 
-          setPermissionState(
-            "idle"
+          registrationPromiseRef.current =
+            null;
+
+          setLastNotification(
+            null
           );
-        });
+
+          setError(null);
+
+          setPermissionState(
+            Platform.OS === "web"
+              ? "unsupported"
+              : "idle"
+          );
+
+          void clearApplicationBadge();
+        };
+
+      void cleanupLoggedOutDevice();
     }
   }, [
+    authLoading,
     isAuthenticated,
     token,
     registerCurrentDevice,
@@ -623,7 +501,9 @@ export function PushNotificationProvider({
 
   const sendRemoteTest =
     useCallback(
-      async () => {
+      async (): Promise<
+        PushTestResult | null
+      > => {
         if (
           !token ||
           !isAuthenticated
@@ -659,7 +539,8 @@ export function PushNotificationProvider({
           requestError
         ) {
           setError(
-            requestError instanceof Error
+            requestError instanceof
+              Error
               ? requestError.message
               : "Unable to send the test notification."
           );
@@ -678,7 +559,7 @@ export function PushNotificationProvider({
 
   const sendLocalTest =
     useCallback(
-      async () => {
+      async (): Promise<void> => {
         setError(null);
 
         try {
@@ -687,7 +568,8 @@ export function PushNotificationProvider({
           requestError
         ) {
           setError(
-            requestError instanceof Error
+            requestError instanceof
+              Error
               ? requestError.message
               : "Unable to show the local notification."
           );
@@ -700,13 +582,16 @@ export function PushNotificationProvider({
 
   const disableCurrentDevice =
     useCallback(
-      async () => {
+      async (): Promise<boolean> => {
         if (
           !token ||
           !expoPushTokenRef.current
         ) {
           return false;
         }
+
+        const pushTokenToDisable =
+          expoPushTokenRef.current;
 
         setDisabling(true);
         setError(null);
@@ -715,7 +600,7 @@ export function PushNotificationProvider({
           const disabled =
             await unregisterDevicePushToken(
               token,
-              expoPushTokenRef.current
+              pushTokenToDisable
             );
 
           if (disabled) {
@@ -732,6 +617,8 @@ export function PushNotificationProvider({
             setPermissionState(
               "idle"
             );
+
+            void clearApplicationBadge();
           }
 
           return disabled;
@@ -739,7 +626,8 @@ export function PushNotificationProvider({
           requestError
         ) {
           setError(
-            requestError instanceof Error
+            requestError instanceof
+              Error
               ? requestError.message
               : "Unable to disable notifications on this device."
           );
