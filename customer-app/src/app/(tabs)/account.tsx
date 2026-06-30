@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
+import { usePushNotifications } from "../../context/PushNotificationContext";
 
 const DASHBOARD_BASE_URL = (
   process.env
@@ -30,6 +31,23 @@ const ADMIN_DASHBOARD_URL =
 const DELIVERY_DASHBOARD_URL =
   `${DASHBOARD_BASE_URL}/login?role=delivery`;
 
+function getPushTokenPreview(
+  token: string | null
+) {
+  if (!token) {
+    return "";
+  }
+
+  if (token.length <= 36) {
+    return token;
+  }
+
+  return `${token.slice(
+    0,
+    23
+  )}...${token.slice(-8)}`;
+}
+
 export default function AccountScreen() {
   const router = useRouter();
 
@@ -40,8 +58,22 @@ export default function AccountScreen() {
     logout,
   } = useAuth();
 
-  const [loggingOut, setLoggingOut] =
-    useState(false);
+  const {
+    permissionState,
+    expoPushToken,
+    error: pushError,
+    registering,
+    testing,
+    disabling,
+    registerCurrentDevice,
+    sendRemoteTest,
+    disableCurrentDevice,
+  } = usePushNotifications();
+
+  const [
+    loggingOut,
+    setLoggingOut,
+  ] = useState(false);
 
   const openDashboard = async (
     dashboardUrl: string,
@@ -92,6 +124,122 @@ export default function AccountScreen() {
       );
     }
   };
+
+  const openNotificationSettings =
+    async () => {
+      if (Platform.OS === "web") {
+        Alert.alert(
+          "Mobile app required",
+          "Notification settings are available inside the Android or iOS app."
+        );
+
+        return;
+      }
+
+      try {
+        await Linking.openSettings();
+      } catch {
+        Alert.alert(
+          "Unable to open settings",
+          "Open your phone settings and allow notifications for SipBite."
+        );
+      }
+    };
+
+  const handleEnableNotifications =
+    async () => {
+      if (
+        registering ||
+        disabling
+      ) {
+        return;
+      }
+
+      const registeredToken =
+        await registerCurrentDevice();
+
+      if (registeredToken) {
+        Alert.alert(
+          "Notifications enabled",
+          "This device will now receive important order, delivery and subscription updates."
+        );
+      }
+    };
+
+  const handleSendTestNotification =
+    async () => {
+      if (
+        testing ||
+        registering ||
+        disabling
+      ) {
+        return;
+      }
+
+      const result =
+        await sendRemoteTest();
+
+      if (result) {
+        Alert.alert(
+          "Test notification sent",
+          "Minimize SipBite and check your phone notification tray."
+        );
+      }
+    };
+
+  const confirmDisableNotifications =
+    () => {
+      if (
+        disabling ||
+        registering
+      ) {
+        return;
+      }
+
+      Alert.alert(
+        "Disable notifications?",
+        "This device will stop receiving SipBite push notifications until notifications are enabled again.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Disable",
+            style: "destructive",
+
+            onPress: () => {
+              void handleDisableNotifications();
+            },
+          },
+        ]
+      );
+    };
+
+  const handleDisableNotifications =
+    async () => {
+      const disabled =
+        await disableCurrentDevice();
+
+      if (disabled) {
+        Alert.alert(
+          "Notifications disabled",
+          "This device was removed from your registered notification devices.",
+          [
+            {
+              text: "Done",
+            },
+            {
+              text: "Phone settings",
+
+              onPress: () => {
+                void openNotificationSettings();
+              },
+            },
+          ]
+        );
+      }
+    };
 
   const handleLogout = async () => {
     if (loggingOut) {
@@ -178,6 +326,7 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.primaryButton,
+
               pressed &&
                 styles.pressed,
             ]}
@@ -197,6 +346,7 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryButton,
+
               pressed &&
                 styles.pressed,
             ]}
@@ -218,6 +368,7 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.browseButton,
+
               pressed &&
                 styles.pressed,
             ]}
@@ -300,6 +451,64 @@ export default function AccountScreen() {
   const roleNotice = isAdmin
     ? "Your administrator account can also buy bottles and subscribe through this customer app."
     : "Your delivery partner account can also place personal bottle orders and subscriptions without changing roles.";
+
+  const notificationsEnabled =
+    permissionState === "granted" &&
+    Boolean(expoPushToken);
+
+  const notificationBusy =
+    registering ||
+    testing ||
+    disabling;
+
+  const notificationStatus =
+    notificationsEnabled
+      ? "Enabled"
+      : permissionState ===
+          "requesting"
+        ? "Enabling"
+        : permissionState ===
+            "denied"
+          ? "Permission blocked"
+          : permissionState ===
+              "unsupported"
+            ? "Mobile app only"
+            : permissionState ===
+                "error"
+              ? "Needs attention"
+              : "Not enabled";
+
+  const notificationDescription =
+    notificationsEnabled
+      ? "This device is registered for order, delivery, payment and subscription updates."
+      : permissionState ===
+          "denied"
+        ? "Notification permission is blocked. Open your phone settings to allow notifications for SipBite."
+        : permissionState ===
+            "unsupported"
+          ? "Push notifications can only be enabled in the installed Android or iOS application."
+          : permissionState ===
+              "error"
+            ? pushError ||
+              "SipBite could not register this device for push notifications."
+            : "Enable notifications to receive important updates even when SipBite is closed.";
+
+  const notificationIcon:
+    keyof typeof Ionicons.glyphMap =
+    notificationsEnabled
+      ? "notifications"
+      : permissionState ===
+          "denied"
+        ? "notifications-off-outline"
+        : permissionState ===
+            "error"
+          ? "alert-circle-outline"
+          : "notifications-outline";
+
+  const tokenPreview =
+    getPushTokenPreview(
+      expoPushToken
+    );
 
   return (
     <SafeAreaView
@@ -507,6 +716,353 @@ export default function AccountScreen() {
             )
           }
         />
+
+        <Text style={styles.sectionTitle}>
+          Notifications
+        </Text>
+
+        <View
+          style={styles.notificationCard}
+        >
+          <View
+            style={styles.notificationTop}
+          >
+            <View
+              style={[
+                styles.notificationIcon,
+
+                notificationsEnabled &&
+                  styles.notificationIconEnabled,
+
+                permissionState ===
+                  "denied" &&
+                  styles.notificationIconBlocked,
+              ]}
+            >
+              <Ionicons
+                name={notificationIcon}
+                size={23}
+                color={
+                  notificationsEnabled
+                    ? "#245C42"
+                    : permissionState ===
+                        "denied"
+                      ? "#A34848"
+                      : "#5C7165"
+                }
+              />
+            </View>
+
+            <View
+              style={
+                styles.notificationContent
+              }
+            >
+              <View
+                style={
+                  styles.notificationTitleRow
+                }
+              >
+                <Text
+                  style={
+                    styles.notificationTitle
+                  }
+                >
+                  Push notifications
+                </Text>
+
+                <View
+                  style={[
+                    styles.notificationStatusBadge,
+
+                    notificationsEnabled
+                      ? styles.notificationStatusEnabled
+                      : permissionState ===
+                            "denied" ||
+                          permissionState ===
+                            "error"
+                        ? styles.notificationStatusError
+                        : styles.notificationStatusIdle,
+                  ]}
+                >
+                  {registering ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#245C42"
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.notificationStatusText,
+
+                        notificationsEnabled
+                          ? styles.notificationStatusTextEnabled
+                          : permissionState ===
+                                "denied" ||
+                              permissionState ===
+                                "error"
+                            ? styles.notificationStatusTextError
+                            : styles.notificationStatusTextIdle,
+                      ]}
+                    >
+                      {notificationStatus}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <Text
+                style={
+                  styles.notificationDescription
+                }
+              >
+                {notificationDescription}
+              </Text>
+            </View>
+          </View>
+
+          {pushError &&
+          permissionState !==
+            "denied" ? (
+            <View
+              style={styles.pushErrorBox}
+            >
+              <Ionicons
+                name="alert-circle-outline"
+                size={16}
+                color="#9C4C4C"
+              />
+
+              <Text
+                style={styles.pushErrorText}
+              >
+                {pushError}
+              </Text>
+            </View>
+          ) : null}
+
+          {notificationsEnabled &&
+          tokenPreview ? (
+            <View
+              style={styles.tokenBox}
+            >
+              <View
+                style={styles.tokenLabelRow}
+              >
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={15}
+                  color="#587063"
+                />
+
+                <Text
+                  style={styles.tokenLabel}
+                >
+                  Registered device
+                </Text>
+              </View>
+
+              <Text
+                numberOfLines={1}
+                selectable
+                style={styles.tokenValue}
+              >
+                {tokenPreview}
+              </Text>
+            </View>
+          ) : null}
+
+          <View
+            style={
+              styles.notificationButtons
+            }
+          >
+            {!notificationsEnabled &&
+            permissionState !==
+              "unsupported" ? (
+              <Pressable
+                disabled={
+                  notificationBusy
+                }
+                onPress={() => {
+                  void handleEnableNotifications();
+                }}
+                style={({ pressed }) => [
+                  styles.notificationPrimaryButton,
+
+                  notificationBusy &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !notificationBusy &&
+                    styles.pressed,
+                ]}
+              >
+                {registering ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Ionicons
+                    name="notifications-outline"
+                    size={17}
+                    color="#FFFFFF"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.notificationPrimaryButtonText
+                  }
+                >
+                  {registering
+                    ? "Enabling..."
+                    : "Enable notifications"}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {notificationsEnabled ? (
+              <Pressable
+                disabled={
+                  notificationBusy
+                }
+                onPress={() => {
+                  void handleSendTestNotification();
+                }}
+                style={({ pressed }) => [
+                  styles.notificationPrimaryButton,
+
+                  notificationBusy &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !notificationBusy &&
+                    styles.pressed,
+                ]}
+              >
+                {testing ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Ionicons
+                    name="paper-plane-outline"
+                    size={17}
+                    color="#FFFFFF"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.notificationPrimaryButtonText
+                  }
+                >
+                  {testing
+                    ? "Sending..."
+                    : "Send test"}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {(permissionState ===
+              "denied" ||
+              permissionState ===
+                "error" ||
+              notificationsEnabled) &&
+            Platform.OS !== "web" ? (
+              <Pressable
+                disabled={
+                  notificationBusy
+                }
+                onPress={() => {
+                  void openNotificationSettings();
+                }}
+                style={({ pressed }) => [
+                  styles.notificationSecondaryButton,
+
+                  notificationBusy &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !notificationBusy &&
+                    styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="settings-outline"
+                  size={17}
+                  color="#245C42"
+                />
+
+                <Text
+                  style={
+                    styles.notificationSecondaryButtonText
+                  }
+                >
+                  Phone settings
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {notificationsEnabled ? (
+              <Pressable
+                disabled={
+                  notificationBusy
+                }
+                onPress={
+                  confirmDisableNotifications
+                }
+                style={({ pressed }) => [
+                  styles.notificationDangerButton,
+
+                  notificationBusy &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !notificationBusy &&
+                    styles.pressed,
+                ]}
+              >
+                {disabling ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#A34848"
+                  />
+                ) : (
+                  <Ionicons
+                    name="notifications-off-outline"
+                    size={17}
+                    color="#A34848"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.notificationDangerButtonText
+                  }
+                >
+                  {disabling
+                    ? "Disabling..."
+                    : "Disable"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {notificationsEnabled ? (
+            <Text
+              style={styles.notificationNote}
+            >
+              Disabling removes this device
+              from your account. Use phone
+              settings to keep notifications
+              permanently blocked.
+            </Text>
+          ) : null}
+        </View>
 
         <Text style={styles.sectionTitle}>
           Account information
@@ -927,6 +1483,218 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14,
     marginTop: 4,
+  },
+
+  notificationCard: {
+    padding: 17,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E1E7E1",
+  },
+
+  notificationTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  notificationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#EDF1ED",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  notificationIconEnabled: {
+    backgroundColor: "#DDECDD",
+  },
+
+  notificationIconBlocked: {
+    backgroundColor: "#FAEAEA",
+  },
+
+  notificationContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  notificationTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+
+  notificationTitle: {
+    flexShrink: 1,
+    color: "#26372E",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  notificationStatusBadge: {
+    minHeight: 23,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  notificationStatusEnabled: {
+    backgroundColor: "#DDECDD",
+  },
+
+  notificationStatusIdle: {
+    backgroundColor: "#EDF0ED",
+  },
+
+  notificationStatusError: {
+    backgroundColor: "#FAEAEA",
+  },
+
+  notificationStatusText: {
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  notificationStatusTextEnabled: {
+    color: "#245C42",
+  },
+
+  notificationStatusTextIdle: {
+    color: "#68746D",
+  },
+
+  notificationStatusTextError: {
+    color: "#A34848",
+  },
+
+  notificationDescription: {
+    color: "#6E7972",
+    fontSize: 9,
+    lineHeight: 15,
+    marginTop: 6,
+  },
+
+  pushErrorBox: {
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: "#FAEDED",
+    borderWidth: 1,
+    borderColor: "#F0D6D6",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 13,
+  },
+
+  pushErrorText: {
+    flex: 1,
+    color: "#8C4747",
+    fontSize: 8,
+    lineHeight: 13,
+  },
+
+  tokenBox: {
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F1",
+    borderWidth: 1,
+    borderColor: "#E0E7E0",
+    marginTop: 13,
+  },
+
+  tokenLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  tokenLabel: {
+    color: "#587063",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  tokenValue: {
+    color: "#526159",
+    fontSize: 8,
+    marginTop: 7,
+  },
+
+  notificationButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+    marginTop: 14,
+  },
+
+  notificationPrimaryButton: {
+    minHeight: 45,
+    paddingHorizontal: 15,
+    borderRadius: 15,
+    backgroundColor: "#245C42",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  notificationPrimaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  notificationSecondaryButton: {
+    minHeight: 45,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    backgroundColor: "#E7EFE8",
+    borderWidth: 1,
+    borderColor: "#D7E3D9",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  notificationSecondaryButtonText: {
+    color: "#245C42",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  notificationDangerButton: {
+    minHeight: 45,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    backgroundColor: "#FAECEC",
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  notificationDangerButtonText: {
+    color: "#A34848",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  notificationNote: {
+    color: "#7B857F",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 12,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
   },
 
   informationCard: {
