@@ -17,6 +17,7 @@ const adminSubscriptionChargeRoutes = require("./routes/adminSubscriptionCharges
 const adminSubscriptionDetailsRoutes = require("./routes/adminSubscriptionDetails");
 const adminSubscriptionRoutes = require("./routes/adminSubscriptions");
 const adminUserRoutes = require("./routes/adminUsers");
+
 const authRoutes = require("./routes/auth");
 const couponRoutes = require("./routes/coupons");
 const deliveryOrderRoutes = require("./routes/deliveryOrders");
@@ -25,19 +26,24 @@ const notificationRoutes = require("./routes/notifications");
 const orderReviewRoutes = require("./routes/orderReviews");
 const orderRoutes = require("./routes/orders");
 const productRoutes = require("./routes/products");
+const pushTokenRoutes = require("./routes/pushTokens");
 const razorpaySubscriptionRoutes = require("./routes/razorpaySubscriptions");
 const razorpaySubscriptionWebhookRoutes = require("./routes/razorpaySubscriptionWebhook");
 const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
 const subscriptionEditRoutes = require("./routes/subscriptionEdits");
 const subscriptionRoutes = require("./routes/subscriptions");
 
-const razorpayRefundWebhookMiddleware = require(
-  "./middleware/razorpayRefundWebhook"
-);
+const razorpayRefundWebhookMiddleware =
+  require(
+    "./middleware/razorpayRefundWebhook"
+  );
 
 const {
-  router: razorpayPaymentRoutes,
+  router:
+    razorpayPaymentRoutes,
+
   razorpayWebhookHandler,
+
   startPaymentExpiryWorker,
 } = require(
   "./routes/razorpayPayments"
@@ -47,6 +53,12 @@ const {
   startSubscriptionDeliveryWorker,
 } = require(
   "./services/subscriptionDelivery"
+);
+
+const {
+  startPushReceiptWorker,
+} = require(
+  "./services/pushNotificationService"
 );
 
 const app = express();
@@ -116,7 +128,8 @@ app.use(
           `Origin ${origin} is not permitted by CORS.`
         );
 
-      error.statusCode = 403;
+      error.statusCode =
+        403;
 
       return callback(
         error
@@ -128,9 +141,9 @@ app.use(
 );
 
 /*
- * Webhooks requiring the original
- * unparsed request body must be
- * registered before express.json().
+ * Webhook routes requiring the original
+ * unparsed request body must remain
+ * before express.json().
  */
 
 app.post(
@@ -178,7 +191,10 @@ if (
 app.get(
   "/api/health",
 
-  (req, res) => {
+  (
+    req,
+    res
+  ) => {
     return res
       .status(200)
       .json({
@@ -235,6 +251,11 @@ app.use(
 app.use(
   "/api/notifications",
   notificationRoutes
+);
+
+app.use(
+  "/api/push-tokens",
+  pushTokenRoutes
 );
 
 app.use(
@@ -335,12 +356,11 @@ app.use(
     res,
     next
   ) => {
-    console.error(
-      error
-    );
+    console.error(error);
 
     if (
-      error.code === 11000
+      error.code ===
+      11000
     ) {
       const duplicateField =
         Object.keys(
@@ -405,6 +425,8 @@ async function startServer() {
         startPaymentExpiryWorker();
 
         startSubscriptionDeliveryWorker();
+
+        startPushReceiptWorker();
       }
     );
   } catch (error) {
