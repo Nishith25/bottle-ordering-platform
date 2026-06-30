@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
+import NotificationNavigationHandler from "../components/NotificationNavigationHandler";
 import { AuthProvider } from "../context/AuthContext";
 import { CartProvider } from "../context/CartContext";
 import { OrderProvider } from "../context/OrderContext";
@@ -16,6 +17,8 @@ export default function RootLayout() {
           <OrderProvider>
             <SubscriptionProvider>
               <PushNotificationProvider>
+                <NotificationNavigationHandler />
+
                 <StatusBar style="dark" />
 
                 <Stack
