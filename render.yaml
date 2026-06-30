@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: sipbite-backend
+    runtime: node
+    region: singapore
+    plan: free
+
+    rootDir: backend
+
+    buildCommand: npm install
+    startCommand: npm start
+
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: HOST
+        value: 0.0.0.0
