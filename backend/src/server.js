@@ -33,76 +33,61 @@ const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
 const subscriptionEditRoutes = require("./routes/subscriptionEdits");
 const subscriptionRoutes = require("./routes/subscriptions");
 
-const razorpayRefundWebhookMiddleware =
-  require(
-    "./middleware/razorpayRefundWebhook"
-  );
+const razorpayRefundWebhookMiddleware = require(
+  "./middleware/razorpayRefundWebhook"
+);
 
 const {
-  router:
-    razorpayPaymentRoutes,
-
+  router: razorpayPaymentRoutes,
   razorpayWebhookHandler,
-
   startPaymentExpiryWorker,
-} = require(
-  "./routes/razorpayPayments"
-);
+} = require("./routes/razorpayPayments");
 
 const {
   startSubscriptionDeliveryWorker,
-} = require(
-  "./services/subscriptionDelivery"
-);
+} = require("./services/subscriptionDelivery");
 
 const {
   startPushReceiptWorker,
-} = require(
-  "./services/pushNotificationService"
-);
+} = require("./services/pushNotificationService");
 
 const app = express();
 
-app.set(
-  "trust proxy",
-  1
-);
+app.set("trust proxy", 1);
 
-app.disable(
-  "x-powered-by"
-);
+app.disable("x-powered-by");
 
 const PORT = Number(
-  process.env.PORT ||
-    5001
+  process.env.PORT || 5001
 );
 
-const allowedOrigins =
-  String(
-    process.env.CLIENT_ORIGINS ||
-      ""
-  )
-    .split(",")
-    .map((origin) =>
-      origin.trim()
-    )
-    .filter(Boolean);
+const HOST = String(
+  process.env.HOST || "0.0.0.0"
+).trim();
+
+const allowedOrigins = String(
+  process.env.CLIENT_ORIGINS || ""
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   helmet({
     crossOriginOpenerPolicy: {
-      policy:
-        "same-origin-allow-popups",
+      policy: "same-origin-allow-popups",
     },
   })
 );
 
 app.use(
   cors({
-    origin(
-      origin,
-      callback
-    ) {
+    origin(origin, callback) {
+      /*
+       * Native mobile requests and tools
+       * such as Postman may not include an
+       * Origin header.
+       */
       if (!origin) {
         return callback(
           null,
@@ -110,12 +95,14 @@ app.use(
         );
       }
 
+      /*
+       * During local development, allow all
+       * origins when CLIENT_ORIGINS has not
+       * been configured.
+       */
       if (
-        allowedOrigins.length ===
-          0 ||
-        allowedOrigins.includes(
-          origin
-        )
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes(origin)
       ) {
         return callback(
           null,
@@ -123,36 +110,47 @@ app.use(
         );
       }
 
-      const error =
-        new Error(
-          `Origin ${origin} is not permitted by CORS.`
-        );
-
-      error.statusCode =
-        403;
-
-      return callback(
-        error
+      const error = new Error(
+        `Origin ${origin} is not permitted by CORS.`
       );
+
+      error.statusCode = 403;
+
+      return callback(error);
     },
 
     credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+    ],
   })
 );
 
 /*
  * Webhook routes requiring the original
- * unparsed request body must remain
- * before express.json().
+ * unparsed request body must remain before
+ * express.json().
  */
 
 app.post(
   "/api/payments/razorpay/webhook",
 
   express.raw({
-    type:
-      "application/json",
-
+    type: "application/json",
     limit: "1mb",
   }),
 
@@ -163,7 +161,6 @@ app.post(
 
 app.use(
   "/api/webhooks/razorpay/subscriptions",
-
   razorpaySubscriptionWebhookRoutes
 );
 
@@ -176,25 +173,20 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
+    limit: "1mb",
   })
 );
 
 if (
-  process.env.NODE_ENV !==
-  "test"
+  process.env.NODE_ENV !== "test"
 ) {
-  app.use(
-    morgan("dev")
-  );
+  app.use(morgan("dev"));
 }
 
 app.get(
   "/api/health",
 
-  (
-    req,
-    res
-  ) => {
+  (req, res) => {
     return res
       .status(200)
       .json({
@@ -207,10 +199,16 @@ app.get(
           process.env.NODE_ENV ||
           "development",
 
+        host: HOST,
+
+        port: PORT,
+
         database:
-          mongoose.connection
-            .name ||
+          mongoose.connection.name ||
           null,
+
+        databaseState:
+          mongoose.connection.readyState,
 
         timestamp:
           new Date().toISOString(),
@@ -333,11 +331,11 @@ app.use(
   adminRoutes
 );
 
+/*
+ * Route not found handler.
+ */
 app.use(
-  (
-    req,
-    res
-  ) => {
+  (req, res) => {
     return res
       .status(404)
       .json({
@@ -349,6 +347,9 @@ app.use(
   }
 );
 
+/*
+ * Central error handler.
+ */
 app.use(
   (
     error,
@@ -359,15 +360,12 @@ app.use(
     console.error(error);
 
     if (
-      error.code ===
-      11000
+      error.code === 11000
     ) {
       const duplicateField =
         Object.keys(
-          error.keyPattern ||
-            {}
-        )[0] ||
-        "field";
+          error.keyPattern || {}
+        )[0] || "field";
 
       return res
         .status(409)
@@ -394,17 +392,14 @@ app.use(
         success: false,
 
         message:
-          statusCode ===
-          500
+          statusCode === 500
             ? "An unexpected server error occurred."
             : error.message,
 
-        ...(process.env
-          .NODE_ENV ===
+        ...(process.env.NODE_ENV ===
         "development"
           ? {
-              stack:
-                error.stack,
+              stack: error.stack,
             }
           : {}),
       });
@@ -417,9 +412,18 @@ async function startServer() {
 
     app.listen(
       PORT,
+      HOST,
       () => {
         console.log(
-          `Backend running on port ${PORT}`
+          `Backend running on http://${HOST}:${PORT}`
+        );
+
+        console.log(
+          `Local health: http://localhost:${PORT}/api/health`
+        );
+
+        console.log(
+          "For mobile testing, use your Mac Wi-Fi IP instead of localhost."
         );
 
         startPaymentExpiryWorker();
