@@ -13,6 +13,9 @@ const PushNotificationLog =
     "../models/PushNotificationLog"
   );
 
+const DEFAULT_ANDROID_CHANNEL_ID =
+  "sipbite-general";
+
 const PUSH_RECEIPT_INTERVAL_MS =
   Math.max(
     60 * 1000,
@@ -508,6 +511,7 @@ async function createPushLog({
 
 function buildExpoMessage({
   token,
+  platform,
   title,
   body,
   data,
@@ -517,8 +521,22 @@ function buildExpoMessage({
   badge,
   ttl,
 }) {
+  const normalizedPlatform =
+    normalizePlatform(
+      platform
+    );
+
+  const cleanSound =
+    cleanText(sound);
+
+  const cleanChannelId =
+    cleanText(
+      channelId
+    );
+
   return {
-    to: token,
+    to:
+      token,
 
     title:
       truncateText(
@@ -537,19 +555,46 @@ function buildExpoMessage({
         data
       ),
 
-    sound:
-      sound || "default",
-
     priority:
-      priority || "high",
+      priority ||
+      "high",
 
-    ...(channelId
+    /*
+     * Android notification behaviour
+     * is controlled by the channel
+     * created in the mobile app.
+     */
+    ...(normalizedPlatform ===
+      "android" &&
+    cleanChannelId
       ? {
-          channelId,
+          channelId:
+            cleanChannelId,
         }
       : {}),
 
-    ...(Number.isInteger(
+    /*
+     * Expo Push Service currently
+     * treats sound as an iOS field.
+     * Do not send "default" as an
+     * Android custom-sound filename.
+     */
+    ...(normalizedPlatform ===
+      "ios" &&
+    cleanSound
+      ? {
+          sound:
+            cleanSound,
+        }
+      : {}),
+
+    /*
+     * Badge is an iOS field in the
+     * Expo Push Service request.
+     */
+    ...(normalizedPlatform ===
+      "ios" &&
+    Number.isInteger(
       badge
     )
       ? {
@@ -583,7 +628,8 @@ async function sendPushToUser({
   dedupeKey,
   sound = "default",
   priority = "high",
-  channelId = "default",
+  channelId =
+    DEFAULT_ANDROID_CHANNEL_ID,
   badge,
   ttl,
 }) {
@@ -756,6 +802,9 @@ async function sendPushToUser({
         buildExpoMessage({
           token:
             tokenDocument.token,
+
+          platform:
+            tokenDocument.platform,
 
           title:
             cleanTitle,
@@ -1435,6 +1484,8 @@ function startPushReceiptWorker() {
 }
 
 module.exports = {
+  DEFAULT_ANDROID_CHANNEL_ID,
+
   registerPushToken,
 
   unregisterPushToken,

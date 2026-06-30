@@ -1,4 +1,5 @@
-const express = require("express");
+const express =
+  require("express");
 
 const {
   protect,
@@ -11,6 +12,7 @@ const PushToken = require(
 );
 
 const {
+  DEFAULT_ANDROID_CHANNEL_ID,
   registerPushToken,
   unregisterPushToken,
   unregisterAllPushTokens,
@@ -305,7 +307,7 @@ router.post(
 
           title:
             req.body.title ||
-            "Bottle notifications enabled",
+            "SipBite notifications enabled",
 
           body:
             req.body.body ||
@@ -335,7 +337,7 @@ router.post(
             `manual-test:${Date.now()}`,
 
           channelId:
-            "default",
+            DEFAULT_ANDROID_CHANNEL_ID,
         });
 
       return res

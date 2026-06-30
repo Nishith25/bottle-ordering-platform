@@ -2,6 +2,20 @@ const Notification = require(
   "../models/Notification"
 );
 
+const {
+  sendPushToUser,
+} = require(
+  "./pushNotificationService"
+);
+
+const PUSH_CHANNELS = {
+  general: "sipbite-general",
+  orders: "sipbite-orders",
+  subscriptions:
+    "sipbite-subscriptions",
+  delivery: "sipbite-delivery",
+};
+
 function cleanText(value) {
   return String(
     value ?? ""
@@ -20,7 +34,9 @@ function getReferenceId(value) {
   }
 
   if (value._id) {
-    return String(value._id);
+    return String(
+      value._id
+    );
   }
 
   return String(value);
@@ -41,6 +57,25 @@ function toPlainObject(value) {
   return {
     ...value,
   };
+}
+
+function normalizeMetadata(value) {
+  if (
+    !value ||
+    typeof value !==
+      "object" ||
+    Array.isArray(value)
+  ) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(
+      JSON.stringify(value)
+    );
+  } catch {
+    return {};
+  }
 }
 
 function formatDate(value) {
@@ -76,7 +111,9 @@ function getUpdateToken(record) {
         Date.now()
     ).getTime();
 
-  return Number.isFinite(updatedAt)
+  return Number.isFinite(
+    updatedAt
+  )
     ? updatedAt
     : Date.now();
 }
@@ -92,7 +129,8 @@ function getOrderNumber(order) {
 
 function getPartnerName(order) {
   if (
-    order.deliveryPartnerSnapshot
+    order
+      .deliveryPartnerSnapshot
       ?.fullName
   ) {
     return cleanText(
@@ -137,6 +175,341 @@ function getPlanName(subscription) {
   );
 }
 
+/*
+ * Select the Android notification
+ * channel based on notification type
+ * and action.
+ */
+function getPushChannel({
+  type,
+  action,
+}) {
+  const cleanType =
+    cleanText(type)
+      .toLowerCase();
+
+  const cleanAction =
+    cleanText(action)
+      .toLowerCase();
+
+  const combined =
+    `${cleanType} ${cleanAction}`;
+
+  if (
+    combined.includes(
+      "delivery"
+    ) ||
+    combined.includes(
+      "picked_up"
+    ) ||
+    combined.includes(
+      "out_for_delivery"
+    )
+  ) {
+    return PUSH_CHANNELS
+      .delivery;
+  }
+
+  if (
+    combined.includes(
+      "subscription"
+    ) ||
+    combined.includes(
+      "recurring"
+    ) ||
+    combined.includes(
+      "mandate"
+    ) ||
+    combined.includes(
+      "billing"
+    ) ||
+    combined.includes(
+      "plan"
+    )
+  ) {
+    return PUSH_CHANNELS
+      .subscriptions;
+  }
+
+  if (
+    combined.includes(
+      "order"
+    ) ||
+    combined.includes(
+      "refund"
+    ) ||
+    combined.includes(
+      "payment"
+    ) ||
+    combined.includes(
+      "review"
+    )
+  ) {
+    return PUSH_CHANNELS
+      .orders;
+  }
+
+  return PUSH_CHANNELS
+    .general;
+}
+
+/*
+ * Create only safe, known routes.
+ * Arbitrary routes from metadata are
+ * not accepted.
+ */
+function getPushRoute({
+  type,
+  action,
+  orderId,
+  subscriptionId,
+}) {
+  const cleanType =
+    cleanText(type)
+      .toLowerCase();
+
+  const cleanAction =
+    cleanText(action)
+      .toLowerCase();
+
+  if (
+    orderId &&
+    (
+      cleanAction ===
+        "delivery_tracking" ||
+      cleanAction ===
+        "delivery_order" ||
+      cleanType.includes(
+        "delivery"
+      ) ||
+      cleanType.includes(
+        "picked_up"
+      ) ||
+      cleanType.includes(
+        "out_for_delivery"
+      )
+    )
+  ) {
+    return "/delivery-order";
+  }
+
+  if (
+    subscriptionId &&
+    (
+      cleanAction ===
+        "subscriptions" ||
+      cleanAction ===
+        "subscription_details" ||
+      cleanType.includes(
+        "subscription"
+      )
+    )
+  ) {
+    return "/subscription-details";
+  }
+
+  if (
+    cleanAction ===
+      "subscriptions" ||
+    cleanType.includes(
+      "subscription"
+    ) ||
+    cleanType.includes(
+      "billing"
+    ) ||
+    cleanType.includes(
+      "mandate"
+    )
+  ) {
+    return "/plans";
+  }
+
+  if (
+    orderId ||
+    cleanAction ===
+      "orders" ||
+    cleanType.includes(
+      "order"
+    ) ||
+    cleanType.includes(
+      "refund"
+    ) ||
+    cleanType.includes(
+      "review"
+    ) ||
+    cleanType.includes(
+      "payment"
+    )
+  ) {
+    return "/orders";
+  }
+
+  return "/notifications";
+}
+
+function buildPushData({
+  notification,
+  type,
+  action,
+  orderId,
+  subscriptionId,
+  metadata,
+}) {
+  const cleanOrderId =
+    getReferenceId(orderId);
+
+  const cleanSubscriptionId =
+    getReferenceId(
+      subscriptionId
+    );
+
+  const cleanMetadata =
+    normalizeMetadata(
+      metadata
+    );
+
+  const data = {
+    notificationId:
+      getReferenceId(
+        notification?._id
+      ) || "",
+
+    type:
+      cleanText(type),
+
+    action:
+      cleanText(action),
+
+    route:
+      getPushRoute({
+        type,
+        action,
+        orderId:
+          cleanOrderId,
+        subscriptionId:
+          cleanSubscriptionId,
+      }),
+  };
+
+  if (cleanOrderId) {
+    data.orderId =
+      cleanOrderId;
+  }
+
+  if (
+    cleanSubscriptionId
+  ) {
+    data.subscriptionId =
+      cleanSubscriptionId;
+  }
+
+  const orderNumber =
+    cleanText(
+      cleanMetadata
+        .orderNumber
+    );
+
+  const subscriptionNumber =
+    cleanText(
+      cleanMetadata
+        .subscriptionNumber
+    );
+
+  if (orderNumber) {
+    data.orderNumber =
+      orderNumber;
+  }
+
+  if (
+    subscriptionNumber
+  ) {
+    data.subscriptionNumber =
+      subscriptionNumber;
+  }
+
+  return data;
+}
+
+/*
+ * Push is deliberately fire-and-forget.
+ * A push failure must not break checkout,
+ * order status updates, refunds, or
+ * subscription operations.
+ */
+function sendPushSafely({
+  notification,
+  userId,
+  type,
+  title,
+  message,
+  action,
+  orderId,
+  subscriptionId,
+  metadata,
+  dedupeKey,
+}) {
+  const cleanUserId =
+    getReferenceId(userId);
+
+  if (!cleanUserId) {
+    return;
+  }
+
+  const pushDedupeKey =
+    cleanText(dedupeKey) ||
+    (
+      notification?._id
+        ? `notification:${notification._id}`
+        : `notification:${cleanUserId}:${Date.now()}`
+    );
+
+  const channelId =
+    getPushChannel({
+      type,
+      action,
+    });
+
+  const data =
+    buildPushData({
+      notification,
+      type,
+      action,
+      orderId,
+      subscriptionId,
+      metadata,
+    });
+
+  Promise.resolve()
+    .then(() =>
+      sendPushToUser({
+        userId:
+          cleanUserId,
+
+        title:
+          cleanText(title),
+
+        body:
+          cleanText(message),
+
+        data,
+
+        dedupeKey:
+          pushDedupeKey,
+
+        channelId,
+
+        priority:
+          "high",
+      })
+    )
+    .catch((error) => {
+      console.error(
+        "Unable to send push notification:",
+        error.message
+      );
+    });
+}
+
 async function createNotification({
   userId,
   type,
@@ -152,54 +525,108 @@ async function createNotification({
     return null;
   }
 
+  const cleanTitle =
+    cleanText(title);
+
+  const cleanMessage =
+    cleanText(message);
+
+  if (
+    !cleanTitle ||
+    !cleanMessage
+  ) {
+    return null;
+  }
+
+  const cleanMetadata =
+    normalizeMetadata(
+      metadata
+    );
+
   const payload = {
     user: userId,
+
     type,
 
     title:
-      cleanText(title),
+      cleanTitle,
 
     message:
-      cleanText(message),
+      cleanMessage,
 
-    action,
+    action:
+      cleanText(action) ||
+      "none",
 
     order:
       orderId || null,
 
     subscription:
-      subscriptionId || null,
+      subscriptionId ||
+      null,
 
     metadata:
-      metadata || {},
+      cleanMetadata,
 
     readAt: null,
   };
 
+  let notification;
+
   if (dedupeKey) {
     payload.dedupeKey =
-      cleanText(dedupeKey);
+      cleanText(
+        dedupeKey
+      );
 
-    return Notification.findOneAndUpdate(
-      {
-        dedupeKey:
-          payload.dedupeKey,
-      },
-      {
-        $setOnInsert:
-          payload,
-      },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
-      }
-    );
+    notification =
+      await Notification.findOneAndUpdate(
+        {
+          dedupeKey:
+            payload.dedupeKey,
+        },
+        {
+          $setOnInsert:
+            payload,
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert:
+            true,
+        }
+      );
+  } else {
+    notification =
+      await Notification.create(
+        payload
+      );
   }
 
-  return Notification.create(
-    payload
-  );
+  if (!notification) {
+    return null;
+  }
+
+  sendPushSafely({
+    notification,
+    userId,
+    type,
+    title:
+      cleanTitle,
+    message:
+      cleanMessage,
+    action:
+      payload.action,
+    orderId,
+    subscriptionId,
+    metadata:
+      cleanMetadata,
+    dedupeKey:
+      payload.dedupeKey ||
+      "",
+  });
+
+  return notification;
 }
 
 async function createNotificationSafely(
@@ -214,12 +641,61 @@ async function createNotificationSafely(
       error?.code === 11000 &&
       input.dedupeKey
     ) {
-      return Notification.findOne({
-        dedupeKey:
-          cleanText(
-            input.dedupeKey
-          ),
-      });
+      const existingNotification =
+        await Notification.findOne({
+          dedupeKey:
+            cleanText(
+              input.dedupeKey
+            ),
+        });
+
+      /*
+       * Retry-safe push call. The push
+       * notification log also uses the
+       * same dedupe key, so it will not
+       * send the same push twice.
+       */
+      if (
+        existingNotification
+      ) {
+        sendPushSafely({
+          notification:
+            existingNotification,
+
+          userId:
+            input.userId,
+
+          type:
+            input.type,
+
+          title:
+            input.title,
+
+          message:
+            input.message,
+
+          action:
+            input.action ||
+            "none",
+
+          orderId:
+            input.orderId ||
+            null,
+
+          subscriptionId:
+            input.subscriptionId ||
+            null,
+
+          metadata:
+            input.metadata ||
+            {},
+
+          dedupeKey:
+            input.dedupeKey,
+        });
+      }
+
+      return existingNotification;
     }
 
     console.error(
@@ -256,13 +732,19 @@ async function notifyOrderPlaced(
 
   return createNotificationSafely({
     userId,
-    type: "order_placed",
-    title: "Order placed",
+
+    type:
+      "order_placed",
+
+    title:
+      "Order placed",
 
     message:
       `${orderNumber} was placed successfully. We will notify you when it is confirmed.`,
 
-    action: "orders",
+    action:
+      "orders",
+
     orderId,
 
     metadata: {
@@ -325,10 +807,18 @@ async function notifyOrderCancelled(
 
   return createNotificationSafely({
     userId,
-    type: "order_cancelled",
-    title: "Order cancelled",
+
+    type:
+      "order_cancelled",
+
+    title:
+      "Order cancelled",
+
     message,
-    action: "orders",
+
+    action:
+      "orders",
+
     orderId,
 
     metadata: {
@@ -364,7 +854,8 @@ async function notifyRefundUpdate(
 
   const attemptCount =
     Number(
-      current.refundAttemptCount ||
+      current
+        .refundAttemptCount ||
         0
     );
 
@@ -374,13 +865,19 @@ async function notifyRefundUpdate(
   ) {
     return createNotificationSafely({
       userId,
-      type: "refund_pending",
-      title: "Refund processing",
+
+      type:
+        "refund_pending",
+
+      title:
+        "Refund processing",
 
       message:
         `The refund for ${orderNumber} is being processed through Razorpay.`,
 
-      action: "orders",
+      action:
+        "orders",
+
       orderId,
 
       metadata: {
@@ -401,6 +898,7 @@ async function notifyRefundUpdate(
   ) {
     return createNotificationSafely({
       userId,
+
       type:
         "refund_processed",
 
@@ -410,7 +908,9 @@ async function notifyRefundUpdate(
       message:
         `The refund for ${orderNumber} was processed successfully.`,
 
-      action: "orders",
+      action:
+        "orders",
+
       orderId,
 
       metadata: {
@@ -436,7 +936,9 @@ async function notifyRefundUpdate(
   ) {
     return createNotificationSafely({
       userId,
-      type: "refund_failed",
+
+      type:
+        "refund_failed",
 
       title:
         "Refund needs attention",
@@ -444,7 +946,9 @@ async function notifyRefundUpdate(
       message:
         `The automatic refund for ${orderNumber} could not be completed. The support team can retry it.`,
 
-      action: "orders",
+      action:
+        "orders",
+
       orderId,
 
       metadata: {
@@ -682,7 +1186,9 @@ async function processOrderNotificationChanges({
         message:
           `${orderNumber} was delivered successfully. You can now share your feedback.`,
 
-        action: "orders",
+        action:
+          "orders",
+
         orderId,
 
         metadata: {
@@ -721,7 +1227,9 @@ async function processOrderNotificationChanges({
         message:
           `${orderNumber} has been confirmed and will be prepared for delivery.`,
 
-        action: "orders",
+        action:
+          "orders",
+
         orderId,
 
         metadata: {
@@ -752,7 +1260,9 @@ async function processOrderNotificationChanges({
         message:
           `${orderNumber} is being prepared for delivery.`,
 
-        action: "orders",
+        action:
+          "orders",
+
         orderId,
 
         metadata: {
@@ -816,7 +1326,9 @@ async function processOrderNotificationChanges({
         message:
           `${orderNumber} was delivered successfully. You can now share your feedback.`,
 
-        action: "orders",
+        action:
+          "orders",
+
         orderId,
 
         metadata: {
@@ -881,7 +1393,8 @@ async function notifyReviewSubmitted(
   const orderNumber =
     cleanText(
       current.orderNumber
-    ) || "your order";
+    ) ||
+    "your order";
 
   return createNotificationSafely({
     userId,
@@ -895,7 +1408,9 @@ async function notifyReviewSubmitted(
     message:
       `Thank you. Your review for ${orderNumber} was submitted successfully.`,
 
-    action: "orders",
+    action:
+      "orders",
+
     orderId,
 
     metadata: {
@@ -1100,6 +1615,7 @@ async function processSubscriptionNotificationChanges({
         metadata: {
           subscriptionNumber,
           planName,
+
           status:
             current.status,
         },
@@ -1143,6 +1659,7 @@ async function processSubscriptionNotificationChanges({
         metadata: {
           subscriptionNumber,
           planName,
+
           status:
             current.status,
         },
@@ -1186,6 +1703,7 @@ async function processSubscriptionNotificationChanges({
         metadata: {
           subscriptionNumber,
           planName,
+
           status:
             current.status,
 
@@ -1222,6 +1740,7 @@ async function processSubscriptionNotificationChanges({
         metadata: {
           subscriptionNumber,
           planName,
+
           status:
             current.status,
         },
@@ -1272,7 +1791,9 @@ async function processSubscriptionNotificationChanges({
     ![
       "cancelled",
       "expired",
-    ].includes(current.status)
+    ].includes(
+      current.status
+    )
   ) {
     const billingDate =
       formatDate(
@@ -1319,4 +1840,5 @@ module.exports = {
   notifySubscriptionCreated,
   processOrderNotificationChanges,
   processSubscriptionNotificationChanges,
+  PUSH_CHANNELS,
 };

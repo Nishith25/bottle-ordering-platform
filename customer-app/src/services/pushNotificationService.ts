@@ -1,11 +1,16 @@
-import {
-  Platform,
-} from "react-native";
+import { Platform } from "react-native";
 
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+
+export const ANDROID_NOTIFICATION_CHANNELS = {
+  general: "sipbite-general",
+  orders: "sipbite-orders",
+  subscriptions: "sipbite-subscriptions",
+  delivery: "sipbite-delivery",
+} as const;
 
 export type PushPermissionState =
   | "idle"
@@ -38,11 +43,8 @@ export class PushRegistrationError extends Error {
   ) {
     super(message);
 
-    this.name =
-      "PushRegistrationError";
-
-    this.code =
-      code;
+    this.name = "PushRegistrationError";
+    this.code = code;
   }
 }
 
@@ -51,27 +53,21 @@ export class PushRegistrationError extends Error {
  * is open in the foreground.
  */
 Notifications.setNotificationHandler({
-  handleNotification:
-    async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
 });
 
-function cleanText(
-  value: unknown
-) {
-  return String(
-    value ?? ""
-  ).trim();
+function cleanText(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function getProjectId() {
   const extra =
-    Constants.expoConfig
-      ?.extra as
+    Constants.expoConfig?.extra as
       | {
           eas?: {
             projectId?: string;
@@ -81,10 +77,8 @@ function getProjectId() {
 
   return cleanText(
     extra?.eas?.projectId ||
-      Constants.easConfig
-        ?.projectId ||
-      process.env
-        .EXPO_PUBLIC_EAS_PROJECT_ID
+      Constants.easConfig?.projectId ||
+      process.env.EXPO_PUBLIC_EAS_PROJECT_ID
   );
 }
 
@@ -92,9 +86,7 @@ function hasNotificationPermission(
   permission:
     Notifications.NotificationPermissionsStatus
 ) {
-  if (
-    Platform.OS === "ios"
-  ) {
+  if (Platform.OS === "ios") {
     const iosStatus =
       permission.ios?.status;
 
@@ -117,27 +109,20 @@ function hasNotificationPermission(
   }
 
   return (
-    permission.status ===
-    "granted"
+    permission.status === "granted"
   );
 }
 
 async function getDeviceId() {
   try {
-    if (
-      Platform.OS ===
-      "android"
-    ) {
+    if (Platform.OS === "android") {
       return (
         Application.getAndroidId() ||
         ""
       );
     }
 
-    if (
-      Platform.OS ===
-      "ios"
-    ) {
+    if (Platform.OS === "ios") {
       return (
         (await Application.getIosIdForVendorAsync()) ||
         ""
@@ -151,33 +136,25 @@ async function getDeviceId() {
 }
 
 export async function configureAndroidNotificationChannels() {
-  if (
-    Platform.OS !==
-    "android"
-  ) {
+  if (Platform.OS !== "android") {
     return;
   }
 
   await Promise.all([
     Notifications.setNotificationChannelAsync(
-      "default",
+      ANDROID_NOTIFICATION_CHANNELS.general,
       {
-        name:
-          "General notifications",
+        name: "General notifications",
 
         description:
-          "Important bottle-ordering updates.",
+          "Important SipBite updates.",
 
         importance:
           Notifications
             .AndroidImportance
             .HIGH,
 
-        sound:
-          "default",
-
-        enableVibrate:
-          true,
+        enableVibrate: true,
 
         vibrationPattern: [
           0,
@@ -186,16 +163,14 @@ export async function configureAndroidNotificationChannels() {
           250,
         ],
 
-        showBadge:
-          true,
+        showBadge: true,
       }
     ),
 
     Notifications.setNotificationChannelAsync(
-      "orders",
+      ANDROID_NOTIFICATION_CHANNELS.orders,
       {
-        name:
-          "Order updates",
+        name: "Order updates",
 
         description:
           "Payment, preparation and delivery updates.",
@@ -205,19 +180,21 @@ export async function configureAndroidNotificationChannels() {
             .AndroidImportance
             .HIGH,
 
-        sound:
-          "default",
+        enableVibrate: true,
 
-        enableVibrate:
-          true,
+        vibrationPattern: [
+          0,
+          250,
+          250,
+          250,
+        ],
 
-        showBadge:
-          true,
+        showBadge: true,
       }
     ),
 
     Notifications.setNotificationChannelAsync(
-      "subscriptions",
+      ANDROID_NOTIFICATION_CHANNELS.subscriptions,
       {
         name:
           "Subscription updates",
@@ -230,22 +207,23 @@ export async function configureAndroidNotificationChannels() {
             .AndroidImportance
             .HIGH,
 
-        sound:
-          "default",
+        enableVibrate: true,
 
-        enableVibrate:
-          true,
+        vibrationPattern: [
+          0,
+          250,
+          250,
+          250,
+        ],
 
-        showBadge:
-          true,
+        showBadge: true,
       }
     ),
 
     Notifications.setNotificationChannelAsync(
-      "delivery",
+      ANDROID_NOTIFICATION_CHANNELS.delivery,
       {
-        name:
-          "Delivery alerts",
+        name: "Delivery alerts",
 
         description:
           "New assignments and active delivery updates.",
@@ -255,11 +233,7 @@ export async function configureAndroidNotificationChannels() {
             .AndroidImportance
             .MAX,
 
-        sound:
-          "default",
-
-        enableVibrate:
-          true,
+        enableVibrate: true,
 
         vibrationPattern: [
           0,
@@ -268,8 +242,7 @@ export async function configureAndroidNotificationChannels() {
           300,
         ],
 
-        showBadge:
-          true,
+        showBadge: true,
       }
     ),
   ]);
@@ -277,9 +250,7 @@ export async function configureAndroidNotificationChannels() {
 
 export async function registerForNativePushNotifications():
   Promise<NativePushRegistration> {
-  if (
-    Platform.OS === "web"
-  ) {
+  if (Platform.OS === "web") {
     throw new PushRegistrationError(
       "unsupported_platform",
       "Mobile push notifications are available only in the iOS and Android apps."
@@ -287,9 +258,9 @@ export async function registerForNativePushNotifications():
   }
 
   /*
-   * Android 13 does not display its
-   * notification permission prompt
-   * until a notification channel exists.
+   * Android 13 requires a notification
+   * channel before showing the permission
+   * request.
    */
   await configureAndroidNotificationChannels();
 
@@ -336,8 +307,7 @@ export async function registerForNativePushNotifications():
     );
   }
 
-  let expoPushToken =
-    "";
+  let expoPushToken = "";
 
   try {
     const result =
@@ -348,9 +318,7 @@ export async function registerForNativePushNotifications():
       );
 
     expoPushToken =
-      cleanText(
-        result.data
-      );
+      cleanText(result.data);
   } catch (error) {
     throw new PushRegistrationError(
       "token_generation_failed",
@@ -393,8 +361,7 @@ export async function registerForNativePushNotifications():
     | "unknown" =
     Platform.OS === "ios"
       ? "ios"
-      : Platform.OS ===
-          "android"
+      : Platform.OS === "android"
         ? "android"
         : "unknown";
 
@@ -409,9 +376,7 @@ export async function registerForNativePushNotifications():
 }
 
 export async function clearApplicationBadge() {
-  if (
-    Platform.OS === "web"
-  ) {
+  if (Platform.OS === "web") {
     return false;
   }
 
@@ -425,36 +390,53 @@ export async function clearApplicationBadge() {
 }
 
 export async function scheduleLocalPushTest() {
-  if (
-    Platform.OS === "web"
-  ) {
+  if (Platform.OS === "web") {
     throw new Error(
       "Local notifications are available only in the mobile app."
     );
   }
 
-  await Notifications.scheduleNotificationAsync(
-    {
-      content: {
-        title:
-          "Bottle notification test",
+  await configureAndroidNotificationChannels();
 
-        body:
-          "Local notifications are working on this device.",
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title:
+        "SipBite notification test",
 
-        sound:
-          "default",
+      body:
+        "Local notifications are working on this device.",
 
-        data: {
-          route:
-            "/notifications",
-
-          type:
-            "local_push_test",
-        },
+      data: {
+        route: "/notifications",
+        type: "local_push_test",
       },
 
-      trigger: null,
-    }
-  );
+      /*
+       * iOS supports the default sound
+       * directly in notification content.
+       * Android receives its settings from
+       * the notification channel.
+       */
+      ...(Platform.OS === "ios"
+        ? {
+            sound: "default" as const,
+          }
+        : {}),
+    },
+
+    trigger:
+      Platform.OS === "android"
+        ? {
+            type:
+              Notifications
+                .SchedulableTriggerInputTypes
+                .TIME_INTERVAL,
+
+            seconds: 1,
+
+            channelId:
+              ANDROID_NOTIFICATION_CHANNELS.general,
+          }
+        : null,
+  });
 }
