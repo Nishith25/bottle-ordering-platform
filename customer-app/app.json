@@ -1,17 +1,21 @@
 {
   "expo": {
-    "name": "customer-app",
+    "name": "SipBite",
     "slug": "sipbite",
+    "owner": "nishithreddys-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "customerapp",
+    "scheme": "sipbite",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nishithreddy.sipbite"
     },
     "android": {
+      "package": "com.nishithreddy.sipbite",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -44,11 +48,9 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "8736d6e9-4325-465f-8835-543b4a25307a"
       }
-    },
-    "owner": "nishithreddys-team"
+    }
   }
 }

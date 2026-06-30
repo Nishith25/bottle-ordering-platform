@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "234234387105",
+    "project_id": "sipbite",
+    "storage_bucket": "sipbite.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:234234387105:android:31d1aefc76d84c70382ee0",
+        "android_client_info": {
+          "package_name": "com.nishithreddy.sipbite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWU6cFW2wUM9_9GLESNq1pXigAvTQyBJk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
