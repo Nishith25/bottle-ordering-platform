@@ -19,6 +19,19 @@
         "buildType": "apk"
       }
     },
+    "preview-ios-simulator": {
+      "environment": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview-ios-device": {
+      "distribution": "internal",
+      "environment": "preview",
+      "ios": {
+        "simulator": false
+      }
+    },
     "production": {
       "environment": "production",
       "autoIncrement": true

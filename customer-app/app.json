@@ -11,7 +11,10 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.nishithreddy.sipbite"
+      "bundleIdentifier": "com.nishithreddy.sipbite",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.nishithreddy.sipbite",
