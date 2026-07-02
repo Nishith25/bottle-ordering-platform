@@ -32,6 +32,7 @@ const razorpaySubscriptionWebhookRoutes = require("./routes/razorpaySubscription
 const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
 const subscriptionEditRoutes = require("./routes/subscriptionEdits");
 const subscriptionRoutes = require("./routes/subscriptions");
+const webPushSubscriptionRoutes = require("./routes/webPushSubscriptions");
 
 const razorpayRefundWebhookMiddleware = require(
   "./middleware/razorpayRefundWebhook"
@@ -83,11 +84,6 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      /*
-       * Native mobile requests and tools
-       * such as Postman may not include an
-       * Origin header.
-       */
       if (!origin) {
         return callback(
           null,
@@ -95,11 +91,6 @@ app.use(
         );
       }
 
-      /*
-       * During local development, allow all
-       * origins when CLIENT_ORIGINS has not
-       * been configured.
-       */
       if (
         allowedOrigins.length === 0 ||
         allowedOrigins.includes(origin)
@@ -141,11 +132,9 @@ app.use(
 );
 
 /*
- * Webhook routes requiring the original
- * unparsed request body must remain before
- * express.json().
+ * Raw webhook routes must stay
+ * before express.json().
  */
-
 app.post(
   "/api/payments/razorpay/webhook",
 
@@ -257,6 +246,11 @@ app.use(
 );
 
 app.use(
+  "/api/web-push",
+  webPushSubscriptionRoutes
+);
+
+app.use(
   "/api/subscriptions",
   razorpaySubscriptionRoutes
 );
@@ -331,9 +325,6 @@ app.use(
   adminRoutes
 );
 
-/*
- * Route not found handler.
- */
 app.use(
   (req, res) => {
     return res
@@ -347,9 +338,6 @@ app.use(
   }
 );
 
-/*
- * Central error handler.
- */
 app.use(
   (
     error,
@@ -399,7 +387,8 @@ app.use(
         ...(process.env.NODE_ENV ===
         "development"
           ? {
-              stack: error.stack,
+              stack:
+                error.stack,
             }
           : {}),
       });
@@ -413,6 +402,7 @@ async function startServer() {
     app.listen(
       PORT,
       HOST,
+
       () => {
         console.log(
           `Backend running on http://${HOST}:${PORT}`

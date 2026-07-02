@@ -8,11 +8,15 @@ import {
   useState,
 } from "react";
 
-import { Platform } from "react-native";
+import {
+  Platform,
+} from "react-native";
 
 import * as Notifications from "expo-notifications";
 
-import { useAuth } from "./AuthContext";
+import {
+  useAuth,
+} from "./AuthContext";
 
 import {
   registerDevicePushToken,
@@ -29,25 +33,68 @@ import {
   type PushPermissionState,
 } from "../services/pushNotificationService";
 
-type PushNotificationContextValue = {
-  permissionState: PushPermissionState;
+import {
+  getWebPushPublicKey,
+  registerBrowserWebPushSubscription,
+  sendCustomerWebPushTest,
+  unregisterBrowserWebPushSubscription,
+  type WebPushTestResult,
+} from "../services/webPushApi";
 
-  expoPushToken: string | null;
+import {
+  getCurrentWebNotificationPermission,
+  getExistingWebPushSubscription,
+  getWebPushDeviceName,
+  getWebPushPlatform,
+  getWebPushSupport,
+  getWebPushUserAgent,
+  registerForWebPushNotifications,
+  requestWebPushPermission,
+  unsubscribeFromWebPushNotifications,
+  WebPushRegistrationError,
+} from "../services/webPushNotificationService";
+
+type RemotePushTestResult =
+  | PushTestResult
+  | WebPushTestResult;
+
+type PushNotificationContextValue = {
+  permissionState:
+    PushPermissionState;
+
+  /*
+   * Native: Expo token.
+   * Web: Web Push endpoint.
+   */
+  expoPushToken:
+    string | null;
 
   lastNotification:
-    Notifications.Notification | null;
+    Notifications.Notification |
+    null;
 
-  error: string | null;
+  error:
+    string | null;
 
-  registering: boolean;
-  testing: boolean;
-  disabling: boolean;
+  registering:
+    boolean;
+
+  testing:
+    boolean;
+
+  disabling:
+    boolean;
 
   registerCurrentDevice:
-    () => Promise<string | null>;
+    () => Promise<
+      string | null
+    >;
 
   sendRemoteTest:
-    () => Promise<PushTestResult | null>;
+    () => Promise<
+      RemotePushTestResult |
+      null
+    >;
 
   sendLocalTest:
     () => Promise<void>;
@@ -58,13 +105,43 @@ type PushNotificationContextValue = {
 
 type RegistrationPromiseRecord = {
   authToken: string;
-  promise: Promise<string | null>;
+
+  promise:
+    Promise<string | null>;
 };
 
 const PushNotificationContext =
   createContext<
-    PushNotificationContextValue | undefined
+    PushNotificationContextValue |
+    undefined
   >(undefined);
+
+function getInitialPermissionState():
+  PushPermissionState {
+  if (
+    Platform.OS !== "web"
+  ) {
+    return "idle";
+  }
+
+  const support =
+    getWebPushSupport();
+
+  if (!support.supported) {
+    return "unsupported";
+  }
+
+  const permission =
+    getCurrentWebNotificationPermission();
+
+  if (
+    permission === "denied"
+  ) {
+    return "denied";
+  }
+
+  return "idle";
+}
 
 export function PushNotificationProvider({
   children,
@@ -73,22 +150,35 @@ export function PushNotificationProvider({
 }) {
   const {
     token,
-    loading: authLoading,
+
+    loading:
+      authLoading,
+
     isAuthenticated,
   } = useAuth();
 
   const [
     permissionState,
+
     setPermissionState,
   ] =
     useState<PushPermissionState>(
-      Platform.OS === "web"
-        ? "unsupported"
-        : "idle"
+      getInitialPermissionState
     );
 
+  /*
+   * Existing Account screen
+   * compatibility:
+   *
+   * Native platforms store the
+   * Expo push token here.
+   *
+   * Web stores the browser push
+   * subscription endpoint here.
+   */
   const [
     expoPushToken,
+
     setExpoPushToken,
   ] =
     useState<string | null>(
@@ -97,14 +187,17 @@ export function PushNotificationProvider({
 
   const [
     lastNotification,
+
     setLastNotification,
   ] =
     useState<
-      Notifications.Notification | null
+      Notifications.Notification |
+      null
     >(null);
 
   const [
     error,
+
     setError,
   ] =
     useState<string | null>(
@@ -113,30 +206,28 @@ export function PushNotificationProvider({
 
   const [
     registering,
+
     setRegistering,
   ] =
     useState(false);
 
   const [
     testing,
+
     setTesting,
   ] =
     useState(false);
 
   const [
     disabling,
+
     setDisabling,
   ] =
     useState(false);
 
-  const registrationPromiseRef =
-    useRef<
-      RegistrationPromiseRecord | null
-    >(null);
-
-  const registeredAuthTokenRef =
+  const currentAuthTokenRef =
     useRef<string | null>(
-      null
+      token
     );
 
   const previousAuthTokenRef =
@@ -144,78 +235,180 @@ export function PushNotificationProvider({
       null
     );
 
-  const currentAuthTokenRef =
-    useRef<string | null>(
-      token
-    );
-
-  const expoPushTokenRef =
+  const registeredAuthTokenRef =
     useRef<string | null>(
       null
     );
 
-  /*
-   * Keep the latest authentication and
-   * Expo token values available inside
-   * asynchronous callbacks.
-   */
+  const registeredIdentifierRef =
+    useRef<string | null>(
+      null
+    );
+
+  const registrationPromiseRef =
+    useRef<
+      RegistrationPromiseRecord |
+      null
+    >(null);
+
   useEffect(() => {
     currentAuthTokenRef.current =
       token;
   }, [token]);
 
   useEffect(() => {
-    expoPushTokenRef.current =
+    registeredIdentifierRef.current =
       expoPushToken;
   }, [expoPushToken]);
 
   /*
-   * Notification-tap navigation is now
-   * handled by NotificationNavigationHandler.
+   * Native foreground listener.
    *
-   * This listener only stores notifications
-   * received while the application is open.
+   * Web notifications are displayed
+   * by public/sw.js.
    */
   useEffect(() => {
     if (
       Platform.OS === "web"
     ) {
+      const support =
+        getWebPushSupport();
+
+      if (!support.supported) {
+        setPermissionState(
+          "unsupported"
+        );
+
+        setError(
+          support.reason ===
+          "not_installed"
+            ? "Open SipBite from its iPhone Home Screen icon to enable notifications."
+            : "This browser does not support Web Push notifications."
+        );
+      }
+
       return;
     }
 
     const receivedSubscription =
-      Notifications.addNotificationReceivedListener(
-        (notification) => {
-          setLastNotification(
+      Notifications
+        .addNotificationReceivedListener(
+          (
             notification
-          );
-        }
-      );
+          ) => {
+            setLastNotification(
+              notification
+            );
+          }
+        );
 
     return () => {
-      receivedSubscription.remove();
+      receivedSubscription
+        .remove();
     };
   }, []);
+
+  const restoreExistingWebRegistration =
+    useCallback(
+      async (
+        authToken:
+          string
+      ): Promise<
+        string | null
+      > => {
+        if (
+          Platform.OS !==
+          "web"
+        ) {
+          return null;
+        }
+
+        const support =
+          getWebPushSupport();
+
+        if (!support.supported) {
+          setPermissionState(
+            "unsupported"
+          );
+
+          return null;
+        }
+
+        const existingSubscription =
+          await getExistingWebPushSubscription();
+
+        if (
+          !existingSubscription
+        ) {
+          const permission =
+            getCurrentWebNotificationPermission();
+
+          setPermissionState(
+            permission ===
+            "denied"
+              ? "denied"
+              : "idle"
+          );
+
+          return null;
+        }
+
+        await registerBrowserWebPushSubscription(
+          authToken,
+
+          {
+            subscription:
+              existingSubscription,
+
+            platform:
+              getWebPushPlatform(),
+
+            deviceName:
+              getWebPushDeviceName(),
+
+            userAgent:
+              getWebPushUserAgent(),
+          }
+        );
+
+        if (
+          currentAuthTokenRef
+            .current !==
+          authToken
+        ) {
+          return null;
+        }
+
+        setExpoPushToken(
+          existingSubscription
+            .endpoint
+        );
+
+        registeredIdentifierRef.current =
+          existingSubscription
+            .endpoint;
+
+        registeredAuthTokenRef.current =
+          authToken;
+
+        setPermissionState(
+          "granted"
+        );
+
+        setError(null);
+
+        return existingSubscription
+          .endpoint;
+      },
+
+      []
+    );
 
   const registerCurrentDevice =
     useCallback(
       async (): Promise<
         string | null
       > => {
-        if (
-          Platform.OS === "web"
-        ) {
-          setPermissionState(
-            "unsupported"
-          );
-
-          setError(
-            "Remote push notifications are available only in the Android and iOS applications."
-          );
-
-          return null;
-        }
-
         if (
           !isAuthenticated ||
           !token
@@ -228,22 +421,28 @@ export function PushNotificationProvider({
         }
 
         if (
-          registeredAuthTokenRef.current ===
+          registeredAuthTokenRef
+            .current ===
             token &&
-          expoPushTokenRef.current
+          registeredIdentifierRef
+            .current
         ) {
-          return expoPushTokenRef.current;
+          return registeredIdentifierRef
+            .current;
         }
 
-        const existingRegistration =
-          registrationPromiseRef.current;
+        const activePromise =
+          registrationPromiseRef
+            .current;
 
         if (
-          existingRegistration &&
-          existingRegistration.authToken ===
+          activePromise &&
+          activePromise
+            .authToken ===
             token
         ) {
-          return existingRegistration.promise;
+          return activePromise
+            .promise;
         }
 
         const authTokenAtStart =
@@ -260,24 +459,114 @@ export function PushNotificationProvider({
             setError(null);
 
             try {
+              if (
+                Platform.OS ===
+                "web"
+              ) {
+                /*
+                 * This runs directly from
+                 * the user's Enable button.
+                 */
+                await requestWebPushPermission();
+
+                const publicKey =
+                  await getWebPushPublicKey();
+
+                const subscription =
+                  await registerForWebPushNotifications(
+                    publicKey
+                  );
+
+                if (
+                  currentAuthTokenRef
+                    .current !==
+                  authTokenAtStart
+                ) {
+                  return null;
+                }
+
+                await registerBrowserWebPushSubscription(
+                  authTokenAtStart,
+
+                  {
+                    subscription,
+
+                    platform:
+                      getWebPushPlatform(),
+
+                    deviceName:
+                      getWebPushDeviceName(),
+
+                    userAgent:
+                      getWebPushUserAgent(),
+                  }
+                );
+
+                if (
+                  currentAuthTokenRef
+                    .current !==
+                  authTokenAtStart
+                ) {
+                  try {
+                    await unregisterBrowserWebPushSubscription(
+                      authTokenAtStart,
+
+                      subscription
+                        .endpoint
+                    );
+                  } catch {
+                    /*
+                     * Session cleanup must
+                     * not crash the app.
+                     */
+                  }
+
+                  return null;
+                }
+
+                setExpoPushToken(
+                  subscription
+                    .endpoint
+                );
+
+                registeredIdentifierRef.current =
+                  subscription
+                    .endpoint;
+
+                registeredAuthTokenRef.current =
+                  authTokenAtStart;
+
+                previousAuthTokenRef.current =
+                  authTokenAtStart;
+
+                setPermissionState(
+                  "granted"
+                );
+
+                return subscription
+                  .endpoint;
+              }
+
               const nativeRegistration =
                 await registerForNativePushNotifications();
 
-              /*
-               * The user may have logged out while
-               * native token generation was running.
-               */
               if (
-                currentAuthTokenRef.current !==
+                currentAuthTokenRef
+                  .current !==
                 authTokenAtStart
               ) {
                 try {
                   await unregisterDevicePushToken(
                     authTokenAtStart,
-                    nativeRegistration.expoPushToken
+
+                    nativeRegistration
+                      .expoPushToken
                   );
                 } catch {
-                  // Session cleanup must not crash the app.
+                  /*
+                   * Session cleanup must
+                   * not crash the app.
+                   */
                 }
 
                 return null;
@@ -285,35 +574,40 @@ export function PushNotificationProvider({
 
               await registerDevicePushToken(
                 authTokenAtStart,
+
                 nativeRegistration
               );
 
-              /*
-               * Check again because the backend
-               * request may also take some time.
-               */
               if (
-                currentAuthTokenRef.current !==
+                currentAuthTokenRef
+                  .current !==
                 authTokenAtStart
               ) {
                 try {
                   await unregisterDevicePushToken(
                     authTokenAtStart,
-                    nativeRegistration.expoPushToken
+
+                    nativeRegistration
+                      .expoPushToken
                   );
                 } catch {
-                  // Session cleanup must not crash the app.
+                  /*
+                   * Session cleanup must
+                   * not crash the app.
+                   */
                 }
 
                 return null;
               }
 
               setExpoPushToken(
-                nativeRegistration.expoPushToken
+                nativeRegistration
+                  .expoPushToken
               );
 
-              expoPushTokenRef.current =
-                nativeRegistration.expoPushToken;
+              registeredIdentifierRef.current =
+                nativeRegistration
+                  .expoPushToken;
 
               registeredAuthTokenRef.current =
                 authTokenAtStart;
@@ -325,7 +619,8 @@ export function PushNotificationProvider({
                 "granted"
               );
 
-              return nativeRegistration.expoPushToken;
+              return nativeRegistration
+                .expoPushToken;
             } catch (
               registrationError
             ) {
@@ -333,28 +628,49 @@ export function PushNotificationProvider({
                 registrationError instanceof
                 PushRegistrationError
               ) {
-                if (
-                  registrationError.code ===
+                setPermissionState(
+                  registrationError
+                    .code ===
                   "permission_denied"
-                ) {
-                  setPermissionState(
-                    "denied"
-                  );
-                } else if (
-                  registrationError.code ===
-                  "unsupported_platform"
-                ) {
-                  setPermissionState(
-                    "unsupported"
-                  );
-                } else {
-                  setPermissionState(
-                    "error"
-                  );
-                }
+                    ? "denied"
+                    : registrationError
+                          .code ===
+                        "unsupported_platform"
+                      ? "unsupported"
+                      : "error"
+                );
 
                 setError(
-                  registrationError.message
+                  registrationError
+                    .message
+                );
+
+                return null;
+              }
+
+              if (
+                registrationError instanceof
+                WebPushRegistrationError
+              ) {
+                setPermissionState(
+                  registrationError
+                    .code ===
+                  "permission_denied"
+                    ? "denied"
+                    : [
+                          "unsupported_platform",
+                          "not_installed",
+                        ].includes(
+                          registrationError
+                            .code
+                        )
+                      ? "unsupported"
+                      : "error"
+                );
+
+                setError(
+                  registrationError
+                    .message
                 );
 
                 return null;
@@ -367,7 +683,8 @@ export function PushNotificationProvider({
               setError(
                 registrationError instanceof
                   Error
-                  ? registrationError.message
+                  ? registrationError
+                      .message
                   : "Unable to enable push notifications."
               );
 
@@ -400,6 +717,7 @@ export function PushNotificationProvider({
 
         return registrationPromise;
       },
+
       [
         isAuthenticated,
         token,
@@ -407,12 +725,12 @@ export function PushNotificationProvider({
     );
 
   /*
-   * Automatically register the current
-   * device whenever authentication is
-   * restored or login succeeds.
+   * Native devices are automatically
+   * registered after login.
    *
-   * On logout, remove the device token
-   * from the previous account.
+   * Web restores an existing browser
+   * subscription without opening an
+   * automatic permission prompt.
    */
   useEffect(() => {
     if (authLoading) {
@@ -420,7 +738,8 @@ export function PushNotificationProvider({
     }
 
     const previousAuthToken =
-      previousAuthTokenRef.current;
+      previousAuthTokenRef
+        .current;
 
     if (
       isAuthenticated &&
@@ -429,7 +748,31 @@ export function PushNotificationProvider({
       previousAuthTokenRef.current =
         token;
 
-      void registerCurrentDevice();
+      if (
+        Platform.OS === "web"
+      ) {
+        void restoreExistingWebRegistration(
+          token
+        ).catch(
+          (
+            restoreError
+          ) => {
+            setPermissionState(
+              "error"
+            );
+
+            setError(
+              restoreError instanceof
+                Error
+                ? restoreError
+                    .message
+                : "Unable to restore Web Push notifications."
+            );
+          }
+        );
+      } else {
+        void registerCurrentDevice();
+      }
 
       return;
     }
@@ -438,23 +781,37 @@ export function PushNotificationProvider({
       !isAuthenticated &&
       previousAuthToken
     ) {
-      const pushTokenToRemove =
-        expoPushTokenRef.current;
+      const identifierToRemove =
+        registeredIdentifierRef
+          .current;
 
       const cleanupLoggedOutDevice =
         async () => {
           if (
-            pushTokenToRemove
+            identifierToRemove
           ) {
             try {
-              await unregisterDevicePushToken(
-                previousAuthToken,
-                pushTokenToRemove
-              );
+              if (
+                Platform.OS ===
+                "web"
+              ) {
+                await unregisterBrowserWebPushSubscription(
+                  previousAuthToken,
+
+                  identifierToRemove
+                );
+              } else {
+                await unregisterDevicePushToken(
+                  previousAuthToken,
+
+                  identifierToRemove
+                );
+              }
             } catch {
               /*
-               * Logout must remain successful even
-               * when the backend is unavailable.
+               * Logout must stay
+               * successful when the
+               * backend is unavailable.
                */
             }
           }
@@ -463,7 +820,7 @@ export function PushNotificationProvider({
             null
           );
 
-          expoPushTokenRef.current =
+          registeredIdentifierRef.current =
             null;
 
           registeredAuthTokenRef.current =
@@ -482,9 +839,7 @@ export function PushNotificationProvider({
           setError(null);
 
           setPermissionState(
-            Platform.OS === "web"
-              ? "unsupported"
-              : "idle"
+            getInitialPermissionState()
           );
 
           void clearApplicationBadge();
@@ -497,12 +852,14 @@ export function PushNotificationProvider({
     isAuthenticated,
     token,
     registerCurrentDevice,
+    restoreExistingWebRegistration,
   ]);
 
   const sendRemoteTest =
     useCallback(
       async (): Promise<
-        PushTestResult | null
+        RemotePushTestResult |
+        null
       > => {
         if (
           !token ||
@@ -516,20 +873,31 @@ export function PushNotificationProvider({
         }
 
         setTesting(true);
+
         setError(null);
 
         try {
           if (
-            !expoPushTokenRef.current
+            !registeredIdentifierRef
+              .current
           ) {
-            const registeredToken =
+            const registeredIdentifier =
               await registerCurrentDevice();
 
             if (
-              !registeredToken
+              !registeredIdentifier
             ) {
               return null;
             }
+          }
+
+          if (
+            Platform.OS ===
+            "web"
+          ) {
+            return await sendCustomerWebPushTest(
+              token
+            );
           }
 
           return await sendCustomerTestPush(
@@ -541,7 +909,8 @@ export function PushNotificationProvider({
           setError(
             requestError instanceof
               Error
-              ? requestError.message
+              ? requestError
+                  .message
               : "Unable to send the test notification."
           );
 
@@ -550,6 +919,7 @@ export function PushNotificationProvider({
           setTesting(false);
         }
       },
+
       [
         token,
         isAuthenticated,
@@ -562,6 +932,15 @@ export function PushNotificationProvider({
       async (): Promise<void> => {
         setError(null);
 
+        if (
+          Platform.OS ===
+          "web"
+        ) {
+          throw new Error(
+            "Use Send test to test Web Push notifications."
+          );
+        }
+
         try {
           await scheduleLocalPushTest();
         } catch (
@@ -570,37 +949,94 @@ export function PushNotificationProvider({
           setError(
             requestError instanceof
               Error
-              ? requestError.message
+              ? requestError
+                  .message
               : "Unable to show the local notification."
           );
 
           throw requestError;
         }
       },
+
       []
     );
 
   const disableCurrentDevice =
     useCallback(
       async (): Promise<boolean> => {
-        if (
-          !token ||
-          !expoPushTokenRef.current
-        ) {
+        if (!token) {
           return false;
         }
 
-        const pushTokenToDisable =
-          expoPushTokenRef.current;
-
         setDisabling(true);
+
         setError(null);
 
         try {
+          if (
+            Platform.OS ===
+            "web"
+          ) {
+            const existingSubscription =
+              await getExistingWebPushSubscription();
+
+            const endpoint =
+              registeredIdentifierRef
+                .current ||
+              existingSubscription
+                ?.endpoint ||
+              "";
+
+            let backendDisabled =
+              false;
+
+            if (endpoint) {
+              backendDisabled =
+                await unregisterBrowserWebPushSubscription(
+                  token,
+
+                  endpoint
+                );
+            }
+
+            const localResult =
+              await unsubscribeFromWebPushNotifications();
+
+            setExpoPushToken(
+              null
+            );
+
+            registeredIdentifierRef.current =
+              null;
+
+            registeredAuthTokenRef.current =
+              null;
+
+            setPermissionState(
+              "idle"
+            );
+
+            return Boolean(
+              backendDisabled ||
+                localResult
+                  .unsubscribed ||
+                endpoint
+            );
+          }
+
+          const nativeToken =
+            registeredIdentifierRef
+              .current;
+
+          if (!nativeToken) {
+            return false;
+          }
+
           const disabled =
             await unregisterDevicePushToken(
               token,
-              pushTokenToDisable
+
+              nativeToken
             );
 
           if (disabled) {
@@ -608,7 +1044,7 @@ export function PushNotificationProvider({
               null
             );
 
-            expoPushTokenRef.current =
+            registeredIdentifierRef.current =
               null;
 
             registeredAuthTokenRef.current =
@@ -628,15 +1064,19 @@ export function PushNotificationProvider({
           setError(
             requestError instanceof
               Error
-              ? requestError.message
+              ? requestError
+                  .message
               : "Unable to disable notifications on this device."
           );
 
           return false;
         } finally {
-          setDisabling(false);
+          setDisabling(
+            false
+          );
         }
       },
+
       [token]
     );
 
@@ -644,15 +1084,25 @@ export function PushNotificationProvider({
     <PushNotificationContext.Provider
       value={{
         permissionState,
+
         expoPushToken,
+
         lastNotification,
+
         error,
+
         registering,
+
         testing,
+
         disabling,
+
         registerCurrentDevice,
+
         sendRemoteTest,
+
         sendLocalTest,
+
         disableCurrentDevice,
       }}
     >

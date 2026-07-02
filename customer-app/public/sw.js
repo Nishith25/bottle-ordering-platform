@@ -1,8 +1,9 @@
 const SERVICE_WORKER_VERSION =
-  "sipbite-pwa-v1";
+  "sipbite-pwa-v2";
 
 self.addEventListener(
   "install",
+
   () => {
     self.skipWaiting();
   }
@@ -10,6 +11,7 @@ self.addEventListener(
 
 self.addEventListener(
   "activate",
+
   (event) => {
     event.waitUntil(
       self.clients.claim()
@@ -19,6 +21,7 @@ self.addEventListener(
 
 self.addEventListener(
   "message",
+
   (event) => {
     if (
       event.data?.type ===
@@ -29,91 +32,155 @@ self.addEventListener(
   }
 );
 
-/*
- * Web Push will be connected to the
- * backend in the next phase.
- *
- * Keeping the push handler here now means
- * the installed PWA is already prepared
- * to display standards-based web pushes.
- */
+function cleanText(
+  value,
+  fallback = ""
+) {
+  const text =
+    String(
+      value ?? ""
+    ).trim();
+
+  return text || fallback;
+}
+
+function normalizeData(value) {
+  if (
+    !value ||
+    typeof value !==
+      "object" ||
+    Array.isArray(value)
+  ) {
+    return {};
+  }
+
+  return {
+    ...value,
+  };
+}
+
 self.addEventListener(
   "push",
-  (event) => {
-    if (!event.data) {
-      return;
-    }
 
+  (event) => {
     let payload = {};
 
-    try {
-      payload =
-        event.data.json();
-    } catch {
-      payload = {
-        title: "SipBite",
-        body: event.data.text(),
-      };
+    if (event.data) {
+      try {
+        payload =
+          event.data.json();
+      } catch {
+        payload = {
+          title:
+            "SipBite",
+
+          body:
+            event.data.text(),
+        };
+      }
     }
 
     const title =
-      String(
-        payload.title ||
-          "SipBite"
-      ).trim();
+      cleanText(
+        payload.title,
+        "SipBite"
+      );
 
     const body =
-      String(
-        payload.body ||
-          "You have a new SipBite update."
-      ).trim();
+      cleanText(
+        payload.body,
+        "You have a new SipBite update."
+      );
 
     const data =
-      payload.data &&
-      typeof payload.data ===
-        "object"
-        ? payload.data
-        : {};
+      normalizeData(
+        payload.data
+      );
+
+    const route =
+      cleanText(
+        data.route ||
+          data.url,
+        "/notifications"
+      );
+
+    const notificationData = {
+      ...data,
+
+      route,
+    };
+
+    const tag =
+      cleanText(
+        payload.tag ||
+          data.notificationId
+      ) || undefined;
 
     event.waitUntil(
-      self.registration.showNotification(
-        title,
-        {
-          body,
-          icon: "/pwa-192.png",
-          badge: "/pwa-192.png",
-          tag:
-            String(
-              payload.tag ||
-                data.notificationId ||
-                ""
-            ) || undefined,
-          renotify: false,
-          data,
-        }
-      )
+      Promise.all([
+        self.registration
+          .showNotification(
+            title,
+
+            {
+              body,
+
+              icon:
+                cleanText(
+                  payload.icon,
+                  "/pwa-192.png"
+                ),
+
+              badge:
+                cleanText(
+                  payload.badge,
+                  "/pwa-192.png"
+                ),
+
+              tag,
+
+              renotify:
+                Boolean(tag),
+
+              data:
+                notificationData,
+
+              timestamp:
+                Date.now(),
+            }
+          ),
+
+        (
+          "setAppBadge" in
+          self.navigator
+            ? self.navigator
+                .setAppBadge(1)
+                .catch(() => {})
+            : Promise.resolve()
+        ),
+      ])
     );
   }
 );
 
 self.addEventListener(
   "notificationclick",
+
   (event) => {
     event.notification.close();
 
     const notificationData =
-      event.notification.data &&
-      typeof event.notification
-        .data === "object"
-        ? event.notification.data
-        : {};
+      normalizeData(
+        event.notification
+          .data
+      );
 
     const requestedPath =
-      String(
+      cleanText(
         notificationData.url ||
-          notificationData.route ||
-          "/notifications"
-      ).trim();
+          notificationData.route,
+        "/notifications"
+      );
 
     let targetUrl;
 
@@ -144,25 +211,43 @@ self.addEventListener(
 
     event.waitUntil(
       (async () => {
+        if (
+          "clearAppBadge" in
+          self.navigator
+        ) {
+          try {
+            await self.navigator
+              .clearAppBadge();
+          } catch {
+            // Badging is optional.
+          }
+        }
+
         const windowClients =
-          await self.clients.matchAll({
-            type: "window",
-            includeUncontrolled: true,
-          });
+          await self.clients
+            .matchAll({
+              type: "window",
+
+              includeUncontrolled:
+                true,
+            });
 
         for (
           const client of
           windowClients
         ) {
           const clientUrl =
-            new URL(client.url);
+            new URL(
+              client.url
+            );
 
           if (
             clientUrl.origin ===
             self.location.origin
           ) {
             if (
-              "navigate" in client
+              "navigate" in
+              client
             ) {
               await client.navigate(
                 targetUrl.href
@@ -175,9 +260,10 @@ self.addEventListener(
           }
         }
 
-        await self.clients.openWindow(
-          targetUrl.href
-        );
+        await self.clients
+          .openWindow(
+            targetUrl.href
+          );
       })()
     );
   }

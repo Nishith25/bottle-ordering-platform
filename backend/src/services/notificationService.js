@@ -5,7 +5,7 @@ const Notification = require(
 const {
   sendPushToUser,
 } = require(
-  "./pushNotificationService"
+  "./notificationDeliveryService"
 );
 
 const PUSH_CHANNELS = {

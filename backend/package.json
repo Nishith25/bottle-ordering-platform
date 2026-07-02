@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed": "node src/seed/seedDatabase.js"
+    "seed": "node src/seed/seedDatabase.js",
+    "generate:vapid": "web-push generate-vapid-keys --json"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.3",
     "morgan": "^1.11.0",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
