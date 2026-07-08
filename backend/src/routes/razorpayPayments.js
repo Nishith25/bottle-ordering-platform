@@ -140,18 +140,40 @@ function safeJson(value) {
 }
 
 async function restorePaymentSession(paymentSession, session) {
-  await restoreOrderInventory({
+  return restoreOrderInventory({
     order: paymentSession,
     session,
   });
 }
 
+/**
+ * Marks an unpaid payment session as terminal and restores:
+ *
+ * - reserved product inventory
+ * - reserved coupon usage
+ * - reserved delivery-slot capacity through PaymentSession middleware
+ *
+ * This operation is idempotent. Calling it repeatedly will not restore
+ * inventory more than once.
+ */
 async function markPaymentSessionFailed({
   paymentSessionId,
   razorpayOrderId,
   reason,
   finalStatus = "failed",
 }) {
+  const allowedFinalStatuses = [
+    "abandoned",
+    "failed",
+    "expired",
+  ];
+
+  if (!allowedFinalStatuses.includes(finalStatus)) {
+    throw new Error(
+      `Unsupported payment-session final status: ${finalStatus}`
+    );
+  }
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -164,10 +186,22 @@ async function markPaymentSessionFailed({
         mongoSession
       );
 
+      if (!paymentSession) {
+        return;
+      }
+
       if (
-        !paymentSession ||
         paymentSession.status === "paid" ||
         paymentSession.createdOrder
+      ) {
+        return;
+      }
+
+      if (
+        ["abandoned", "failed", "expired"].includes(
+          paymentSession.status
+        ) &&
+        paymentSession.inventoryRestored
       ) {
         return;
       }
@@ -180,10 +214,19 @@ async function markPaymentSessionFailed({
       });
 
       paymentSession.status = finalStatus;
-      paymentSession.failureReason = reason;
-      paymentSession.failedAt = new Date();
+      paymentSession.failureReason = String(
+        reason || "Payment was not completed."
+      ).trim();
 
-      await paymentSession.save({ session: mongoSession });
+      if (finalStatus === "abandoned") {
+        paymentSession.abandonedAt = new Date();
+      } else {
+        paymentSession.failedAt = new Date();
+      }
+
+      await paymentSession.save({
+        session: mongoSession,
+      });
     });
   } finally {
     await mongoSession.endSession();
@@ -191,7 +234,7 @@ async function markPaymentSessionFailed({
 }
 
 async function reserveRestoredInventory(paymentSession, session) {
-  const items = paymentSession.orderDraft.items;
+  const items = paymentSession.orderDraft?.items || [];
   const productIds = items.map((item) => item.product);
 
   const products = await Product.find({
@@ -208,9 +251,17 @@ async function reserveRestoredInventory(paymentSession, session) {
     );
   }
 
-  const quantitiesByProductId = new Map(
-    items.map((item) => [item.productId, item.quantity])
-  );
+  const quantitiesByProductId = new Map();
+
+  for (const item of items) {
+    const productId = String(item.productId || "").trim();
+    const quantity = Number(item.quantity);
+
+    quantitiesByProductId.set(
+      productId,
+      (quantitiesByProductId.get(productId) || 0) + quantity
+    );
+  }
 
   await reserveProductInventory({
     products,
@@ -244,9 +295,17 @@ async function finalizePaymentSession({
         completedOrder = await Order.findById(
           paymentSession.createdOrder
         ).session(mongoSession);
+
         return;
       }
 
+      /*
+       * Stock may already have been restored because the customer
+       * closed Checkout or the session expired.
+       *
+       * If Razorpay later confirms successful payment, reserve stock
+       * again before creating the paid order.
+       */
       if (paymentSession.inventoryRestored) {
         await reserveRestoredInventory(paymentSession, mongoSession);
       }
@@ -272,7 +331,9 @@ async function finalizePaymentSession({
             inventoryRestored: false,
           },
         ],
-        { session: mongoSession }
+        {
+          session: mongoSession,
+        }
       );
 
       completedOrder = orders[0];
@@ -285,7 +346,10 @@ async function finalizePaymentSession({
         });
 
         completedOrder.couponUsage = usage?._id || null;
-        await completedOrder.save({ session: mongoSession });
+
+        await completedOrder.save({
+          session: mongoSession,
+        });
       }
 
       paymentSession.status = "paid";
@@ -293,9 +357,19 @@ async function finalizePaymentSession({
         razorpayPaymentId || paymentSession.razorpayPaymentId;
       paymentSession.createdOrder = completedOrder._id;
       paymentSession.paidAt = new Date();
-      paymentSession.inventoryReserved = false;
 
-      await paymentSession.save({ session: mongoSession });
+      /*
+       * The reserved inventory now belongs to the completed Order.
+       * The PaymentSession must no longer be allowed to restore it.
+       */
+      paymentSession.inventoryReserved = false;
+      paymentSession.inventoryRestored = false;
+      paymentSession.inventoryRestoredAt = null;
+      paymentSession.failureReason = "";
+
+      await paymentSession.save({
+        session: mongoSession,
+      });
     });
 
     return completedOrder;
@@ -304,8 +378,12 @@ async function finalizePaymentSession({
   }
 }
 
-async function ensurePaymentCaptured({ paymentSession, paymentId }) {
+async function ensurePaymentCaptured({
+  paymentSession,
+  paymentId,
+}) {
   const razorpay = getRazorpayClient();
+
   let payment = await razorpay.payments.fetch(paymentId);
 
   if (payment.order_id !== paymentSession.razorpayOrderId) {
@@ -323,7 +401,8 @@ async function ensurePaymentCaptured({ paymentSession, paymentId }) {
   }
 
   if (
-    String(payment.currency).toUpperCase() !== paymentSession.currency
+    String(payment.currency).toUpperCase() !==
+    paymentSession.currency
   ) {
     throw createHttpError(
       "The Razorpay payment currency does not match this order.",
@@ -351,6 +430,7 @@ async function ensurePaymentCaptured({ paymentSession, paymentId }) {
 
 router.post("/initiate", protect, async (req, res, next) => {
   const mongoSession = await mongoose.startSession();
+
   let paymentSessionId = null;
 
   try {
@@ -358,6 +438,7 @@ router.post("/initiate", protect, async (req, res, next) => {
     const razorpay = getRazorpayClient();
     const rawSessionToken = createSessionToken();
     const sessionTokenHash = hashSessionToken(rawSessionToken);
+
     let paymentSession = null;
 
     await mongoSession.withTransaction(async () => {
@@ -397,7 +478,9 @@ router.post("/initiate", protect, async (req, res, next) => {
             expiresAt,
           },
         ],
-        { session: mongoSession }
+        {
+          session: mongoSession,
+        }
       );
 
       paymentSession = sessions[0];
@@ -413,7 +496,10 @@ router.post("/initiate", protect, async (req, res, next) => {
         });
 
         paymentSession.couponUsage = usage?._id || null;
-        await paymentSession.save({ session: mongoSession });
+
+        await paymentSession.save({
+          session: mongoSession,
+        });
       }
     });
 
@@ -434,9 +520,11 @@ router.post("/initiate", protect, async (req, res, next) => {
       await markPaymentSessionFailed({
         paymentSessionId,
         reason: "Unable to create Razorpay order.",
+        finalStatus: "failed",
       });
 
       gatewayError.statusCode = gatewayError.statusCode || 502;
+
       throw gatewayError;
     }
 
@@ -448,8 +536,25 @@ router.post("/initiate", protect, async (req, res, next) => {
           razorpayOrderId: razorpayOrder.id,
         },
       },
-      { new: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     );
+
+    if (!paymentSession) {
+      await markPaymentSessionFailed({
+        paymentSessionId,
+        reason:
+          "Razorpay order was created, but the payment session could not be updated.",
+        finalStatus: "failed",
+      });
+
+      throw createHttpError(
+        "Unable to prepare the online payment session.",
+        500
+      );
+    }
 
     const backendBaseUrl = getBackendBaseUrl(req);
 
@@ -469,11 +574,25 @@ router.post("/initiate", protect, async (req, res, next) => {
       },
     });
   } catch (error) {
-    if (paymentSessionId && !error.statusCode) {
-      await markPaymentSessionFailed({
-        paymentSessionId,
-        reason: "Online payment setup failed.",
-      });
+    /*
+     * Always attempt cleanup once a PaymentSession exists.
+     * markPaymentSessionFailed itself ignores paid/completed sessions.
+     */
+    if (paymentSessionId) {
+      try {
+        await markPaymentSessionFailed({
+          paymentSessionId,
+          reason:
+            error.message ||
+            "Online payment setup failed.",
+          finalStatus: "failed",
+        });
+      } catch (cleanupError) {
+        console.error(
+          "Unable to clean up failed payment setup:",
+          cleanupError.message
+        );
+      }
     }
 
     return next(error);
@@ -508,6 +627,17 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
       return res.status(410).send("This payment session has expired.");
     }
 
+    /*
+     * An abandoned session has already released inventory and its slot.
+     * It should not normally be reopened. This prevents the customer
+     * from paying against a session whose stock was returned.
+     */
+    if (paymentSession.status === "abandoned") {
+      return res
+        .status(410)
+        .send("This payment session was cancelled. Please start again.");
+    }
+
     const checkoutData = {
       key: process.env.RAZORPAY_KEY_ID,
       amount: paymentSession.amountPaise,
@@ -519,8 +649,13 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
       order_id: paymentSession.razorpayOrderId,
       prefill: paymentSession.prefill,
       timeout: getCheckoutTimeoutSeconds(),
-      retry: { enabled: true, max_count: 2 },
-      theme: { color: "#245C42" },
+      retry: {
+        enabled: true,
+        max_count: 2,
+      },
+      theme: {
+        color: "#245C42",
+      },
     };
 
     res.removeHeader("Content-Security-Policy");
@@ -536,15 +671,73 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #203128; background: #f7f7f2; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .card { width: min(420px, 100%); padding: 32px; border: 1px solid #e1e7df; border-radius: 28px; background: #fff; text-align: center; box-shadow: 0 24px 70px rgba(25,55,38,.1); }
-    .icon { width: 68px; height: 68px; display: grid; place-items: center; margin: 0 auto; border-radius: 22px; color: #fff; background: #245c42; font-size: 28px; }
-    h1 { margin: 22px 0 8px; font-size: 24px; }
-    p { margin: 0; color: #718078; font-size: 14px; line-height: 1.6; }
-    .coupon { margin-top: 10px; color: #245c42; font-weight: 800; }
-    button { width: 100%; min-height: 52px; margin-top: 24px; border: 0; border-radius: 17px; color: #fff; background: #245c42; font-size: 14px; font-weight: 800; cursor: pointer; }
-    button:disabled { opacity: .6; cursor: wait; }
-    #status { min-height: 22px; margin-top: 16px; color: #5f6d65; font-size: 12px; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: #203128;
+      background: #f7f7f2;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .card {
+      width: min(420px, 100%);
+      padding: 32px;
+      border: 1px solid #e1e7df;
+      border-radius: 28px;
+      background: #fff;
+      text-align: center;
+      box-shadow: 0 24px 70px rgba(25,55,38,.1);
+    }
+    .icon {
+      width: 68px;
+      height: 68px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto;
+      border-radius: 22px;
+      color: #fff;
+      background: #245c42;
+      font-size: 28px;
+    }
+    h1 {
+      margin: 22px 0 8px;
+      font-size: 24px;
+    }
+    p {
+      margin: 0;
+      color: #718078;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .coupon {
+      margin-top: 10px;
+      color: #245c42;
+      font-weight: 800;
+    }
+    button {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 24px;
+      border: 0;
+      border-radius: 17px;
+      color: #fff;
+      background: #245c42;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+    #status {
+      min-height: 22px;
+      margin-top: 16px;
+      color: #5f6d65;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -552,27 +745,33 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
     <div class="icon">₹</div>
     <h1>Secure Razorpay Checkout</h1>
     <p>Amount payable: <strong>₹${paymentSession.orderDraft.total}</strong></p>
+
     ${
       paymentSession.orderDraft?.coupon?.code
         ? `<p class="coupon">${paymentSession.orderDraft.coupon.code} saved ₹${paymentSession.orderDraft.couponDiscount}</p>`
         : ""
     }
+
     <button id="pay-button" type="button">Pay securely</button>
     <div id="status">Opening payment options…</div>
   </main>
+
   <script>
     const checkoutOptions = ${safeJson(checkoutData)};
     const sessionToken = ${safeJson(req.params.sessionToken)};
     const returnUrl = ${safeJson(paymentSession.returnUrl)};
     const payButton = document.getElementById("pay-button");
     const statusElement = document.getElementById("status");
+
     let completed = false;
 
     function finish(parameters) {
       const target = new URL(returnUrl);
+
       Object.entries(parameters).forEach(([key, value]) => {
         target.searchParams.set(key, String(value || ""));
       });
+
       target.searchParams.set("session", sessionToken);
       window.location.replace(target.toString());
     }
@@ -580,68 +779,120 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
     async function postJson(path, body) {
       const response = await fetch(path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify(body)
       });
+
       const payload = await response.json();
+
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.message || "Payment could not be verified.");
+        throw new Error(
+          payload.message || "Payment could not be processed."
+        );
       }
+
       return payload;
     }
 
     checkoutOptions.handler = async function (response) {
       if (completed) return;
+
       completed = true;
       payButton.disabled = true;
       statusElement.textContent = "Verifying payment securely…";
 
       try {
-        const result = await postJson("/api/payments/razorpay/verify", {
-          sessionToken,
-          razorpayPaymentId: response.razorpay_payment_id,
-          razorpayOrderId: response.razorpay_order_id,
-          razorpaySignature: response.razorpay_signature
+        const result = await postJson(
+          "/api/payments/razorpay/verify",
+          {
+            sessionToken,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpayOrderId: response.razorpay_order_id,
+            razorpaySignature: response.razorpay_signature
+          }
+        );
+
+        finish({
+          status: "success",
+          orderId: result.data.order._id
         });
-        finish({ status: "success", orderId: result.data.order._id });
       } catch (error) {
         completed = false;
         payButton.disabled = false;
         statusElement.textContent = error.message;
-        finish({ status: "failed", message: error.message });
+
+        finish({
+          status: "failed",
+          message: error.message
+        });
       }
     };
 
     checkoutOptions.modal = {
       ondismiss: async function () {
         if (completed) return;
+
         completed = true;
+        statusElement.textContent = "Cancelling payment and releasing stock…";
+
         try {
-          await postJson("/api/payments/razorpay/abandon", { sessionToken });
+          await postJson(
+            "/api/payments/razorpay/abandon",
+            {
+              sessionToken
+            }
+          );
         } catch {}
-        finish({ status: "cancelled", message: "Payment was not completed." });
+
+        finish({
+          status: "cancelled",
+          message: "Payment was not completed. Reserved stock was released."
+        });
       }
     };
 
     const razorpayCheckout = new Razorpay(checkoutOptions);
 
-    razorpayCheckout.on("payment.failed", async function (response) {
-      if (completed) return;
-      completed = true;
-      const paymentId = response?.error?.metadata?.payment_id || "";
-      const message = response?.error?.description || "Payment failed.";
-      try {
-        await postJson("/api/payments/razorpay/fail", {
-          sessionToken,
-          paymentId,
-          reason: message
+    razorpayCheckout.on(
+      "payment.failed",
+      async function (response) {
+        if (completed) return;
+
+        completed = true;
+
+        const paymentId =
+          response?.error?.metadata?.payment_id || "";
+
+        const message =
+          response?.error?.description || "Payment failed.";
+
+        statusElement.textContent =
+          "Payment failed. Releasing reserved stock…";
+
+        try {
+          await postJson(
+            "/api/payments/razorpay/fail",
+            {
+              sessionToken,
+              paymentId,
+              reason: message
+            }
+          );
+        } catch {}
+
+        finish({
+          status: "failed",
+          message
         });
-      } catch {}
-      finish({ status: "failed", message });
-    });
+      }
+    );
 
     function openCheckout() {
-      statusElement.textContent = "Complete payment in Razorpay Checkout.";
+      statusElement.textContent =
+        "Complete payment in Razorpay Checkout.";
+
       razorpayCheckout.open();
     }
 
@@ -658,9 +909,15 @@ router.get("/checkout/:sessionToken", async (req, res, next) => {
 router.post("/verify", async (req, res, next) => {
   try {
     const sessionToken = String(req.body.sessionToken || "");
-    const razorpayPaymentId = String(req.body.razorpayPaymentId || "");
-    const razorpayOrderId = String(req.body.razorpayOrderId || "");
-    const razorpaySignature = String(req.body.razorpaySignature || "");
+    const razorpayPaymentId = String(
+      req.body.razorpayPaymentId || ""
+    );
+    const razorpayOrderId = String(
+      req.body.razorpayOrderId || ""
+    );
+    const razorpaySignature = String(
+      req.body.razorpaySignature || ""
+    );
 
     const paymentSession = await PaymentSession.findOne({
       sessionTokenHash: hashSessionToken(sessionToken),
@@ -702,7 +959,9 @@ router.post("/verify", async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Payment verified successfully.",
-      data: { order },
+      data: {
+        order,
+      },
     });
   } catch (error) {
     return next(error);
@@ -719,7 +978,17 @@ router.post("/fail", async (req, res, next) => {
       throw createHttpError("Payment session not found.", 404);
     }
 
-    const paymentId = String(req.body.paymentId || "");
+    if (paymentSession.status === "paid") {
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "paid",
+          order: paymentSession.createdOrder || null,
+        },
+      });
+    }
+
+    const paymentId = String(req.body.paymentId || "").trim();
 
     if (paymentId) {
       const razorpay = getRazorpayClient();
@@ -733,38 +1002,28 @@ router.post("/fail", async (req, res, next) => {
 
         return res.status(200).json({
           success: true,
-          data: { status: "paid", order },
-        });
-      }
-
-      if (payment.status === "failed") {
-        await markPaymentSessionFailed({
-          paymentSessionId: paymentSession._id,
-          reason: String(
-            req.body.reason || "Razorpay payment failed."
-          ),
-        });
-
-        return res.status(200).json({
-          success: true,
-          data: { status: "failed" },
+          data: {
+            status: "paid",
+            order,
+          },
         });
       }
     }
 
-    paymentSession.status = "abandoned";
-    paymentSession.abandonedAt = new Date();
-
-    const shortExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    if (shortExpiry < paymentSession.expiresAt) {
-      paymentSession.expiresAt = shortExpiry;
-    }
-
-    await paymentSession.save();
+    await markPaymentSessionFailed({
+      paymentSessionId: paymentSession._id,
+      reason: String(
+        req.body.reason || "Razorpay payment failed."
+      ),
+      finalStatus: "failed",
+    });
 
     return res.status(200).json({
       success: true,
-      data: { status: "abandoned" },
+      message: "Failed payment inventory was released.",
+      data: {
+        status: "failed",
+      },
     });
   } catch (error) {
     return next(error);
@@ -784,24 +1043,26 @@ router.post("/abandon", async (req, res, next) => {
     if (paymentSession.status === "paid") {
       return res.status(200).json({
         success: true,
-        data: { status: "paid" },
+        data: {
+          status: "paid",
+          order: paymentSession.createdOrder || null,
+        },
       });
     }
 
-    paymentSession.status = "abandoned";
-    paymentSession.abandonedAt = new Date();
-
-    const shortExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    if (shortExpiry < paymentSession.expiresAt) {
-      paymentSession.expiresAt = shortExpiry;
-    }
-
-    await paymentSession.save();
+    await markPaymentSessionFailed({
+      paymentSessionId: paymentSession._id,
+      reason: "Customer closed Razorpay Checkout.",
+      finalStatus: "abandoned",
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Payment session marked as abandoned.",
-      data: { status: "abandoned" },
+      message:
+        "Payment session cancelled and reserved stock released.",
+      data: {
+        status: "abandoned",
+      },
     });
   } catch (error) {
     return next(error);
@@ -819,6 +1080,30 @@ router.get("/status/:sessionToken", protect, async (req, res, next) => {
 
     if (!paymentSession) {
       throw createHttpError("Payment session not found.", 404);
+    }
+
+    /*
+     * Handle an expired session immediately when the app checks status,
+     * instead of waiting for the next worker interval.
+     */
+    if (
+      ["gateway_creating", "created"].includes(paymentSession.status) &&
+      new Date(paymentSession.expiresAt).getTime() <= Date.now()
+    ) {
+      await markPaymentSessionFailed({
+        paymentSessionId: paymentSession._id,
+        reason: "Payment session expired.",
+        finalStatus: "expired",
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "expired",
+          order: null,
+          message: "Payment session expired.",
+        },
+      });
     }
 
     return res.status(200).json({
@@ -847,7 +1132,10 @@ async function razorpayWebhookHandler(req, res, next) {
       });
     }
 
-    const signatureValid = verifyWebhookSignature(req.body, signature);
+    const signatureValid = verifyWebhookSignature(
+      req.body,
+      signature
+    );
 
     if (!signatureValid) {
       return res.status(400).json({
@@ -859,7 +1147,9 @@ async function razorpayWebhookHandler(req, res, next) {
     const event = JSON.parse(req.body.toString("utf8"));
     const payment = event?.payload?.payment?.entity;
     const razorpayOrder = event?.payload?.order?.entity;
-    const razorpayOrderId = payment?.order_id || razorpayOrder?.id || "";
+
+    const razorpayOrderId =
+      payment?.order_id || razorpayOrder?.id || "";
 
     if (
       ["payment.captured", "order.paid"].includes(event.event) &&
@@ -891,26 +1181,40 @@ async function razorpayWebhookHandler(req, res, next) {
       await markPaymentSessionFailed({
         razorpayOrderId,
         reason:
-          payment?.error_description || "Razorpay payment failed.",
+          payment?.error_description ||
+          "Razorpay payment failed.",
+        finalStatus: "failed",
       });
     }
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({
+      success: true,
+    });
   } catch (error) {
     return next(error);
   }
 }
 
 async function cleanupExpiredPaymentSessions() {
-  if (!isRazorpayConfigured()) return;
+  if (!isRazorpayConfigured()) {
+    return;
+  }
 
   const expiredSessions = await PaymentSession.find({
     status: {
-      $in: ["gateway_creating", "created", "abandoned"],
+      $in: [
+        "gateway_creating",
+        "created",
+      ],
     },
-    expiresAt: { $lte: new Date() },
+
+    expiresAt: {
+      $lte: new Date(),
+    },
   })
-    .sort({ expiresAt: 1 })
+    .sort({
+      expiresAt: 1,
+    })
     .limit(25);
 
   const razorpay = getRazorpayClient();
@@ -924,12 +1228,14 @@ async function cleanupExpiredPaymentSessions() {
 
         if (
           gatewayOrder.status === "paid" ||
-          Number(gatewayOrder.amount_paid) >= paymentSession.amountPaise
+          Number(gatewayOrder.amount_paid) >=
+            paymentSession.amountPaise
         ) {
           await finalizePaymentSession({
             razorpayOrderId: paymentSession.razorpayOrderId,
             razorpayPaymentId: paymentSession.razorpayPaymentId,
           });
+
           continue;
         }
       }
@@ -941,7 +1247,7 @@ async function cleanupExpiredPaymentSessions() {
       });
     } catch (error) {
       console.error(
-        "Payment expiry reconciliation failed:",
+        `Payment expiry reconciliation failed for ${paymentSession._id}:`,
         error.message
       );
     }
@@ -953,6 +1259,7 @@ function startPaymentExpiryWorker() {
     console.warn(
       "Razorpay expiry worker not started because Razorpay keys are missing."
     );
+
     return null;
   }
 
@@ -961,7 +1268,9 @@ function startPaymentExpiryWorker() {
   }, 60 * 1000);
 
   timer.unref?.();
+
   void cleanupExpiredPaymentSessions();
+
   return timer;
 }
 

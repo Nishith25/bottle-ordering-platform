@@ -1,218 +1,190 @@
-const mongoose =
-  require("mongoose");
+const mongoose = require("mongoose");
 
 const {
   releaseDeliverySlotReservation,
-} = require(
-  "../services/deliverySlotService"
-);
+} = require("../services/deliverySlotService");
 
-const paymentSessionSchema =
-  new mongoose.Schema(
-    {
-      sessionTokenHash: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true,
-      },
+const TERMINAL_UNPAID_STATUSES = [
+  "abandoned",
+  "failed",
+  "expired",
+];
 
-      user: {
-        type:
-          mongoose.Schema.Types
-            .ObjectId,
+const paymentSessionSchema = new mongoose.Schema(
+  {
+    sessionTokenHash: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
 
-        ref: "User",
-        required: true,
-        index: true,
-      },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
 
-      status: {
-        type: String,
+    status: {
+      type: String,
 
-        enum: [
-          "gateway_creating",
-          "created",
-          "abandoned",
-          "paid",
-          "failed",
-          "expired",
-        ],
+      enum: [
+        "gateway_creating",
+        "created",
+        "abandoned",
+        "paid",
+        "failed",
+        "expired",
+      ],
 
-        default:
-          "gateway_creating",
+      default: "gateway_creating",
+      index: true,
+    },
 
-        index: true,
-      },
+    returnUrl: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-      returnUrl: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-
-      prefill: {
-        name: {
-          type: String,
-          default: "",
-          trim: true,
-        },
-
-        email: {
-          type: String,
-          default: "",
-          trim: true,
-        },
-
-        contact: {
-          type: String,
-          default: "",
-          trim: true,
-        },
-      },
-
-      razorpayOrderId: {
-        type: String,
-        default: "",
-        trim: true,
-        index: true,
-      },
-
-      razorpayPaymentId: {
+    prefill: {
+      name: {
         type: String,
         default: "",
         trim: true,
       },
 
-      amountPaise: {
-        type: Number,
-        required: true,
-        min: 1,
-      },
-
-      currency: {
-        type: String,
-        default: "INR",
-        uppercase: true,
-        trim: true,
-      },
-
-      orderDraft: {
-        type:
-          mongoose.Schema.Types
-            .Mixed,
-
-        required: true,
-      },
-
-      couponUsage: {
-        type:
-          mongoose.Schema.Types
-            .ObjectId,
-
-        ref: "CouponUsage",
-        default: null,
-      },
-
-      inventoryReserved: {
-        type: Boolean,
-        default: true,
-      },
-
-      inventoryRestored: {
-        type: Boolean,
-        default: false,
-      },
-
-      inventoryRestoredAt: {
-        type: Date,
-        default: null,
-      },
-
-      createdOrder: {
-        type:
-          mongoose.Schema.Types
-            .ObjectId,
-
-        ref: "Order",
-        default: null,
-      },
-
-      abandonedAt: {
-        type: Date,
-        default: null,
-      },
-
-      paidAt: {
-        type: Date,
-        default: null,
-      },
-
-      failedAt: {
-        type: Date,
-        default: null,
-      },
-
-      failureReason: {
+      email: {
         type: String,
         default: "",
         trim: true,
       },
 
-      expiresAt: {
-        type: Date,
-        required: true,
-        index: true,
+      contact: {
+        type: String,
+        default: "",
+        trim: true,
       },
     },
-    {
-      timestamps: true,
-    }
-  );
 
-function getReservationToken(
-  paymentSession
-) {
+    razorpayOrderId: {
+      type: String,
+      default: "",
+      trim: true,
+      index: true,
+    },
+
+    razorpayPaymentId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    amountPaise: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    currency: {
+      type: String,
+      default: "INR",
+      uppercase: true,
+      trim: true,
+    },
+
+    orderDraft: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+    },
+
+    couponUsage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CouponUsage",
+      default: null,
+    },
+
+    inventoryReserved: {
+      type: Boolean,
+      default: true,
+    },
+
+    inventoryRestored: {
+      type: Boolean,
+      default: false,
+    },
+
+    inventoryRestoredAt: {
+      type: Date,
+      default: null,
+    },
+
+    createdOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
+
+    abandonedAt: {
+      type: Date,
+      default: null,
+    },
+
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
+    failedAt: {
+      type: Date,
+      default: null,
+    },
+
+    failureReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    expiresAt: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+function getReservationToken(paymentSession) {
   return String(
-    paymentSession
-      ?.orderDraft
-      ?.deliverySchedule
-      ?.deliverySlotReservationToken ||
-      ""
+    paymentSession?.orderDraft?.deliverySchedule
+      ?.deliverySlotReservationToken || ""
   ).trim();
 }
 
 paymentSessionSchema.pre(
   "save",
 
-  async function releaseExpiredSlotReservation() {
+  async function releaseUnpaidDeliverySlot() {
     if (
-      !this.isModified(
-        "status"
-      ) ||
-      ![
-        "failed",
-        "expired",
-      ].includes(
-        this.status
-      ) ||
+      !this.isModified("status") ||
+      !TERMINAL_UNPAID_STATUSES.includes(this.status) ||
       this.createdOrder
     ) {
       return;
     }
 
     await releaseDeliverySlotReservation({
-      reservationToken:
-        getReservationToken(
-          this
-        ),
+      reservationToken: getReservationToken(this),
 
       reason:
         this.failureReason ||
         `Payment session ${this.status}.`,
 
-      session:
-        this.$session(),
+      session: this.$session(),
     });
   }
 );
@@ -221,71 +193,46 @@ paymentSessionSchema.pre(
   "findOneAndUpdate",
 
   async function releaseSlotForQueryFailure() {
-    const update =
-      this.getUpdate() ||
-      {};
+    const update = this.getUpdate() || {};
 
     const nextStatus =
       update.status ||
-      update.$set
-        ?.status;
+      update.$set?.status;
 
-    if (
-      ![
-        "failed",
-        "expired",
-      ].includes(
-        nextStatus
-      )
-    ) {
+    if (!TERMINAL_UNPAID_STATUSES.includes(nextStatus)) {
       return;
     }
 
-    let query =
-      this.model
-        .findOne(
-          this.getQuery()
-        )
-        .select(
-          "orderDraft createdOrder failureReason"
-        )
-        .lean();
+    let query = this.model
+      .findOne(this.getQuery())
+      .select(
+        "orderDraft createdOrder failureReason status"
+      )
+      .lean();
 
-    const session =
-      this.getOptions()
-        .session;
+    const session = this.getOptions().session;
 
     if (session) {
-      query =
-        query.session(
-          session
-        );
+      query = query.session(session);
     }
 
-    const paymentSession =
-      await query;
+    const paymentSession = await query;
 
     if (
       !paymentSession ||
-      paymentSession
-        .createdOrder
+      paymentSession.createdOrder ||
+      paymentSession.status === nextStatus
     ) {
       return;
     }
 
     await releaseDeliverySlotReservation({
-      reservationToken:
-        getReservationToken(
-          paymentSession
-        ),
+      reservationToken: getReservationToken(paymentSession),
 
       reason:
-        update
-          .failureReason ||
-        update.$set
-          ?.failureReason ||
-        paymentSession
-          .failureReason ||
+        update.failureReason ||
+        update.$set?.failureReason ||
+        paymentSession.failureReason ||
         `Payment session ${nextStatus}.`,
 
       session,
@@ -298,8 +245,7 @@ paymentSessionSchema.index({
   expiresAt: 1,
 });
 
-module.exports =
-  mongoose.model(
-    "PaymentSession",
-    paymentSessionSchema
-  );
+module.exports = mongoose.model(
+  "PaymentSession",
+  paymentSessionSchema
+);
