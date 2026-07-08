@@ -188,7 +188,7 @@ const subscriptionChargeSchema =
 
         trim: true,
 
-        index: true,
+
       },
 
       order: {
