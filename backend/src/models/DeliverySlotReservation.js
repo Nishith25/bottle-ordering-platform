@@ -1,4 +1,5 @@
-const mongoose = require("mongoose");
+const mongoose =
+  require("mongoose");
 
 const deliverySlotReservationSchema =
   new mongoose.Schema(
@@ -8,7 +9,6 @@ const deliverySlotReservationSchema =
         required: true,
         unique: true,
         trim: true,
-        index: true,
       },
 
       user: {
@@ -28,7 +28,6 @@ const deliverySlotReservationSchema =
 
         ref: "Order",
         default: null,
-        index: true,
       },
 
       source: {
@@ -93,16 +92,21 @@ const deliverySlotReservationSchema =
       startMinutes: {
         type: Number,
         required: true,
+        min: 0,
+        max: 1439,
       },
 
       endMinutes: {
         type: Number,
         required: true,
+        min: 1,
+        max: 1440,
       },
 
       cutoffMinutes: {
         type: Number,
         required: true,
+        min: 0,
       },
 
       capacitySnapshot: {
@@ -121,7 +125,9 @@ const deliverySlotReservationSchema =
           "released",
         ],
 
-        default: "reserved",
+        default:
+          "reserved",
+
         index: true,
       },
 

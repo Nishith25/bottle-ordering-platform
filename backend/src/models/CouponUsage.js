@@ -1,100 +1,135 @@
-const mongoose = require("mongoose");
+const mongoose =
+  require("mongoose");
 
-const couponUsageSchema = new mongoose.Schema(
-  {
-    coupon: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Coupon",
-      required: true,
-      index: true,
-    },
+const couponUsageSchema =
+  new mongoose.Schema(
+    {
+      coupon: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
 
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
+        ref:
+          "Coupon",
 
-    context: {
-      type: String,
-      enum: ["order", "subscription"],
-      required: true,
-      index: true,
-    },
+        required: true,
+        index: true,
+      },
 
-    status: {
-      type: String,
-      enum: ["reserved", "redeemed", "released"],
-      required: true,
-      index: true,
-    },
+      user: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
 
-    code: {
-      type: String,
-      required: true,
-      uppercase: true,
-      trim: true,
-    },
+        ref:
+          "User",
 
-    discountAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+        required: true,
+        index: true,
+      },
 
-    eligibleAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+      context: {
+        type: String,
 
-    paymentSession: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "PaymentSession",
-      default: null,
-      index: true,
-    },
+        enum: [
+          "order",
+          "subscription",
+        ],
 
-    order: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-      default: null,
-      index: true,
-    },
+        required: true,
+        index: true,
+      },
 
-    subscription: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Subscription",
-      default: null,
-      index: true,
-    },
+      status: {
+        type: String,
 
-    reservedAt: {
-      type: Date,
-      default: null,
-    },
+        enum: [
+          "reserved",
+          "redeemed",
+          "released",
+        ],
 
-    redeemedAt: {
-      type: Date,
-      default: null,
-    },
+        required: true,
+        index: true,
+      },
 
-    releasedAt: {
-      type: Date,
-      default: null,
-    },
+      code: {
+        type: String,
+        required: true,
+        uppercase: true,
+        trim: true,
+      },
 
-    expiresAt: {
-      type: Date,
-      default: null,
-      index: true,
+      discountAmount: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      eligibleAmount: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+
+      paymentSession: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref:
+          "PaymentSession",
+
+        default: null,
+      },
+
+      order: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref:
+          "Order",
+
+        default: null,
+      },
+
+      subscription: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref:
+          "Subscription",
+
+        default: null,
+      },
+
+      reservedAt: {
+        type: Date,
+        default: null,
+      },
+
+      redeemedAt: {
+        type: Date,
+        default: null,
+      },
+
+      releasedAt: {
+        type: Date,
+        default: null,
+      },
+
+      expiresAt: {
+        type: Date,
+        default: null,
+        index: true,
+      },
     },
-  },
-  {
-    timestamps: true,
-  }
-);
+    {
+      timestamps: true,
+    }
+  );
 
 couponUsageSchema.index({
   coupon: 1,
@@ -103,7 +138,9 @@ couponUsageSchema.index({
 });
 
 couponUsageSchema.index(
-  { paymentSession: 1 },
+  {
+    paymentSession: 1,
+  },
   {
     unique: true,
     sparse: true,
@@ -111,7 +148,9 @@ couponUsageSchema.index(
 );
 
 couponUsageSchema.index(
-  { order: 1 },
+  {
+    order: 1,
+  },
   {
     unique: true,
     sparse: true,
@@ -119,14 +158,17 @@ couponUsageSchema.index(
 );
 
 couponUsageSchema.index(
-  { subscription: 1 },
+  {
+    subscription: 1,
+  },
   {
     unique: true,
     sparse: true,
   }
 );
 
-module.exports = mongoose.model(
-  "CouponUsage",
-  couponUsageSchema
-);
+module.exports =
+  mongoose.model(
+    "CouponUsage",
+    couponUsageSchema
+  );
