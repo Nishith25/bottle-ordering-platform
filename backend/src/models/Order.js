@@ -1,9 +1,17 @@
-const mongoose = require("mongoose");
+const mongoose =
+  require("mongoose");
 
 const {
   processOrderNotificationChanges,
 } = require(
   "../services/notificationService"
+);
+
+const {
+  ensureOrderDeliverySlotReservation,
+  releaseDeliverySlotReservation,
+} = require(
+  "../services/deliverySlotService"
 );
 
 const orderItemSchema =
@@ -140,6 +148,54 @@ const deliveryScheduleSchema =
       deliverySlot: {
         type: String,
         required: true,
+        trim: true,
+      },
+
+      deliverySlotCode: {
+        type: String,
+        default: "",
+        trim: true,
+        lowercase: true,
+      },
+
+      deliverySlotId: {
+        type:
+          mongoose.Schema.Types
+            .ObjectId,
+
+        ref: "DeliverySlot",
+        default: null,
+      },
+
+      deliverySlotStartMinutes: {
+        type: Number,
+        default: null,
+        min: 0,
+        max: 1439,
+      },
+
+      deliverySlotEndMinutes: {
+        type: Number,
+        default: null,
+        min: 1,
+        max: 1440,
+      },
+
+      deliverySlotCutoffMinutes: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
+
+      deliverySlotCapacitySnapshot: {
+        type: Number,
+        default: null,
+        min: 1,
+      },
+
+      deliverySlotReservationToken: {
+        type: String,
+        default: "",
         trim: true,
       },
     },
@@ -708,16 +764,20 @@ orderSchema.pre(
       ) ||
       this.couponDiscount < 0
     ) {
-      this.couponDiscount = 0;
+      this.couponDiscount =
+        0;
     }
 
     if (
       this.orderSource ===
       "subscription"
     ) {
-      if (!this.subscription) {
+      if (
+        !this.subscription
+      ) {
         this.invalidate(
           "subscription",
+
           "A recurring order must reference a subscription."
         );
       }
@@ -730,6 +790,7 @@ orderSchema.pre(
       ) {
         this.invalidate(
           "subscriptionCycleKey",
+
           "A recurring order must include its billing-cycle key."
         );
       }
@@ -753,6 +814,137 @@ orderSchema.pre(
   }
 );
 
+/*
+ * Reserve or consume one delivery-capacity position
+ * whenever a new order is created.
+ *
+ * For one-time online orders, a reservation token
+ * may already have been created during checkout.
+ *
+ * For COD and subscription-generated orders, this
+ * hook creates the reservation while the order is
+ * saved inside the existing transaction.
+ */
+orderSchema.pre(
+  "save",
+
+  async function manageDeliverySlotCapacity() {
+    const session =
+      this.$session();
+
+    if (
+      this.isNew &&
+      this.orderStatus !==
+        "cancelled"
+    ) {
+      await ensureOrderDeliverySlotReservation({
+        order: this,
+        session,
+      });
+    }
+
+    if (
+      !this.isNew &&
+      this.isModified(
+        "orderStatus"
+      ) &&
+      this.orderStatus ===
+        "cancelled"
+    ) {
+      await releaseDeliverySlotReservation({
+        reservationToken:
+          this.deliverySchedule
+            ?.deliverySlotReservationToken,
+
+        reason:
+          this.cancellationReason ||
+          "Order cancelled.",
+
+        session,
+      });
+    }
+  }
+);
+
+/*
+ * Some admin/customer cancellation flows can use
+ * findOneAndUpdate instead of document.save().
+ *
+ * Release the slot before that update is committed.
+ */
+orderSchema.pre(
+  "findOneAndUpdate",
+
+  async function releaseSlotForQueryCancellation() {
+    const update =
+      this.getUpdate() ||
+      {};
+
+    const nextStatus =
+      update.orderStatus ||
+      update.$set
+        ?.orderStatus;
+
+    if (
+      nextStatus !==
+      "cancelled"
+    ) {
+      return;
+    }
+
+    let query =
+      this.model
+        .findOne(
+          this.getQuery()
+        )
+        .select(
+          "deliverySchedule cancellationReason orderStatus"
+        )
+        .lean();
+
+    const session =
+      this.getOptions()
+        .session;
+
+    if (session) {
+      query =
+        query.session(
+          session
+        );
+    }
+
+    const existingOrder =
+      await query;
+
+    if (
+      !existingOrder ||
+      existingOrder.orderStatus ===
+        "cancelled"
+    ) {
+      return;
+    }
+
+    const reason =
+      update
+        .cancellationReason ||
+      update.$set
+        ?.cancellationReason ||
+      existingOrder
+        .cancellationReason ||
+      "Order cancelled.";
+
+    await releaseDeliverySlotReservation({
+      reservationToken:
+        existingOrder
+          .deliverySchedule
+          ?.deliverySlotReservationToken,
+
+      reason,
+      session,
+    });
+  }
+);
+
 const NOTIFICATION_FIELDS = [
   "orderStatus",
   "deliveryStatus",
@@ -763,13 +955,17 @@ const NOTIFICATION_FIELDS = [
   "paymentStatus",
 ];
 
-function referenceValue(value) {
+function referenceValue(
+  value
+) {
   if (!value) {
     return "";
   }
 
   if (value._id) {
-    return String(value._id);
+    return String(
+      value._id
+    );
   }
 
   return String(value);
@@ -813,7 +1009,9 @@ function hasNotificationDifference(
   );
 }
 
-function wait(milliseconds) {
+function wait(
+  milliseconds
+) {
   return new Promise(
     (resolve) => {
       setTimeout(
@@ -848,10 +1046,14 @@ function scheduleOrderNotification({
 
         const committedOrder =
           await model
-            .findById(orderId)
+            .findById(
+              orderId
+            )
             .lean();
 
-        if (!committedOrder) {
+        if (
+          !committedOrder
+        ) {
           continue;
         }
 
@@ -879,6 +1081,7 @@ function scheduleOrderNotification({
     (error) => {
       console.error(
         "Unable to process order notification:",
+
         error.message
       );
     }
@@ -896,19 +1099,26 @@ orderSchema.pre(
       isNewDocument ||
       NOTIFICATION_FIELDS.some(
         (field) =>
-          this.isModified(field)
+          this.isModified(
+            field
+          )
       );
 
     if (!shouldTrack) {
       return;
     }
 
-    let previous = null;
+    let previous =
+      null;
 
-    if (!isNewDocument) {
+    if (
+      !isNewDocument
+    ) {
       let query =
         this.constructor
-          .findById(this._id)
+          .findById(
+            this._id
+          )
           .lean();
 
       const session =
@@ -916,7 +1126,9 @@ orderSchema.pre(
 
       if (session) {
         query =
-          query.session(session);
+          query.session(
+            session
+          );
       }
 
       previous =
@@ -981,7 +1193,9 @@ orderSchema.pre(
 
     if (session) {
       query =
-        query.session(session);
+        query.session(
+          session
+        );
     }
 
     this._previousOrderForNotification =
@@ -997,7 +1211,9 @@ orderSchema.post(
       this
         ._previousOrderForNotification;
 
-    if (!previous?._id) {
+    if (
+      !previous?._id
+    ) {
       return;
     }
 
@@ -1053,11 +1269,24 @@ orderSchema.index({
   createdAt: -1,
 });
 
+orderSchema.index({
+  "deliverySchedule.deliveryDateId":
+    1,
+
+  "deliverySchedule.deliverySlotCode":
+    1,
+
+  orderStatus: 1,
+});
+
 orderSchema.index(
   {
     subscription: 1,
-    subscriptionCycleKey: 1,
+
+    subscriptionCycleKey:
+      1,
   },
+
   {
     unique: true,
     sparse: true,

@@ -1,89 +1,225 @@
 require("dotenv").config();
 
-const cors = require("cors");
-const express = require("express");
-const helmet = require("helmet");
-const mongoose = require("mongoose");
-const morgan = require("morgan");
+const cors =
+  require("cors");
 
-const connectDB = require("./config/db");
+const express =
+  require("express");
 
-const adminRoutes = require("./routes/admin");
-const adminCouponRoutes = require("./routes/adminCoupons");
-const adminDeliveryPartnerRoutes = require("./routes/adminDeliveryPartners");
-const adminInventoryRoutes = require("./routes/adminInventory");
-const adminOrderRoutes = require("./routes/adminOrders");
-const adminSubscriptionChargeRoutes = require("./routes/adminSubscriptionCharges");
-const adminSubscriptionDetailsRoutes = require("./routes/adminSubscriptionDetails");
-const adminSubscriptionRoutes = require("./routes/adminSubscriptions");
-const adminUserRoutes = require("./routes/adminUsers");
+const helmet =
+  require("helmet");
 
-const authRoutes = require("./routes/auth");
-const couponRoutes = require("./routes/coupons");
-const deliveryOrderRoutes = require("./routes/deliveryOrders");
-const locationRoutes = require("./routes/locations");
-const notificationRoutes = require("./routes/notifications");
-const orderReviewRoutes = require("./routes/orderReviews");
-const orderRoutes = require("./routes/orders");
-const productRoutes = require("./routes/products");
-const pushTokenRoutes = require("./routes/pushTokens");
-const razorpaySubscriptionRoutes = require("./routes/razorpaySubscriptions");
-const razorpaySubscriptionWebhookRoutes = require("./routes/razorpaySubscriptionWebhook");
-const subscriptionDetailRoutes = require("./routes/subscriptionDetails");
-const subscriptionEditRoutes = require("./routes/subscriptionEdits");
-const subscriptionRoutes = require("./routes/subscriptions");
-const webPushSubscriptionRoutes = require("./routes/webPushSubscriptions");
+const mongoose =
+  require("mongoose");
 
-const razorpayRefundWebhookMiddleware = require(
-  "./middleware/razorpayRefundWebhook"
+const morgan =
+  require("morgan");
+
+const connectDB =
+  require("./config/db");
+
+const adminRoutes =
+  require("./routes/admin");
+
+const adminCouponRoutes =
+  require(
+    "./routes/adminCoupons"
+  );
+
+const adminDeliveryPartnerRoutes =
+  require(
+    "./routes/adminDeliveryPartners"
+  );
+
+const adminDeliverySlotRoutes =
+  require(
+    "./routes/adminDeliverySlots"
+  );
+
+const adminInventoryRoutes =
+  require(
+    "./routes/adminInventory"
+  );
+
+const adminOrderRoutes =
+  require(
+    "./routes/adminOrders"
+  );
+
+const adminSubscriptionChargeRoutes =
+  require(
+    "./routes/adminSubscriptionCharges"
+  );
+
+const adminSubscriptionDetailsRoutes =
+  require(
+    "./routes/adminSubscriptionDetails"
+  );
+
+const adminSubscriptionRoutes =
+  require(
+    "./routes/adminSubscriptions"
+  );
+
+const adminUserRoutes =
+  require(
+    "./routes/adminUsers"
+  );
+
+const authRoutes =
+  require("./routes/auth");
+
+const couponRoutes =
+  require("./routes/coupons");
+
+const deliveryOrderRoutes =
+  require(
+    "./routes/deliveryOrders"
+  );
+
+const deliverySlotRoutes =
+  require(
+    "./routes/deliverySlots"
+  );
+
+const locationRoutes =
+  require("./routes/locations");
+
+const notificationRoutes =
+  require(
+    "./routes/notifications"
+  );
+
+const orderReviewRoutes =
+  require(
+    "./routes/orderReviews"
+  );
+
+const orderRoutes =
+  require("./routes/orders");
+
+const productRoutes =
+  require("./routes/products");
+
+const pushTokenRoutes =
+  require("./routes/pushTokens");
+
+const razorpaySubscriptionRoutes =
+  require(
+    "./routes/razorpaySubscriptions"
+  );
+
+const razorpaySubscriptionWebhookRoutes =
+  require(
+    "./routes/razorpaySubscriptionWebhook"
+  );
+
+const subscriptionDetailRoutes =
+  require(
+    "./routes/subscriptionDetails"
+  );
+
+const subscriptionEditRoutes =
+  require(
+    "./routes/subscriptionEdits"
+  );
+
+const subscriptionRoutes =
+  require(
+    "./routes/subscriptions"
+  );
+
+const webPushSubscriptionRoutes =
+  require(
+    "./routes/webPushSubscriptions"
+  );
+
+const razorpayRefundWebhookMiddleware =
+  require(
+    "./middleware/razorpayRefundWebhook"
+  );
+
+const {
+  router:
+    razorpayPaymentRoutes,
+
+  razorpayWebhookHandler,
+
+  startPaymentExpiryWorker,
+} = require(
+  "./routes/razorpayPayments"
 );
 
 const {
-  router: razorpayPaymentRoutes,
-  razorpayWebhookHandler,
-  startPaymentExpiryWorker,
-} = require("./routes/razorpayPayments");
+  ensureDefaultDeliverySlots,
+} = require(
+  "./services/deliverySlotService"
+);
 
 const {
   startSubscriptionDeliveryWorker,
-} = require("./services/subscriptionDelivery");
+} = require(
+  "./services/subscriptionDelivery"
+);
 
 const {
   startPushReceiptWorker,
-} = require("./services/pushNotificationService");
-
-const app = express();
-
-app.set("trust proxy", 1);
-
-app.disable("x-powered-by");
-
-const PORT = Number(
-  process.env.PORT || 5001
+} = require(
+  "./services/pushNotificationService"
 );
 
-const HOST = String(
-  process.env.HOST || "0.0.0.0"
-).trim();
+const app =
+  express();
 
-const allowedOrigins = String(
-  process.env.CLIENT_ORIGINS || ""
-)
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+app.set(
+  "trust proxy",
+  1
+);
+
+app.disable(
+  "x-powered-by"
+);
+
+const PORT =
+  Number(
+    process.env.PORT ||
+      5001
+  );
+
+const HOST =
+  String(
+    process.env.HOST ||
+      "0.0.0.0"
+  ).trim();
+
+const allowedOrigins =
+  String(
+    process.env
+      .CLIENT_ORIGINS ||
+      ""
+  )
+    .split(",")
+    .map(
+      (origin) =>
+        origin.trim()
+    )
+    .filter(Boolean);
 
 app.use(
   helmet({
     crossOriginOpenerPolicy: {
-      policy: "same-origin-allow-popups",
+      policy:
+        "same-origin-allow-popups",
     },
   })
 );
 
 app.use(
   cors({
-    origin(origin, callback) {
+    origin(
+      origin,
+      callback
+    ) {
       if (!origin) {
         return callback(
           null,
@@ -92,8 +228,11 @@ app.use(
       }
 
       if (
-        allowedOrigins.length === 0 ||
-        allowedOrigins.includes(origin)
+        allowedOrigins.length ===
+          0 ||
+        allowedOrigins.includes(
+          origin
+        )
       ) {
         return callback(
           null,
@@ -101,13 +240,17 @@ app.use(
         );
       }
 
-      const error = new Error(
-        `Origin ${origin} is not permitted by CORS.`
+      const error =
+        new Error(
+          `Origin ${origin} is not permitted by CORS.`
+        );
+
+      error.statusCode =
+        403;
+
+      return callback(
+        error
       );
-
-      error.statusCode = 403;
-
-      return callback(error);
     },
 
     credentials: true,
@@ -132,15 +275,19 @@ app.use(
 );
 
 /*
- * Raw webhook routes must stay
- * before express.json().
+ * Raw webhook routes must remain before
+ * express.json() so Razorpay signatures
+ * are verified against the original body.
  */
 app.post(
   "/api/payments/razorpay/webhook",
 
   express.raw({
-    type: "application/json",
-    limit: "1mb",
+    type:
+      "application/json",
+
+    limit:
+      "1mb",
   }),
 
   razorpayRefundWebhookMiddleware,
@@ -150,32 +297,42 @@ app.post(
 
 app.use(
   "/api/webhooks/razorpay/subscriptions",
+
   razorpaySubscriptionWebhookRoutes
 );
 
 app.use(
   express.json({
-    limit: "1mb",
+    limit:
+      "1mb",
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "1mb",
+
+    limit:
+      "1mb",
   })
 );
 
 if (
-  process.env.NODE_ENV !== "test"
+  process.env.NODE_ENV !==
+  "test"
 ) {
-  app.use(morgan("dev"));
+  app.use(
+    morgan("dev")
+  );
 }
 
 app.get(
   "/api/health",
 
-  (req, res) => {
+  (
+    req,
+    res
+  ) => {
     return res
       .status(200)
       .json({
@@ -185,22 +342,28 @@ app.get(
           "Backend is running.",
 
         environment:
-          process.env.NODE_ENV ||
+          process.env
+            .NODE_ENV ||
           "development",
 
-        host: HOST,
+        host:
+          HOST,
 
-        port: PORT,
+        port:
+          PORT,
 
         database:
-          mongoose.connection.name ||
+          mongoose.connection
+            .name ||
           null,
 
         databaseState:
-          mongoose.connection.readyState,
+          mongoose.connection
+            .readyState,
 
         timestamp:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       });
   }
 );
@@ -218,6 +381,11 @@ app.use(
 app.use(
   "/api/locations",
   locationRoutes
+);
+
+app.use(
+  "/api/delivery-slots",
+  deliverySlotRoutes
 );
 
 app.use(
@@ -286,6 +454,11 @@ app.use(
 );
 
 app.use(
+  "/api/admin/delivery-slots",
+  adminDeliverySlotRoutes
+);
+
+app.use(
   "/api/admin/coupons",
   adminCouponRoutes
 );
@@ -326,7 +499,10 @@ app.use(
 );
 
 app.use(
-  (req, res) => {
+  (
+    req,
+    res
+  ) => {
     return res
       .status(404)
       .json({
@@ -345,15 +521,20 @@ app.use(
     res,
     next
   ) => {
-    console.error(error);
+    console.error(
+      error
+    );
 
     if (
-      error.code === 11000
+      error.code ===
+      11000
     ) {
       const duplicateField =
         Object.keys(
-          error.keyPattern || {}
-        )[0] || "field";
+          error.keyPattern ||
+            {}
+        )[0] ||
+        "field";
 
       return res
         .status(409)
@@ -375,16 +556,20 @@ app.use(
       );
 
     return res
-      .status(statusCode)
+      .status(
+        statusCode
+      )
       .json({
         success: false,
 
         message:
-          statusCode === 500
+          statusCode ===
+          500
             ? "An unexpected server error occurred."
             : error.message,
 
-        ...(process.env.NODE_ENV ===
+        ...(process.env
+          .NODE_ENV ===
         "development"
           ? {
               stack:
@@ -398,6 +583,14 @@ app.use(
 async function startServer() {
   try {
     await connectDB();
+
+    /*
+     * Seed only missing global default slots.
+     *
+     * Existing delivery-slot settings and future
+     * admin changes are not overwritten.
+     */
+    await ensureDefaultDeliverySlots();
 
     app.listen(
       PORT,
@@ -426,6 +619,7 @@ async function startServer() {
   } catch (error) {
     console.error(
       "Unable to start backend:",
+
       error.message
     );
 
