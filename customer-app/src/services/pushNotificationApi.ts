@@ -1,4 +1,6 @@
-import { API_BASE_URL } from "./api";
+import {
+  API_BASE_URL,
+} from "./api";
 
 type ApiResponse = {
   success: boolean;
@@ -36,13 +38,12 @@ export type RegisteredPushToken = {
   lastSeenAt?: string;
 };
 
-export type PushTestResult = {
-  success: boolean;
+export type NativePushTestResult = {
+  success?: boolean;
   duplicate?: boolean;
-
   logId?: string;
 
-  status:
+  status?:
     | "queued"
     | "no_tokens"
     | "sent"
@@ -53,6 +54,70 @@ export type PushTestResult = {
   attemptedTokenCount?: number;
   acceptedCount?: number;
   failedCount?: number;
+};
+
+export type WebPushTestResult = {
+  success?: boolean;
+
+  status?:
+    | "not_configured"
+    | "no_subscriptions"
+    | "sent"
+    | "partial"
+    | "failed"
+    | string;
+
+  attemptedSubscriptionCount?: number;
+  deliveredCount?: number;
+  failedCount?: number;
+};
+
+export type PushTestResult = {
+  success: boolean;
+  duplicate?: boolean;
+  logId?: string;
+
+  status:
+    | "duplicate"
+    | "not_configured"
+    | "no_recipients"
+    | "sent"
+    | "partial"
+    | "failed"
+    | string;
+
+  /*
+   * Combined native + Web Push counts.
+   */
+  attemptedDeviceCount?: number;
+  deliveredCount?: number;
+  failedCount?: number;
+
+  /*
+   * Existing Expo-native fields are retained
+   * for backward compatibility.
+   */
+  attemptedTokenCount?: number;
+  acceptedCount?: number;
+  nativeFailedCount?: number;
+
+  /*
+   * Web Push fields.
+   */
+  attemptedSubscriptionCount?: number;
+  webDeliveredCount?: number;
+  webFailedCount?: number;
+
+  nativePush?:
+    | NativePushTestResult
+    | null;
+
+  webPush?:
+    | WebPushTestResult
+    | null;
+
+  nativeError?: string;
+  webError?: string;
 };
 
 type RegisterResponse =
@@ -144,14 +209,16 @@ async function request<T>(
       T & ApiResponse;
 
     try {
-      payload = responseText
-        ? JSON.parse(
-            responseText
-          )
-        : ({
-            success:
-              response.ok,
-          } as T & ApiResponse);
+      payload =
+        responseText
+          ? JSON.parse(
+              responseText
+            )
+          : ({
+              success:
+                response.ok,
+            } as T &
+              ApiResponse);
     } catch {
       throw new Error(
         "The backend returned an invalid response."
@@ -160,7 +227,8 @@ async function request<T>(
 
     if (
       !response.ok ||
-      payload.success === false
+      payload.success ===
+        false
     ) {
       throw new Error(
         payload.message ||
@@ -181,7 +249,8 @@ async function request<T>(
     }
 
     if (
-      error instanceof TypeError
+      error instanceof
+      TypeError
     ) {
       throw new Error(
         "Unable to connect to the backend."
@@ -198,7 +267,9 @@ async function request<T>(
       "Unable to complete the push-notification request."
     );
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(
+      timeoutId
+    );
   }
 }
 
@@ -221,31 +292,38 @@ export async function registerDevicePushToken(
       "/api/push-tokens/register",
       authToken,
       {
-        method: "POST",
+        method:
+          "POST",
 
-        body: JSON.stringify({
-          token:
-            cleanPushToken,
+        body:
+          JSON.stringify({
+            token:
+              cleanPushToken,
 
-          platform:
-            input.platform,
+            platform:
+              input.platform,
 
-          deviceId:
-            input.deviceId || "",
+            deviceId:
+              input.deviceId ||
+              "",
 
-          deviceName:
-            input.deviceName || "",
+            deviceName:
+              input.deviceName ||
+              "",
 
-          appVersion:
-            input.appVersion || "",
+            appVersion:
+              input.appVersion ||
+              "",
 
-          projectId:
-            input.projectId || "",
-        }),
+            projectId:
+              input.projectId ||
+              "",
+          }),
       }
     );
 
-  return response.data.pushToken;
+  return response.data
+    .pushToken;
 }
 
 export async function unregisterDevicePushToken(
@@ -264,16 +342,19 @@ export async function unregisterDevicePushToken(
       "/api/push-tokens/unregister",
       authToken,
       {
-        method: "DELETE",
+        method:
+          "DELETE",
 
-        body: JSON.stringify({
-          token:
-            cleanPushToken,
-        }),
+        body:
+          JSON.stringify({
+            token:
+              cleanPushToken,
+          }),
       }
     );
 
-  return response.data.disabled;
+  return response.data
+    .disabled;
 }
 
 export async function unregisterAllDevicePushTokens(
@@ -284,11 +365,13 @@ export async function unregisterAllDevicePushTokens(
       "/api/push-tokens/unregister-all",
       authToken,
       {
-        method: "DELETE",
+        method:
+          "DELETE",
       }
     );
 
-  return response.data.disabledCount;
+  return response.data
+    .disabledCount;
 }
 
 export async function sendCustomerTestPush(
@@ -303,19 +386,22 @@ export async function sendCustomerTestPush(
       "/api/push-tokens/test",
       authToken,
       {
-        method: "POST",
+        method:
+          "POST",
 
-        body: JSON.stringify({
-          title:
-            input?.title ||
-            "Bottle notification test",
+        body:
+          JSON.stringify({
+            title:
+              input?.title ||
+              "SipBite notification test",
 
-          body:
-            input?.body ||
-            "Your iOS or Android push notifications are connected.",
-        }),
+            body:
+              input?.body ||
+              "Your Android, iOS, or Home Screen PWA notifications are connected.",
+          }),
       }
     );
 
-  return response.data.result;
+  return response.data
+    .result;
 }

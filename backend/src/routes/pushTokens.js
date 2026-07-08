@@ -7,18 +7,24 @@ const {
   "../middleware/auth"
 );
 
-const PushToken = require(
-  "../models/PushToken"
-);
+const PushToken =
+  require(
+    "../models/PushToken"
+  );
 
 const {
   DEFAULT_ANDROID_CHANNEL_ID,
   registerPushToken,
   unregisterPushToken,
   unregisterAllPushTokens,
-  sendPushToUser,
 } = require(
   "../services/pushNotificationService"
+);
+
+const {
+  sendPushToUser,
+} = require(
+  "../services/notificationDeliveryService"
 );
 
 const router =
@@ -33,6 +39,35 @@ function getAuthenticatedUserId(
     req.user?._id ||
     req.user?.id
   );
+}
+
+function getTestPushMessage(
+  result
+) {
+  switch (
+    result?.status
+  ) {
+    case "duplicate":
+      return "This test notification was already submitted.";
+
+    case "no_recipients":
+      return "No active native app or Home Screen PWA notification subscription is registered for this account.";
+
+    case "not_configured":
+      return "No native device is registered and Web Push VAPID configuration is missing.";
+
+    case "partial":
+      return "The test notification reached at least one registered device, but another delivery channel reported a problem.";
+
+    case "sent":
+      return "The test notification was submitted to your registered devices.";
+
+    case "failed":
+      return "The test notification could not be delivered.";
+
+    default:
+      return "The test notification request was completed.";
+  }
 }
 
 /**
@@ -123,27 +158,31 @@ router.post(
           req
         );
 
+      const body =
+        req.body ||
+        {};
+
       const pushToken =
         await registerPushToken({
           userId,
 
           token:
-            req.body.token,
+            body.token,
 
           platform:
-            req.body.platform,
+            body.platform,
 
           deviceId:
-            req.body.deviceId,
+            body.deviceId,
 
           deviceName:
-            req.body.deviceName,
+            body.deviceName,
 
           appVersion:
-            req.body.appVersion,
+            body.appVersion,
 
           projectId:
-            req.body.projectId,
+            body.projectId,
         });
 
       return res
@@ -210,12 +249,16 @@ router.delete(
           req
         );
 
+      const body =
+        req.body ||
+        {};
+
       const pushToken =
         await unregisterPushToken({
           userId,
 
           token:
-            req.body.token,
+            body.token,
         });
 
       return res
@@ -243,6 +286,10 @@ router.delete(
 
 /**
  * DELETE /api/push-tokens/unregister-all
+ *
+ * This route preserves its existing native-device
+ * behavior. Browser subscriptions are handled by
+ * the separate Web Push subscription routes.
  */
 router.delete(
   "/unregister-all",
@@ -271,7 +318,7 @@ router.delete(
           success: true,
 
           message:
-            "Push notifications were disabled on all registered devices.",
+            "Push notifications were disabled on all registered native devices.",
 
           data:
             result,
@@ -285,7 +332,10 @@ router.delete(
 /**
  * POST /api/push-tokens/test
  *
- * Sends only to the authenticated user.
+ * Sends to the authenticated user's:
+ *
+ * - Expo native Android/iOS devices
+ * - Standards-based Web Push PWA subscriptions
  */
 router.post(
   "/test",
@@ -301,16 +351,30 @@ router.post(
           req
         );
 
+      const body =
+        req.body ||
+        {};
+
+      const requestData =
+        body.data &&
+        typeof body.data ===
+          "object" &&
+        !Array.isArray(
+          body.data
+        )
+          ? body.data
+          : {};
+
       const result =
         await sendPushToUser({
           userId,
 
           title:
-            req.body.title ||
+            body.title ||
             "SipBite notifications enabled",
 
           body:
-            req.body.body ||
+            body.body ||
             "You will now receive important order and subscription updates.",
 
           data: {
@@ -320,24 +384,18 @@ router.post(
             type:
               "push_test",
 
-            ...(req.body.data &&
-            typeof req.body
-              .data ===
-              "object" &&
-            !Array.isArray(
-              req.body.data
-            )
-              ? req.body.data
-              : {}),
+            ...requestData,
           },
 
           dedupeKey:
-            req.body
-              .dedupeKey ||
+            body.dedupeKey ||
             `manual-test:${Date.now()}`,
 
           channelId:
             DEFAULT_ANDROID_CHANNEL_ID,
+
+          priority:
+            "high",
         });
 
       return res
@@ -346,10 +404,9 @@ router.post(
           success: true,
 
           message:
-            result.status ===
-            "no_tokens"
-              ? "No active push-enabled device is registered for this account."
-              : "Test push notification was submitted.",
+            getTestPushMessage(
+              result
+            ),
 
           data: {
             result,
