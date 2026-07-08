@@ -1,215 +1,189 @@
 require("dotenv").config();
 
-const cors =
-  require("cors");
+const cors = require("cors");
+const express = require("express");
+const helmet = require("helmet");
+const mongoose = require("mongoose");
+const morgan = require("morgan");
 
-const express =
-  require("express");
+const connectDB = require("./config/db");
 
-const helmet =
-  require("helmet");
+const adminRoutes = require("./routes/admin");
+const adminCouponRoutes = require("./routes/adminCoupons");
+const adminDeliveryPartnerRoutes = require(
+  "./routes/adminDeliveryPartners"
+);
+const adminDeliverySlotRoutes = require(
+  "./routes/adminDeliverySlots"
+);
+const adminInventoryRoutes = require(
+  "./routes/adminInventory"
+);
+const adminOrderRoutes = require(
+  "./routes/adminOrders"
+);
+const adminSubscriptionChargeRoutes = require(
+  "./routes/adminSubscriptionCharges"
+);
+const adminSubscriptionDetailsRoutes = require(
+  "./routes/adminSubscriptionDetails"
+);
+const adminSubscriptionRoutes = require(
+  "./routes/adminSubscriptions"
+);
+const adminUserRoutes = require(
+  "./routes/adminUsers"
+);
 
-const mongoose =
-  require("mongoose");
+const authRoutes = require("./routes/auth");
+const couponRoutes = require("./routes/coupons");
+const deliveryOrderRoutes = require(
+  "./routes/deliveryOrders"
+);
+const deliverySlotRoutes = require(
+  "./routes/deliverySlots"
+);
+const locationRoutes = require("./routes/locations");
+const notificationRoutes = require(
+  "./routes/notifications"
+);
+const orderReviewRoutes = require(
+  "./routes/orderReviews"
+);
+const orderRoutes = require("./routes/orders");
+const productRoutes = require("./routes/products");
+const pushTokenRoutes = require(
+  "./routes/pushTokens"
+);
 
-const morgan =
-  require("morgan");
+const razorpaySubscriptionRoutes = require(
+  "./routes/razorpaySubscriptions"
+);
+const razorpaySubscriptionWebhookRoutes = require(
+  "./routes/razorpaySubscriptionWebhook"
+);
 
-const connectDB =
-  require("./config/db");
+const subscriptionDetailRoutes = require(
+  "./routes/subscriptionDetails"
+);
+const subscriptionEditRoutes = require(
+  "./routes/subscriptionEdits"
+);
+const subscriptionRoutes = require(
+  "./routes/subscriptions"
+);
 
-const adminRoutes =
-  require("./routes/admin");
+const webPushSubscriptionRoutes = require(
+  "./routes/webPushSubscriptions"
+);
 
-const adminCouponRoutes =
-  require(
-    "./routes/adminCoupons"
-  );
-
-const adminDeliveryPartnerRoutes =
-  require(
-    "./routes/adminDeliveryPartners"
-  );
-
-const adminDeliverySlotRoutes =
-  require(
-    "./routes/adminDeliverySlots"
-  );
-
-const adminInventoryRoutes =
-  require(
-    "./routes/adminInventory"
-  );
-
-const adminOrderRoutes =
-  require(
-    "./routes/adminOrders"
-  );
-
-const adminSubscriptionChargeRoutes =
-  require(
-    "./routes/adminSubscriptionCharges"
-  );
-
-const adminSubscriptionDetailsRoutes =
-  require(
-    "./routes/adminSubscriptionDetails"
-  );
-
-const adminSubscriptionRoutes =
-  require(
-    "./routes/adminSubscriptions"
-  );
-
-const adminUserRoutes =
-  require(
-    "./routes/adminUsers"
-  );
-
-const authRoutes =
-  require("./routes/auth");
-
-const couponRoutes =
-  require("./routes/coupons");
-
-const deliveryOrderRoutes =
-  require(
-    "./routes/deliveryOrders"
-  );
-
-const deliverySlotRoutes =
-  require(
-    "./routes/deliverySlots"
-  );
-
-const locationRoutes =
-  require("./routes/locations");
-
-const notificationRoutes =
-  require(
-    "./routes/notifications"
-  );
-
-const orderReviewRoutes =
-  require(
-    "./routes/orderReviews"
-  );
-
-const orderRoutes =
-  require("./routes/orders");
-
-const productRoutes =
-  require("./routes/products");
-
-const pushTokenRoutes =
-  require("./routes/pushTokens");
-
-const razorpaySubscriptionRoutes =
-  require(
-    "./routes/razorpaySubscriptions"
-  );
-
-const razorpaySubscriptionWebhookRoutes =
-  require(
-    "./routes/razorpaySubscriptionWebhook"
-  );
-
-const subscriptionDetailRoutes =
-  require(
-    "./routes/subscriptionDetails"
-  );
-
-const subscriptionEditRoutes =
-  require(
-    "./routes/subscriptionEdits"
-  );
-
-const subscriptionRoutes =
-  require(
-    "./routes/subscriptions"
-  );
-
-const webPushSubscriptionRoutes =
-  require(
-    "./routes/webPushSubscriptions"
-  );
-
-const razorpayRefundWebhookMiddleware =
-  require(
-    "./middleware/razorpayRefundWebhook"
-  );
+const razorpayRefundWebhookMiddleware = require(
+  "./middleware/razorpayRefundWebhook"
+);
 
 const {
-  router:
-    razorpayPaymentRoutes,
-
+  router: razorpayPaymentRoutes,
   razorpayWebhookHandler,
-
   startPaymentExpiryWorker,
-} = require(
-  "./routes/razorpayPayments"
-);
+} = require("./routes/razorpayPayments");
 
 const {
   ensureDefaultDeliverySlots,
-} = require(
-  "./services/deliverySlotService"
-);
+} = require("./services/deliverySlotService");
 
 const {
   startSubscriptionDeliveryWorker,
-} = require(
-  "./services/subscriptionDelivery"
-);
+} = require("./services/subscriptionDelivery");
 
 const {
   startPushReceiptWorker,
-} = require(
-  "./services/pushNotificationService"
+} = require("./services/pushNotificationService");
+
+const app = express();
+
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+const PORT = Number(
+  process.env.PORT || 5001
 );
 
-const app =
-  express();
+const HOST = String(
+  process.env.HOST || "0.0.0.0"
+).trim();
 
-app.set(
-  "trust proxy",
-  1
+/*
+ * Normalises origins so these are treated equally:
+ *
+ * https://example.com
+ * https://example.com/
+ */
+function normalizeOrigin(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+const configuredOrigins = String(
+  process.env.CLIENT_ORIGINS || ""
+)
+  .split(",")
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const backendPublicOrigin = normalizeOrigin(
+  process.env.BACKEND_PUBLIC_URL || ""
 );
 
-app.disable(
-  "x-powered-by"
+/*
+ * BACKEND_PUBLIC_URL is added automatically because the
+ * Razorpay checkout page is served from the backend itself
+ * and calls /verify, /fail and /abandon from that origin.
+ */
+const allowedOrigins = [
+  ...new Set([
+    ...configuredOrigins,
+
+    ...(backendPublicOrigin
+      ? [backendPublicOrigin]
+      : []),
+
+    /*
+     * Safe local development defaults.
+     * These do not affect production security because they
+     * only permit browser requests originating from these
+     * exact local addresses.
+     */
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:8081",
+    "http://localhost:19006",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:8081",
+    "http://127.0.0.1:19006",
+  ]),
+];
+
+console.log(
+  "Allowed CORS origins:",
+  allowedOrigins
 );
-
-const PORT =
-  Number(
-    process.env.PORT ||
-      5001
-  );
-
-const HOST =
-  String(
-    process.env.HOST ||
-      "0.0.0.0"
-  ).trim();
-
-const allowedOrigins =
-  String(
-    process.env
-      .CLIENT_ORIGINS ||
-      ""
-  )
-    .split(",")
-    .map(
-      (origin) =>
-        origin.trim()
-    )
-    .filter(Boolean);
 
 app.use(
   helmet({
     crossOriginOpenerPolicy: {
       policy:
         "same-origin-allow-popups",
+    },
+
+    /*
+     * Razorpay Checkout loads external scripts and opens
+     * secure payment windows. The dedicated checkout route
+     * also removes CSP before sending its HTML.
+     */
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
     },
   })
 );
@@ -220,6 +194,13 @@ app.use(
       origin,
       callback
     ) {
+      /*
+       * Requests without an Origin header include:
+       * - curl
+       * - server-to-server calls
+       * - native mobile requests
+       * - Razorpay webhooks
+       */
       if (!origin) {
         return callback(
           null,
@@ -227,11 +208,14 @@ app.use(
         );
       }
 
+      const normalizedRequestOrigin =
+        normalizeOrigin(origin);
+
       if (
         allowedOrigins.length ===
           0 ||
         allowedOrigins.includes(
-          origin
+          normalizedRequestOrigin
         )
       ) {
         return callback(
@@ -240,13 +224,11 @@ app.use(
         );
       }
 
-      const error =
-        new Error(
-          `Origin ${origin} is not permitted by CORS.`
-        );
+      const error = new Error(
+        `Origin ${normalizedRequestOrigin} is not permitted by CORS.`
+      );
 
-      error.statusCode =
-        403;
+      error.statusCode = 403;
 
       return callback(
         error
@@ -271,13 +253,21 @@ app.use(
       "Accept",
       "Origin",
     ],
+
+    exposedHeaders: [
+      "Content-Length",
+      "Content-Type",
+    ],
+
+    maxAge: 86400,
   })
 );
 
 /*
- * Raw webhook routes must remain before
- * express.json() so Razorpay signatures
- * are verified against the original body.
+ * Raw webhook routes must remain before express.json().
+ *
+ * Razorpay signatures must be verified against the
+ * unmodified request body.
  */
 app.post(
   "/api/payments/razorpay/webhook",
@@ -311,9 +301,7 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
-
-    limit:
-      "1mb",
+    limit: "1mb",
   })
 );
 
@@ -346,11 +334,12 @@ app.get(
             .NODE_ENV ||
           "development",
 
-        host:
-          HOST,
+        host: HOST,
+        port: PORT,
 
-        port:
-          PORT,
+        backendPublicOrigin:
+          backendPublicOrigin ||
+          null,
 
         database:
           mongoose.connection
@@ -585,10 +574,8 @@ async function startServer() {
     await connectDB();
 
     /*
-     * Seed only missing global default slots.
-     *
-     * Existing delivery-slot settings and future
-     * admin changes are not overwritten.
+     * Creates only missing default slots.
+     * Existing admin configuration is preserved.
      */
     await ensureDefaultDeliverySlots();
 
@@ -605,14 +592,20 @@ async function startServer() {
           `Local health: http://localhost:${PORT}/api/health`
         );
 
+        if (
+          backendPublicOrigin
+        ) {
+          console.log(
+            `Public backend: ${backendPublicOrigin}`
+          );
+        }
+
         console.log(
-          "For mobile testing, use your Mac Wi-Fi IP instead of localhost."
+          "For physical-device local testing, use your Mac Wi-Fi IP instead of localhost."
         );
 
         startPaymentExpiryWorker();
-
         startSubscriptionDeliveryWorker();
-
         startPushReceiptWorker();
       }
     );
