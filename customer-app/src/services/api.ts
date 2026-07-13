@@ -55,6 +55,17 @@ type LocationCheckResponse =
     data: ServiceableLocation | null;
   };
 
+type DeliverySlotAvailabilityResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      location: ServiceableLocation;
+      deliveryDateId: string;
+      slots: DeliverySlotAvailability[];
+    };
+  };
+
 type AuthResponse =
   ApiBaseResponse & {
     data: AuthSession;
@@ -94,6 +105,7 @@ type RazorpayStatusResponse =
       status: RazorpayPaymentSessionStatus;
       order: CustomerOrder | null;
       message?: string;
+      inventoryRestored?: boolean;
     };
   };
 
@@ -217,6 +229,35 @@ export type PincodeCheckResult = {
   serviceable: boolean;
   message: string;
   location: ServiceableLocation | null;
+};
+
+export type DeliverySlotUnavailableReason =
+  | ""
+  | "not_scheduled"
+  | "cutoff_passed"
+  | "full";
+
+export type DeliverySlotAvailability = {
+  id: string;
+  slotCode: string;
+  label: string;
+  startMinutes: number;
+  endMinutes: number;
+  capacity: number;
+  booked: number;
+  remaining: number;
+  cutoffMinutes: number;
+  cutoffAt: string;
+  weekdays: number[];
+  available: boolean;
+  reason: DeliverySlotUnavailableReason;
+  locationSpecific: boolean;
+};
+
+export type DeliverySlotAvailabilityResult = {
+  location: ServiceableLocation;
+  deliveryDateId: string;
+  slots: DeliverySlotAvailability[];
 };
 
 export type AuthUser = {
@@ -348,6 +389,13 @@ export type OrderDeliverySchedule = {
   deliveryDateId: string;
   deliveryDateLabel: string;
   deliverySlot: string;
+  deliverySlotCode?: string;
+  deliverySlotId?: string | null;
+  deliverySlotStartMinutes?: number | null;
+  deliverySlotEndMinutes?: number | null;
+  deliverySlotCutoffMinutes?: number | null;
+  deliverySlotCapacitySnapshot?: number | null;
+  deliverySlotReservationToken?: string;
 };
 
 export type CustomerOrder = {
@@ -496,6 +544,7 @@ export type CreateOrderInput = {
     deliveryDateId: string;
     deliveryDateLabel: string;
     deliverySlot: string;
+    deliverySlotCode: string;
   };
 
   paymentMethod: OrderPaymentMethod;
@@ -539,6 +588,7 @@ export type InitiateRazorpayPaymentInput = {
     deliveryDateId: string;
     deliveryDateLabel: string;
     deliverySlot: string;
+    deliverySlotCode: string;
   };
 
   couponCode?: string;
@@ -549,6 +599,7 @@ export type RazorpayPaymentStatusResult = {
   status: RazorpayPaymentSessionStatus;
   order: CustomerOrder | null;
   message: string;
+  inventoryRestored: boolean;
 };
 
 export type SubscriptionBillingCycle =
@@ -894,6 +945,52 @@ export async function checkServiceablePincode(
   };
 }
 
+export async function fetchDeliverySlotAvailability(
+  pincode: string,
+  deliveryDateId: string
+): Promise<DeliverySlotAvailabilityResult> {
+  const normalisedPincode =
+    pincode.replace(/\D/g, "");
+
+  if (
+    normalisedPincode.length !== 6
+  ) {
+    throw new Error(
+      "Please enter a valid six-digit pincode."
+    );
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      deliveryDateId.trim()
+    )
+  ) {
+    throw new Error(
+      "Select a valid delivery date."
+    );
+  }
+
+  const response =
+    await apiRequest<DeliverySlotAvailabilityResponse>(
+      `/api/delivery-slots/availability?pincode=${encodeURIComponent(
+        normalisedPincode
+      )}&date=${encodeURIComponent(
+        deliveryDateId.trim()
+      )}`
+    );
+
+  return {
+    location:
+      response.data.location,
+
+    deliveryDateId:
+      response.data.deliveryDateId,
+
+    slots:
+      response.data.slots,
+  };
+}
+
 export async function validateCoupon(
   input: {
     code: string;
@@ -1049,6 +1146,9 @@ export async function fetchRazorpayPaymentStatus(
     order: response.data.order,
     message:
       response.data.message ?? "",
+    inventoryRestored:
+      response.data.inventoryRestored ??
+      false,
   };
 }
 

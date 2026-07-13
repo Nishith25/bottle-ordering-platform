@@ -1144,3 +1144,301 @@ button:disabled {
     padding: 23px;
   }
 }
+/* Delivery-slot management */
+
+.slot-metric-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 13px;
+  margin-bottom: 15px;
+}
+
+.slot-metric-card {
+  min-height: 132px;
+  padding: 18px;
+  border: 1px solid #e1e6df;
+  border-radius: 21px;
+  background: #ffffff;
+  box-shadow:
+    0 15px 35px
+    rgba(27, 55, 39, 0.04);
+}
+
+.slot-metric-card span,
+.slot-metric-card strong,
+.slot-metric-card small {
+  display: block;
+}
+
+.slot-metric-card span {
+  color: #748078;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.slot-metric-card strong {
+  margin-top: 9px;
+  color: #1d2d24;
+  font-size: 27px;
+}
+
+.slot-metric-card small {
+  margin-top: 8px;
+  color: #6c7a72;
+  font-size: 8px;
+  line-height: 14px;
+}
+
+.slot-preview-panel {
+  margin-bottom: 15px;
+  overflow: hidden;
+}
+
+.slot-preview-controls {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1fr)
+    minmax(180px, 1fr)
+    auto;
+  align-items: end;
+  gap: 13px;
+  padding: 18px 20px;
+}
+
+.slot-preview-button {
+  min-width: 155px;
+  margin-bottom: 0;
+}
+
+.slot-preview-message {
+  margin: 0 20px 18px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  font-size: 9px;
+}
+
+.slot-preview-message.error {
+  color: #934545;
+  border: 1px solid #f0d8d8;
+  background: #faecec;
+}
+
+.slot-preview-content {
+  padding:
+    0 20px 20px;
+}
+
+.slot-preview-location {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 15px;
+  background: #f2f5f1;
+}
+
+.slot-preview-location strong {
+  color: #294534;
+  font-size: 11px;
+}
+
+.slot-preview-location span {
+  color: #718078;
+  font-size: 8px;
+}
+
+.slot-preview-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  margin-top: 12px;
+}
+
+.slot-preview-card {
+  position: relative;
+  min-height: 135px;
+  padding: 15px;
+  border: 1px solid #e1e6df;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.slot-preview-card.available {
+  border-color: #cfe4d5;
+  background: #f5fbf6;
+}
+
+.slot-preview-card.unavailable {
+  border-color: #ebdddd;
+  background: #fffafa;
+}
+
+.slot-preview-card > div:first-child strong,
+.slot-preview-card > div:first-child span {
+  display: block;
+}
+
+.slot-preview-card > div:first-child strong {
+  color: #283b30;
+  font-size: 11px;
+}
+
+.slot-preview-card > div:first-child span {
+  margin-top: 5px;
+  color: #78857d;
+  font-size: 8px;
+}
+
+.slot-preview-capacity {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 17px;
+}
+
+.slot-preview-capacity strong {
+  color: #265f43;
+  font-size: 23px;
+}
+
+.slot-preview-capacity span {
+  color: #728078;
+  font-size: 8px;
+}
+
+.slot-preview-status {
+  display: inline-flex;
+  margin-top: 13px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  font-size: 7px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.slot-preview-status.available {
+  color: #28704a;
+  background: #e3f1e6;
+}
+
+.slot-preview-status.unavailable {
+  color: #9b4c4c;
+  background: #f8eaea;
+}
+
+.slot-table-panel {
+  overflow: hidden;
+}
+
+.delivery-slot-table td {
+  vertical-align: middle;
+}
+
+.slot-name-cell strong,
+.slot-name-cell span,
+.slot-location-cell strong,
+.slot-location-cell span {
+  display: block;
+}
+
+.slot-name-cell strong,
+.slot-location-cell strong {
+  color: #27392f;
+  font-size: 10px;
+}
+
+.slot-name-cell span,
+.slot-location-cell span {
+  margin-top: 4px;
+  color: #87928c;
+  font-size: 8px;
+}
+
+.delivery-slot-modal {
+  width: min(760px, 100%);
+}
+
+.slot-form-notice {
+  padding: 13px 15px;
+  margin-bottom: 17px;
+  border: 1px solid #dce8de;
+  border-radius: 15px;
+  color: #4e6757;
+  background: #edf5ef;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.weekday-selector {
+  display: grid;
+  grid-template-columns:
+    repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekday-button {
+  min-height: 43px;
+  border: 1px solid #dfe5de;
+  border-radius: 12px;
+  color: #66736b;
+  background: #f7f8f5;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.weekday-button:hover {
+  border-color: #8cab97;
+}
+
+.weekday-button.selected {
+  color: #ffffff;
+  border-color: #245c42;
+  background: #245c42;
+}
+
+.slot-active-toggle {
+  margin-top: 17px;
+}
+
+@media (max-width: 1150px) {
+  .slot-metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .slot-preview-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .slot-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .slot-preview-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .slot-preview-button {
+    width: 100%;
+  }
+
+  .slot-preview-location {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .slot-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .weekday-selector {
+    grid-template-columns:
+      repeat(4, minmax(0, 1fr));
+  }
+}

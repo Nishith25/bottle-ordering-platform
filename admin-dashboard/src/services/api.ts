@@ -113,6 +113,93 @@ export type ProductPayload = {
   sortOrder: number;
 };
 
+export type AdminDeliverySlotLocation = {
+  _id: string;
+  pincode: string;
+  area: string;
+  city: string;
+  active: boolean;
+};
+
+export type AdminDeliverySlotConfiguration = {
+  _id: string;
+  slotCode: string;
+  label: string;
+  startMinutes: number;
+  endMinutes: number;
+  capacity: number;
+  cutoffMinutes: number;
+  weekdays: number[];
+
+  serviceableLocation:
+    | AdminDeliverySlotLocation
+    | string
+    | null;
+
+  pincodeSnapshot: string;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminDeliverySlotAvailability = {
+  id: string;
+  slotCode: string;
+  label: string;
+  startMinutes: number;
+  endMinutes: number;
+  capacity: number;
+  booked: number;
+  remaining: number;
+  cutoffMinutes: number;
+  cutoffAt: string;
+  weekdays: number[];
+  available: boolean;
+
+  reason:
+    | ""
+    | "not_scheduled"
+    | "cutoff_passed"
+    | "full";
+
+  locationSpecific: boolean;
+};
+
+export type AdminDeliverySlotPreview = {
+  location: {
+    _id?: string;
+    pincode: string;
+    area: string;
+    city: string;
+    active: boolean;
+  };
+
+  deliveryDateId: string;
+  slots: AdminDeliverySlotAvailability[];
+};
+
+export type AdminDeliverySlotsResult = {
+  configurations: AdminDeliverySlotConfiguration[];
+
+  preview:
+    | AdminDeliverySlotPreview
+    | null;
+};
+
+export type AdminDeliverySlotPayload = {
+  slotCode: string;
+  label: string;
+  startMinutes: number;
+  endMinutes: number;
+  capacity: number;
+  cutoffMinutes: number;
+  weekdays: number[];
+  active: boolean;
+  sortOrder: number;
+  pincode?: string;
+};
+
 type LoginResponse =
   ApiBaseResponse & {
     data: AdminSession;
@@ -146,6 +233,28 @@ type ProductResponse =
     };
   };
 
+type DeliverySlotsResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      configurations:
+        AdminDeliverySlotConfiguration[];
+
+      preview:
+        | AdminDeliverySlotPreview
+        | null;
+    };
+  };
+
+type DeliverySlotResponse =
+  ApiBaseResponse & {
+    data: {
+      slot:
+        AdminDeliverySlotConfiguration;
+    };
+  };
+
 function isDashboardRole(
   role: UserRole
 ): role is DashboardRole {
@@ -176,6 +285,16 @@ function normaliseProduct(
     sortOrder:
       product.sortOrder ?? 0,
   };
+}
+
+function requireToken(
+  token: string
+) {
+  if (!token.trim()) {
+    throw new Error(
+      "Dashboard authentication token is missing."
+    );
+  }
 }
 
 async function apiRequest<T>(
@@ -308,13 +427,6 @@ async function apiRequest<T>(
   }
 }
 
-/**
- * Logs an administrator or delivery
- * partner into the operations dashboard.
- *
- * Normal customer accounts cannot enter
- * the operations dashboard.
- */
 export async function loginDashboardUser(
   identifier: string,
   password: string
@@ -380,18 +492,10 @@ export async function loginDashboardUser(
   return session;
 }
 
-/**
- * Restores and verifies the currently
- * authenticated dashboard account.
- */
 export async function fetchDashboardUser(
   token: string
 ): Promise<AdminUser> {
-  if (!token.trim()) {
-    throw new Error(
-      "Dashboard authentication token is missing."
-    );
-  }
+  requireToken(token);
 
   const response =
     await apiRequest<CurrentUserResponse>(
@@ -429,10 +533,6 @@ export async function fetchDashboardUser(
   return dashboardUser;
 }
 
-/**
- * Compatibility aliases for the existing
- * dashboard AuthContext.
- */
 export const loginAdmin =
   loginDashboardUser;
 
@@ -442,6 +542,8 @@ export const fetchAdminUser =
 export async function fetchAdminDashboard(
   token: string
 ): Promise<DashboardData> {
+  requireToken(token);
+
   const response =
     await apiRequest<DashboardResponse>(
       "/api/admin/dashboard",
@@ -456,6 +558,8 @@ export async function fetchAdminDashboard(
 export async function fetchAdminProducts(
   token: string
 ): Promise<AdminProduct[]> {
+  requireToken(token);
+
   const response =
     await apiRequest<ProductsResponse>(
       "/api/admin/products",
@@ -478,6 +582,8 @@ async function updateInventory(
     adjustment?: number;
   }
 ): Promise<AdminProduct> {
+  requireToken(token);
+
   const response =
     await apiRequest<ProductResponse>(
       `/api/admin/inventory/${encodeURIComponent(
@@ -502,6 +608,8 @@ export async function createAdminProduct(
   token: string,
   payload: ProductPayload
 ): Promise<AdminProduct> {
+  requireToken(token);
+
   const {
     stockQuantity,
     lowStockThreshold,
@@ -537,6 +645,8 @@ export async function updateAdminProduct(
   payload:
     Partial<ProductPayload>
 ): Promise<AdminProduct> {
+  requireToken(token);
+
   const {
     stockQuantity,
     lowStockThreshold,
@@ -603,6 +713,8 @@ export async function adjustAdminProductStock(
   productId: string,
   adjustment: number
 ): Promise<AdminProduct> {
+  requireToken(token);
+
   if (
     !Number.isFinite(
       adjustment
@@ -637,6 +749,8 @@ export async function archiveAdminProduct(
   token: string,
   productId: string
 ): Promise<AdminProduct> {
+  requireToken(token);
+
   const response =
     await apiRequest<ProductResponse>(
       `/api/admin/products/${encodeURIComponent(
@@ -651,6 +765,163 @@ export async function archiveAdminProduct(
   return normaliseProduct(
     response.data.product
   );
+}
+
+export async function fetchAdminDeliverySlots(
+  token: string,
+  options: {
+    includeInactive?: boolean;
+    pincode?: string;
+    date?: string;
+  } = {}
+): Promise<AdminDeliverySlotsResult> {
+  requireToken(token);
+
+  const searchParams =
+    new URLSearchParams();
+
+  searchParams.set(
+    "includeInactive",
+    String(
+      options.includeInactive ??
+      true
+    )
+  );
+
+  const cleanPincode =
+    String(
+      options.pincode ??
+      ""
+    )
+      .replace(
+        /\D/g,
+        ""
+      )
+      .slice(
+        0,
+        6
+      );
+
+  if (
+    cleanPincode
+  ) {
+    searchParams.set(
+      "pincode",
+      cleanPincode
+    );
+  }
+
+  if (
+    options.date
+  ) {
+    searchParams.set(
+      "date",
+      options.date
+    );
+  }
+
+  const response =
+    await apiRequest<DeliverySlotsResponse>(
+      `/api/admin/delivery-slots?${searchParams.toString()}`,
+      {
+        token,
+      }
+    );
+
+  return {
+    configurations:
+      response.data.configurations,
+
+    preview:
+      response.data.preview,
+  };
+}
+
+export async function createAdminDeliverySlot(
+  token: string,
+  payload:
+    AdminDeliverySlotPayload
+): Promise<AdminDeliverySlotConfiguration> {
+  requireToken(token);
+
+  const response =
+    await apiRequest<DeliverySlotResponse>(
+      "/api/admin/delivery-slots",
+      {
+        method: "POST",
+        token,
+
+        body:
+          JSON.stringify(
+            payload
+          ),
+      }
+    );
+
+  return response.data.slot;
+}
+
+export async function updateAdminDeliverySlot(
+  token: string,
+  slotId: string,
+  payload:
+    Partial<AdminDeliverySlotPayload>
+): Promise<AdminDeliverySlotConfiguration> {
+  requireToken(token);
+
+  if (
+    !slotId.trim()
+  ) {
+    throw new Error(
+      "Delivery-slot ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<DeliverySlotResponse>(
+      `/api/admin/delivery-slots/${encodeURIComponent(
+        slotId.trim()
+      )}`,
+      {
+        method: "PATCH",
+        token,
+
+        body:
+          JSON.stringify(
+            payload
+          ),
+      }
+    );
+
+  return response.data.slot;
+}
+
+export async function disableAdminDeliverySlot(
+  token: string,
+  slotId: string
+): Promise<AdminDeliverySlotConfiguration> {
+  requireToken(token);
+
+  if (
+    !slotId.trim()
+  ) {
+    throw new Error(
+      "Delivery-slot ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<DeliverySlotResponse>(
+      `/api/admin/delivery-slots/${encodeURIComponent(
+        slotId.trim()
+      )}`,
+      {
+        method: "DELETE",
+        token,
+      }
+    );
+
+  return response.data.slot;
 }
 
 export {

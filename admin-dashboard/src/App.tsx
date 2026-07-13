@@ -15,6 +15,7 @@ import DashboardPage from "./pages/DashboardPage";
 import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
 import DeliveryPartnersPage from "./pages/DeliveryPartnersPage";
 import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
+import DeliverySlotsPage from "./pages/DeliverySlotsPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
@@ -34,16 +35,19 @@ export default function App() {
           element={<LoginPage />}
         />
 
-        {/* ADMIN ROUTES */}
         <Route
           element={
             <ProtectedRoute
-              allowedRoles={["admin"]}
+              allowedRoles={[
+                "admin",
+              ]}
             />
           }
         >
           <Route
-            element={<AdminLayout />}
+            element={
+              <AdminLayout />
+            }
           >
             <Route
               index
@@ -57,23 +61,36 @@ export default function App() {
 
             <Route
               path="/dashboard"
-              element={<DashboardPage />}
+              element={
+                <DashboardPage />
+              }
             />
 
             <Route
               path="/products"
-              element={<ProductsPage />}
+              element={
+                <ProductsPage />
+              }
             />
 
             <Route
               path="/orders"
-              element={<OrdersPage />}
+              element={
+                <OrdersPage />
+              }
             />
 
             <Route
               path="/delivery-partners"
               element={
                 <DeliveryPartnersPage />
+              }
+            />
+
+            <Route
+              path="/delivery-slots"
+              element={
+                <DeliverySlotsPage />
               }
             />
 
@@ -86,17 +103,23 @@ export default function App() {
 
             <Route
               path="/coupons"
-              element={<CouponsPage />}
+              element={
+                <CouponsPage />
+              }
             />
 
             <Route
               path="/locations"
-              element={<LocationsPage />}
+              element={
+                <LocationsPage />
+              }
             />
 
             <Route
               path="/plans"
-              element={<PlansPage />}
+              element={
+                <PlansPage />
+              }
             />
 
             <Route
@@ -122,21 +145,26 @@ export default function App() {
 
             <Route
               path="/users"
-              element={<UsersPage />}
+              element={
+                <UsersPage />
+              }
             />
           </Route>
         </Route>
 
-        {/* DELIVERY PARTNER ROUTES */}
         <Route
           element={
             <ProtectedRoute
-              allowedRoles={["delivery"]}
+              allowedRoles={[
+                "delivery",
+              ]}
             />
           }
         >
           <Route
-            element={<DeliveryLayout />}
+            element={
+              <DeliveryLayout />
+            }
           >
             <Route
               index

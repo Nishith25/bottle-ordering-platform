@@ -56,6 +56,54 @@ function showMessage(
   );
 }
 
+/**
+ * Remote push responses differ between:
+ *
+ * - Expo native push
+ * - Browser Web Push
+ *
+ * This helper safely reads the first available numeric field without
+ * assuming every result type contains acceptedCount or failedCount.
+ */
+function getNumericResultValue(
+  result: unknown,
+  fieldNames: string[]
+) {
+  if (
+    !result ||
+    typeof result !==
+      "object"
+  ) {
+    return 0;
+  }
+
+  const record =
+    result as Record<
+      string,
+      unknown
+    >;
+
+  for (
+    const fieldName of
+    fieldNames
+  ) {
+    const value =
+      record[fieldName];
+
+    if (
+      typeof value ===
+        "number" &&
+      Number.isFinite(
+        value
+      )
+    ) {
+      return value;
+    }
+  }
+
+  return 0;
+}
+
 export default function PushNotificationTestScreen() {
   const router =
     useRouter();
@@ -81,7 +129,9 @@ export default function PushNotificationTestScreen() {
       if (result) {
         showMessage(
           "Notifications enabled",
-          "This device is now registered for push notifications."
+          Platform.OS === "web"
+            ? "This browser is now registered for Web Push notifications."
+            : "This device is now registered for push notifications."
         );
       }
     };
@@ -110,23 +160,38 @@ export default function PushNotificationTestScreen() {
       ) {
         showMessage(
           "No registered device",
-          "The backend could not find an active device token."
+          "The backend could not find an active notification subscription for this account."
         );
 
         return;
       }
 
+      const acceptedCount =
+        getNumericResultValue(
+          result,
+          [
+            "acceptedCount",
+            "sentCount",
+            "successCount",
+            "successfulCount",
+          ]
+        );
+
+      const failedCount =
+        getNumericResultValue(
+          result,
+          [
+            "failedCount",
+            "rejectedCount",
+            "errorCount",
+          ]
+        );
+
       showMessage(
         "Test submitted",
         `Status: ${formatStatus(
           result.status
-        )}\nAccepted: ${
-          result.acceptedCount ??
-          0
-        }\nFailed: ${
-          result.failedCount ??
-          0
-        }`
+        )}\nAccepted: ${acceptedCount}\nFailed: ${failedCount}`
       );
     };
 
@@ -138,7 +203,9 @@ export default function PushNotificationTestScreen() {
       if (disabled) {
         showMessage(
           "Notifications disabled",
-          "This device was removed from your push-notification account."
+          Platform.OS === "web"
+            ? "This browser was removed from your Web Push subscriptions."
+            : "This device was removed from your push-notification account."
         );
       }
     };
@@ -204,13 +271,13 @@ export default function PushNotificationTestScreen() {
           <Text
             style={styles.eyebrow}
           >
-            IOS &amp; ANDROID
+            IOS, ANDROID &amp; WEB
           </Text>
 
           <Text
             style={styles.title}
           >
-            Device notification testing
+            Notification testing
           </Text>
 
           <Text
@@ -218,10 +285,8 @@ export default function PushNotificationTestScreen() {
               styles.description
             }
           >
-            Register this device and test
-            both local notifications and
-            remote notifications sent by
-            your backend.
+            Register this device or browser and test local notifications
+            and remote notifications sent through the backend.
           </Text>
         </View>
 
@@ -370,7 +435,11 @@ export default function PushNotificationTestScreen() {
           }
           disabled={
             disabling ||
-            !expoPushToken
+            (
+              Platform.OS !==
+                "web" &&
+              !expoPushToken
+            )
           }
           danger
           onPress={() => {
@@ -390,11 +459,10 @@ export default function PushNotificationTestScreen() {
           <Text
             style={styles.noteText}
           >
-            Remote notifications require
-            an Android or iOS development
-            build with the correct FCM or
-            Apple push credentials. They
-            will not work from the browser.
+            Native remote notifications require an Android or iOS build
+            with valid push credentials. Web Push requires a supported
+            browser and notification permission. On iPhone, Web Push
+            requires the app to be installed on the Home Screen.
           </Text>
         </View>
       </ScrollView>
