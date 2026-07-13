@@ -1,16 +1,21 @@
-// customer-app/src/app/(tabs)/bottles.tsx
-
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useRouter } from "expo-router";
 
 import {
+  useFocusEffect,
+  useRouter,
+} from "expo-router";
+
+import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Platform,
   Pressable,
@@ -19,13 +24,19 @@ import {
   View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
 import BottleVisual from "../../components/BottleVisual";
 
-import { useCart } from "../../context/CartContext";
+import {
+  useCart,
+} from "../../context/CartContext";
 
-import { useProducts } from "../../context/ProductContext";
+import {
+  useProducts,
+} from "../../context/ProductContext";
 
 import type {
   Product,
@@ -41,6 +52,9 @@ const FILTERS: Filter[] = [
   "Hydrating",
   "Fruity",
 ];
+
+const STOCK_REFRESH_INTERVAL_MS =
+  10_000;
 
 function ProductCard({
   product,
@@ -58,6 +72,7 @@ function ProductCard({
     getQuantity(product.id);
 
   const outOfStock =
+    !product.available ||
     product.stockQuantity <= 0;
 
   const lowStock =
@@ -66,14 +81,18 @@ function ProductCard({
       product.lowStockThreshold;
 
   const maximumQuantity =
-    Math.min(
-      product.stockQuantity,
-      50
+    Math.max(
+      0,
+      Math.min(
+        product.stockQuantity,
+        50
+      )
     );
 
   const quantityLimitReached =
+    outOfStock ||
     quantity >=
-    maximumQuantity;
+      maximumQuantity;
 
   return (
     <View
@@ -89,26 +108,59 @@ function ProductCard({
           styles.outOfStockCard,
       ]}
     >
-      <View style={styles.productTopRow}>
-        <View style={styles.sizeBadge}>
-          <Text style={styles.sizeBadgeText}>
+      <View
+        style={
+          styles.productTopRow
+        }
+      >
+        <View
+          style={styles.sizeBadge}
+        >
+          <Text
+            style={
+              styles.sizeBadgeText
+            }
+          >
             {product.sizeMl} ml
           </Text>
         </View>
 
-        <View style={styles.topBadgeGroup}>
+        <View
+          style={
+            styles.topBadgeGroup
+          }
+        >
           {lowStock ? (
-            <View style={styles.lowStockBadge}>
-              <Text style={styles.lowStockBadgeText}>
+            <View
+              style={
+                styles.lowStockBadge
+              }
+            >
+              <Text
+                style={
+                  styles.lowStockBadgeText
+                }
+              >
                 Only{" "}
-                {product.stockQuantity} left
+                {
+                  product.stockQuantity
+                }{" "}
+                left
               </Text>
             </View>
           ) : null}
 
           {outOfStock ? (
-            <View style={styles.outOfStockBadge}>
-              <Text style={styles.outOfStockBadgeText}>
+            <View
+              style={
+                styles.outOfStockBadge
+              }
+            >
+              <Text
+                style={
+                  styles.outOfStockBadgeText
+                }
+              >
                 Sold out
               </Text>
             </View>
@@ -116,14 +168,22 @@ function ProductCard({
 
           {!outOfStock &&
           product.subscriptionEligible ? (
-            <View style={styles.planBadge}>
+            <View
+              style={
+                styles.planBadge
+              }
+            >
               <Ionicons
                 name="repeat"
                 size={11}
                 color="#42664F"
               />
 
-              <Text style={styles.planBadgeText}>
+              <Text
+                style={
+                  styles.planBadgeText
+                }
+              >
                 Plans
               </Text>
             </View>
@@ -131,7 +191,9 @@ function ProductCard({
         </View>
       </View>
 
-      <View style={styles.visualArea}>
+      <View
+        style={styles.visualArea}
+      >
         <View
           style={[
             styles.visualCircle,
@@ -144,7 +206,9 @@ function ProductCard({
         />
 
         <BottleVisual
-          label={product.shortName}
+          label={
+            product.shortName
+          }
           liquidColor={
             product.liquidColor
           }
@@ -154,8 +218,16 @@ function ProductCard({
         />
 
         {outOfStock ? (
-          <View style={styles.soldOutOverlay}>
-            <Text style={styles.soldOutOverlayText}>
+          <View
+            style={
+              styles.soldOutOverlay
+            }
+          >
+            <Text
+              style={
+                styles.soldOutOverlayText
+              }
+            >
               OUT OF STOCK
             </Text>
           </View>
@@ -171,18 +243,26 @@ function ProductCard({
 
       <Text
         numberOfLines={2}
-        style={styles.productDescription}
+        style={
+          styles.productDescription
+        }
       >
         {product.description}
       </Text>
 
-      <View style={styles.priceRow}>
+      <View
+        style={styles.priceRow}
+      >
         <View>
-          <Text style={styles.price}>
+          <Text
+            style={styles.price}
+          >
             ₹{product.price}
           </Text>
 
-          <Text style={styles.taxText}>
+          <Text
+            style={styles.taxText}
+          >
             {outOfStock
               ? "currently unavailable"
               : `${product.stockQuantity} available`}
@@ -221,7 +301,11 @@ function ProductCard({
             />
           </Pressable>
         ) : (
-          <View style={styles.quantityControl}>
+          <View
+            style={
+              styles.quantityControl
+            }
+          >
             <Pressable
               onPress={() =>
                 decreaseItem(
@@ -239,7 +323,11 @@ function ProductCard({
               />
             </Pressable>
 
-            <Text style={styles.quantityText}>
+            <Text
+              style={
+                styles.quantityText
+              }
+            >
               {quantity}
             </Text>
 
@@ -275,7 +363,11 @@ function ProductCard({
 
       {quantityLimitReached &&
       !outOfStock ? (
-        <Text style={styles.stockLimitText}>
+        <Text
+          style={
+            styles.stockLimitText
+          }
+        >
           Maximum available quantity selected
         </Text>
       ) : null}
@@ -284,7 +376,8 @@ function ProductCard({
 }
 
 export default function BottlesScreen() {
-  const router = useRouter();
+  const router =
+    useRouter();
 
   const {
     itemCount,
@@ -305,9 +398,95 @@ export default function BottlesScreen() {
     setSelectedFilter,
   ] = useState<Filter>("All");
 
+  const refreshRunningRef =
+    useRef(false);
+
+  const refreshLiveProducts =
+    useCallback(async () => {
+      if (
+        refreshRunningRef.current
+      ) {
+        return;
+      }
+
+      refreshRunningRef.current =
+        true;
+
+      try {
+        await refreshProducts();
+      } finally {
+        refreshRunningRef.current =
+          false;
+      }
+    }, [
+      refreshProducts,
+    ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let screenActive = true;
+
+      let currentAppState =
+        AppState.currentState ??
+        "active";
+
+      const runRefresh = () => {
+        if (
+          !screenActive ||
+          currentAppState !==
+            "active"
+        ) {
+          return;
+        }
+
+        void refreshLiveProducts();
+      };
+
+      runRefresh();
+
+      const intervalId =
+        setInterval(
+          runRefresh,
+          STOCK_REFRESH_INTERVAL_MS
+        );
+
+      const appStateSubscription =
+        AppState.addEventListener(
+          "change",
+          (nextState) => {
+            currentAppState =
+              nextState;
+
+            if (
+              nextState ===
+              "active"
+            ) {
+              runRefresh();
+            }
+          }
+        );
+
+      return () => {
+        screenActive = false;
+
+        clearInterval(
+          intervalId
+        );
+
+        appStateSubscription.remove();
+      };
+    }, [
+      refreshLiveProducts,
+    ])
+  );
+
   useEffect(() => {
-    if (products.length > 0) {
-      syncProducts(products);
+    if (
+      products.length > 0
+    ) {
+      syncProducts(
+        products
+      );
     }
   }, [
     products,
@@ -340,26 +519,40 @@ export default function BottlesScreen() {
     ]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>
+    <SafeAreaView
+      style={styles.safeArea}
+    >
+      <View
+        style={styles.header}
+      >
+        <View
+          style={styles.headerText}
+        >
+          <Text
+            style={styles.eyebrow}
+          >
             FRESH SELECTION
           </Text>
 
-          <Text style={styles.title}>
+          <Text
+            style={styles.title}
+          >
             Choose your bottle
           </Text>
 
-          <Text style={styles.subtitle}>
-            Freshly prepared 300 ml bottles
-            with live stock availability.
+          <Text
+            style={styles.subtitle}
+          >
+            Freshly prepared 300 ml bottles with live stock
+            availability.
           </Text>
         </View>
 
         <Pressable
           onPress={() =>
-            router.push("/cart")
+            router.push(
+              "/cart"
+            )
           }
           style={({ pressed }) => [
             styles.cartButton,
@@ -375,8 +568,16 @@ export default function BottlesScreen() {
           />
 
           {itemCount > 0 ? (
-            <View style={styles.cartCount}>
-              <Text style={styles.cartCountText}>
+            <View
+              style={
+                styles.cartCount
+              }
+            >
+              <Text
+                style={
+                  styles.cartCountText
+                }
+              >
                 {itemCount}
               </Text>
             </View>
@@ -384,61 +585,85 @@ export default function BottlesScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.filterRow}>
-        {FILTERS.map((filter) => {
-          const active =
-            selectedFilter ===
-            filter;
+      <View
+        style={styles.filterRow}
+      >
+        {FILTERS.map(
+          (filter) => {
+            const active =
+              selectedFilter ===
+              filter;
 
-          return (
-            <Pressable
-              key={filter}
-              onPress={() =>
-                setSelectedFilter(
-                  filter
-                )
-              }
-              style={[
-                styles.filterButton,
-
-                active &&
-                  styles.filterButtonActive,
-              ]}
-            >
-              <Text
+            return (
+              <Pressable
+                key={filter}
+                onPress={() =>
+                  setSelectedFilter(
+                    filter
+                  )
+                }
                 style={[
-                  styles.filterText,
+                  styles.filterButton,
 
                   active &&
-                    styles.filterTextActive,
+                    styles.filterButtonActive,
                 ]}
               >
-                {filter}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.filterText,
+
+                    active &&
+                      styles.filterTextActive,
+                  ]}
+                >
+                  {filter}
+                </Text>
+              </Pressable>
+            );
+          }
+        )}
       </View>
 
       {loading ? (
-        <View style={styles.stateContainer}>
+        <View
+          style={
+            styles.stateContainer
+          }
+        >
           <ActivityIndicator
             size="large"
             color="#245C42"
           />
 
-          <Text style={styles.stateTitle}>
+          <Text
+            style={
+              styles.stateTitle
+            }
+          >
             Loading fresh bottles
           </Text>
 
-          <Text style={styles.stateDescription}>
-            Getting the latest products,
-            prices and stock.
+          <Text
+            style={
+              styles.stateDescription
+            }
+          >
+            Getting the latest products, prices and stock.
           </Text>
         </View>
-      ) : error ? (
-        <View style={styles.stateContainer}>
-          <View style={styles.errorIcon}>
+      ) : error &&
+        products.length === 0 ? (
+        <View
+          style={
+            styles.stateContainer
+          }
+        >
+          <View
+            style={
+              styles.errorIcon
+            }
+          >
             <Ionicons
               name="cloud-offline-outline"
               size={30}
@@ -446,17 +671,25 @@ export default function BottlesScreen() {
             />
           </View>
 
-          <Text style={styles.stateTitle}>
+          <Text
+            style={
+              styles.stateTitle
+            }
+          >
             Unable to load bottles
           </Text>
 
-          <Text style={styles.stateDescription}>
+          <Text
+            style={
+              styles.stateDescription
+            }
+          >
             {error}
           </Text>
 
           <Pressable
             onPress={() => {
-              void refreshProducts();
+              void refreshLiveProducts();
             }}
             style={({ pressed }) => [
               styles.retryButton,
@@ -471,7 +704,11 @@ export default function BottlesScreen() {
               color="#FFFFFF"
             />
 
-            <Text style={styles.retryButtonText}>
+            <Text
+              style={
+                styles.retryButtonText
+              }
+            >
               Try again
             </Text>
           </Pressable>
@@ -482,10 +719,14 @@ export default function BottlesScreen() {
             filteredProducts
           }
           numColumns={2}
-          keyExtractor={(item) =>
+          keyExtractor={(
+            item
+          ) =>
             item.id
           }
-          renderItem={({ item }) => (
+          renderItem={({
+            item,
+          }) => (
             <ProductCard
               product={item}
             />
@@ -500,7 +741,7 @@ export default function BottlesScreen() {
             refreshing
           }
           onRefresh={() => {
-            void refreshProducts();
+            void refreshLiveProducts();
           }}
           contentContainerStyle={[
             styles.listContent,
@@ -508,45 +749,119 @@ export default function BottlesScreen() {
             itemCount > 0 &&
               styles.listWithCartBar,
           ]}
+          ListHeaderComponent={
+            error &&
+            products.length > 0 ? (
+              <View
+                style={
+                  styles.refreshWarning
+                }
+              >
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={17}
+                  color="#966228"
+                />
+
+                <Text
+                  style={
+                    styles.refreshWarningText
+                  }
+                >
+                  Live stock could not be refreshed. Showing the most
+                  recently loaded inventory.
+                </Text>
+              </View>
+            ) : refreshing ? (
+              <View
+                style={
+                  styles.refreshStatus
+                }
+              >
+                <ActivityIndicator
+                  size="small"
+                  color="#35694E"
+                />
+
+                <Text
+                  style={
+                    styles.refreshStatusText
+                  }
+                >
+                  Updating live stock…
+                </Text>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View style={styles.emptyList}>
+            <View
+              style={
+                styles.emptyList
+              }
+            >
               <Ionicons
                 name="nutrition-outline"
                 size={35}
                 color="#35694E"
               />
 
-              <Text style={styles.stateTitle}>
+              <Text
+                style={
+                  styles.stateTitle
+                }
+              >
                 No bottles available
               </Text>
 
-              <Text style={styles.stateDescription}>
-                Available products will
-                appear here.
+              <Text
+                style={
+                  styles.stateDescription
+                }
+              >
+                Available products will appear here.
               </Text>
             </View>
           }
           ListFooterComponent={
             filteredProducts.length >
             0 ? (
-              <View style={styles.deliveryNotice}>
-                <View style={styles.deliveryIcon}>
+              <View
+                style={
+                  styles.deliveryNotice
+                }
+              >
+                <View
+                  style={
+                    styles.deliveryIcon
+                  }
+                >
                   <Ionicons
-                    name="cube-outline"
-                    size={20}
+                    name="refresh-circle-outline"
+                    size={21}
                     color="#386E52"
                   />
                 </View>
 
-                <View style={styles.deliveryText}>
-                  <Text style={styles.deliveryTitle}>
-                    Live inventory protected
+                <View
+                  style={
+                    styles.deliveryText
+                  }
+                >
+                  <Text
+                    style={
+                      styles.deliveryTitle
+                    }
+                  >
+                    Live inventory refresh
                   </Text>
 
-                  <Text style={styles.deliveryDescription}>
-                    Stock is checked again
-                    securely when your order
-                    is placed.
+                  <Text
+                    style={
+                      styles.deliveryDescription
+                    }
+                  >
+                    Stock refreshes automatically and is checked again
+                    securely when your order is placed.
                   </Text>
                 </View>
               </View>
@@ -556,10 +871,16 @@ export default function BottlesScreen() {
       )}
 
       {itemCount > 0 ? (
-        <View style={styles.floatingCartWrapper}>
+        <View
+          style={
+            styles.floatingCartWrapper
+          }
+        >
           <Pressable
             onPress={() =>
-              router.push("/cart")
+              router.push(
+                "/cart"
+              )
             }
             style={({ pressed }) => [
               styles.floatingCart,
@@ -568,18 +889,38 @@ export default function BottlesScreen() {
                 styles.pressed,
             ]}
           >
-            <View style={styles.floatingCartCount}>
-              <Text style={styles.floatingCartCountText}>
+            <View
+              style={
+                styles.floatingCartCount
+              }
+            >
+              <Text
+                style={
+                  styles.floatingCartCountText
+                }
+              >
                 {itemCount}
               </Text>
             </View>
 
-            <View style={styles.floatingCartText}>
-              <Text style={styles.floatingCartTitle}>
+            <View
+              style={
+                styles.floatingCartText
+              }
+            >
+              <Text
+                style={
+                  styles.floatingCartTitle
+                }
+              >
                 View your cart
               </Text>
 
-              <Text style={styles.floatingCartSubtitle}>
+              <Text
+                style={
+                  styles.floatingCartSubtitle
+                }
+              >
                 {itemCount}{" "}
                 {itemCount === 1
                   ? "bottle"
@@ -587,7 +928,11 @@ export default function BottlesScreen() {
               </Text>
             </View>
 
-            <Text style={styles.floatingCartPrice}>
+            <Text
+              style={
+                styles.floatingCartPrice
+              }
+            >
               ₹{subtotal}
             </Text>
 
@@ -603,484 +948,554 @@ export default function BottlesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F7F7F2",
-  },
-
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 19,
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-
-  headerText: {
-    flex: 1,
-    paddingRight: 14,
-  },
-
-  eyebrow: {
-    color: "#4D765F",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.6,
-    marginBottom: 8,
-  },
-
-  title: {
-    color: "#17221C",
-    fontSize: 31,
-    lineHeight: 38,
-    fontWeight: "800",
-    letterSpacing: -1,
-  },
-
-  subtitle: {
-    color: "#717A75",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-  },
-
-  cartButton: {
-    width: 47,
-    height: 47,
-    borderRadius: 17,
-    backgroundColor: "#E5EFE7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  cartCount: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    borderRadius: 10,
-    backgroundColor: "#1F513B",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#F7F7F2",
-  },
-
-  cartCountText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-
-  filterRow: {
-    paddingHorizontal: 20,
-    paddingBottom: 17,
-    flexDirection: "row",
-    gap: 9,
-  },
-
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 20,
-    backgroundColor: "#EAEBE6",
-  },
-
-  filterButtonActive: {
-    backgroundColor: "#245C42",
-  },
-
-  filterText: {
-    color: "#68716C",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 120,
-  },
-
-  listWithCartBar: {
-    paddingBottom: 200,
-  },
-
-  productRow: {
-    gap: 12,
-    marginBottom: 12,
-  },
-
-  productCard: {
-    flex: 1,
-    minHeight: 335,
-    padding: 13,
-    borderRadius: 24,
-    overflow: "hidden",
-
-    ...Platform.select({
-      ios: {
-        shadowColor: "#17221C",
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        shadowOffset: {
-          width: 0,
-          height: 6,
-        },
-      },
-
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-
-  outOfStockCard: {
-    opacity: 0.78,
-  },
-
-  productTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    minHeight: 26,
-  },
-
-  topBadgeGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-
-  sizeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.72)",
-  },
-
-  sizeBadgeText: {
-    color: "#5A635E",
-    fontSize: 8,
-    fontWeight: "800",
-  },
-
-  planBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-
-  planBadgeText: {
-    color: "#42664F",
-    fontSize: 8,
-    fontWeight: "800",
-  },
-
-  lowStockBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "#FFF2C9",
-  },
-
-  lowStockBadgeText: {
-    color: "#826014",
-    fontSize: 7,
-    fontWeight: "900",
-  },
-
-  outOfStockBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "#F8DDDD",
-  },
-
-  outOfStockBadgeText: {
-    color: "#954949",
-    fontSize: 7,
-    fontWeight: "900",
-  },
-
-  visualArea: {
-    height: 135,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  visualCircle: {
-    position: "absolute",
-    width: 116,
-    height: 116,
-    borderRadius: 58,
-  },
-
-  soldOutOverlay: {
-    position: "absolute",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "rgba(113,45,45,0.88)",
-  },
-
-  soldOutOverlayText: {
-    color: "#FFFFFF",
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-
-  productName: {
-    color: "#17221C",
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "800",
-    minHeight: 36,
-  },
-
-  productDescription: {
-    color: "#6D7671",
-    fontSize: 10,
-    lineHeight: 15,
-    minHeight: 31,
-    marginTop: 4,
-  },
-
-  priceRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  price: {
-    color: "#17221C",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-
-  taxText: {
-    color: "#7C857F",
-    fontSize: 8,
-    marginTop: 1,
-  },
-
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  quantityControl: {
-    padding: 3,
-    borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.78)",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  quantityButton: {
-    width: 27,
-    height: 29,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  quantityButtonDisabled: {
-    opacity: 0.5,
-  },
-
-  quantityText: {
-    minWidth: 20,
-    textAlign: "center",
-    color: "#1E3D2D",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  stockLimitText: {
-    color: "#8A681E",
-    fontSize: 7,
-    lineHeight: 10,
-    fontWeight: "700",
-    marginTop: 7,
-  },
-
-  deliveryNotice: {
-    marginTop: 13,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: "#E8F0EA",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  deliveryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: "#D8E7DC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  deliveryText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  deliveryTitle: {
-    color: "#294534",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  deliveryDescription: {
-    color: "#657269",
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 3,
-  },
-
-  stateContainer: {
-    flex: 1,
-    paddingHorizontal: 35,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  emptyList: {
-    minHeight: 360,
-    paddingHorizontal: 35,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  stateTitle: {
-    color: "#1C2922",
-    fontSize: 17,
-    fontWeight: "800",
-    textAlign: "center",
-    marginTop: 16,
-  },
-
-  stateDescription: {
-    color: "#747E78",
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: "center",
-    marginTop: 7,
-  },
-
-  errorIcon: {
-    width: 66,
-    height: 66,
-    borderRadius: 22,
-    backgroundColor: "#FAECEC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  retryButton: {
-    minHeight: 47,
-    paddingHorizontal: 19,
-    borderRadius: 15,
-    backgroundColor: "#245C42",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    marginTop: 18,
-  },
-
-  retryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  floatingCartWrapper: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 91,
-  },
-
-  floatingCart: {
-    minHeight: 64,
-    paddingHorizontal: 14,
-    borderRadius: 21,
-    backgroundColor: "#1F513B",
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#14271B",
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
-    shadowOffset: {
-      width: 0,
-      height: 9,
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        "#F7F7F2",
     },
-    elevation: 12,
-  },
 
-  floatingCartCount: {
-    width: 37,
-    height: 37,
-    borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    header: {
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 19,
+      flexDirection: "row",
+      alignItems: "flex-start",
+    },
 
-  floatingCartCountText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
+    headerText: {
+      flex: 1,
+      paddingRight: 14,
+    },
 
-  floatingCartText: {
-    flex: 1,
-    marginLeft: 11,
-  },
+    eyebrow: {
+      color: "#4D765F",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 1.6,
+      marginBottom: 8,
+    },
 
-  floatingCartTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    title: {
+      color: "#17221C",
+      fontSize: 31,
+      lineHeight: 38,
+      fontWeight: "800",
+      letterSpacing: -1,
+    },
 
-  floatingCartSubtitle: {
-    color: "#C9DDD0",
-    fontSize: 9,
-    marginTop: 2,
-  },
+    subtitle: {
+      color: "#717A75",
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 8,
+    },
 
-  floatingCartPrice: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-    marginRight: 9,
-  },
+    cartButton: {
+      width: 47,
+      height: 47,
+      borderRadius: 17,
+      backgroundColor:
+        "#E5EFE7",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  pressed: {
-    opacity: 0.84,
-    transform: [
-      {
-        scale: 0.98,
+    cartCount: {
+      position: "absolute",
+      top: -4,
+      right: -4,
+      minWidth: 20,
+      height: 20,
+      paddingHorizontal: 5,
+      borderRadius: 10,
+      backgroundColor:
+        "#1F513B",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      borderWidth: 2,
+      borderColor: "#F7F7F2",
+    },
+
+    cartCountText: {
+      color: "#FFFFFF",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    filterRow: {
+      paddingHorizontal: 20,
+      paddingBottom: 17,
+      flexDirection: "row",
+      gap: 9,
+    },
+
+    filterButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: 20,
+      backgroundColor:
+        "#EAEBE6",
+    },
+
+    filterButtonActive: {
+      backgroundColor:
+        "#245C42",
+    },
+
+    filterText: {
+      color: "#68716C",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+
+    filterTextActive: {
+      color: "#FFFFFF",
+    },
+
+    listContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 120,
+    },
+
+    listWithCartBar: {
+      paddingBottom: 200,
+    },
+
+    refreshStatus: {
+      minHeight: 39,
+      marginBottom: 11,
+      paddingHorizontal: 12,
+      borderRadius: 13,
+      backgroundColor:
+        "#E8F0EA",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 8,
+    },
+
+    refreshStatusText: {
+      color: "#526A5B",
+      fontSize: 9,
+      fontWeight: "700",
+    },
+
+    refreshWarning: {
+      marginBottom: 11,
+      padding: 12,
+      borderRadius: 14,
+      backgroundColor:
+        "#FFF3DE",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    refreshWarningText: {
+      flex: 1,
+      color: "#7A5A2A",
+      fontSize: 9,
+      lineHeight: 14,
+    },
+
+    productRow: {
+      gap: 12,
+      marginBottom: 12,
+    },
+
+    productCard: {
+      flex: 1,
+      minHeight: 335,
+      padding: 13,
+      borderRadius: 24,
+      overflow: "hidden",
+
+      ...Platform.select({
+        ios: {
+          shadowColor:
+            "#17221C",
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          shadowOffset: {
+            width: 0,
+            height: 6,
+          },
+        },
+
+        android: {
+          elevation: 2,
+        },
+      }),
+    },
+
+    outOfStockCard: {
+      opacity: 0.78,
+    },
+
+    productTopRow: {
+      flexDirection: "row",
+      justifyContent:
+        "space-between",
+      alignItems: "center",
+      minHeight: 26,
+    },
+
+    topBadgeGroup: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+
+    sizeBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 10,
+      backgroundColor:
+        "rgba(255,255,255,0.72)",
+    },
+
+    sizeBadgeText: {
+      color: "#5A635E",
+      fontSize: 8,
+      fontWeight: "800",
+    },
+
+    planBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+      borderRadius: 10,
+      backgroundColor:
+        "rgba(255,255,255,0.72)",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+    },
+
+    planBadgeText: {
+      color: "#42664F",
+      fontSize: 8,
+      fontWeight: "800",
+    },
+
+    lowStockBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+      borderRadius: 10,
+      backgroundColor:
+        "#FFF2C9",
+    },
+
+    lowStockBadgeText: {
+      color: "#826014",
+      fontSize: 7,
+      fontWeight: "900",
+    },
+
+    outOfStockBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 5,
+      borderRadius: 10,
+      backgroundColor:
+        "#F8DDDD",
+    },
+
+    outOfStockBadgeText: {
+      color: "#954949",
+      fontSize: 7,
+      fontWeight: "900",
+    },
+
+    visualArea: {
+      height: 135,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    visualCircle: {
+      position: "absolute",
+      width: 116,
+      height: 116,
+      borderRadius: 58,
+    },
+
+    soldOutOverlay: {
+      position: "absolute",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+      backgroundColor:
+        "rgba(113,45,45,0.88)",
+    },
+
+    soldOutOverlayText: {
+      color: "#FFFFFF",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+
+    productName: {
+      color: "#17221C",
+      fontSize: 14,
+      lineHeight: 18,
+      fontWeight: "800",
+      minHeight: 36,
+    },
+
+    productDescription: {
+      color: "#6D7671",
+      fontSize: 10,
+      lineHeight: 15,
+      minHeight: 31,
+      marginTop: 4,
+    },
+
+    priceRow: {
+      marginTop: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    price: {
+      color: "#17221C",
+      fontSize: 17,
+      fontWeight: "900",
+    },
+
+    taxText: {
+      color: "#7C857F",
+      fontSize: 8,
+      marginTop: 1,
+    },
+
+    addButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 13,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    quantityControl: {
+      padding: 3,
+      borderRadius: 13,
+      backgroundColor:
+        "rgba(255,255,255,0.78)",
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    quantityButton: {
+      width: 27,
+      height: 29,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    quantityButtonDisabled: {
+      opacity: 0.5,
+    },
+
+    quantityText: {
+      minWidth: 20,
+      textAlign: "center",
+      color: "#1E3D2D",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    stockLimitText: {
+      color: "#8A681E",
+      fontSize: 7,
+      lineHeight: 10,
+      fontWeight: "700",
+      marginTop: 7,
+    },
+
+    deliveryNotice: {
+      marginTop: 13,
+      padding: 16,
+      borderRadius: 20,
+      backgroundColor:
+        "#E8F0EA",
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    deliveryIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      backgroundColor:
+        "#D8E7DC",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    deliveryText: {
+      flex: 1,
+      marginLeft: 12,
+    },
+
+    deliveryTitle: {
+      color: "#294534",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    deliveryDescription: {
+      color: "#657269",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
+    },
+
+    stateContainer: {
+      flex: 1,
+      paddingHorizontal: 35,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    emptyList: {
+      minHeight: 360,
+      paddingHorizontal: 35,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    stateTitle: {
+      color: "#1C2922",
+      fontSize: 17,
+      fontWeight: "800",
+      textAlign: "center",
+      marginTop: 16,
+    },
+
+    stateDescription: {
+      color: "#747E78",
+      fontSize: 11,
+      lineHeight: 17,
+      textAlign: "center",
+      marginTop: 7,
+    },
+
+    errorIcon: {
+      width: 66,
+      height: 66,
+      borderRadius: 22,
+      backgroundColor:
+        "#FAECEC",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    retryButton: {
+      minHeight: 47,
+      paddingHorizontal: 19,
+      borderRadius: 15,
+      backgroundColor:
+        "#245C42",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 7,
+      marginTop: 18,
+    },
+
+    retryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    floatingCartWrapper: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      bottom: 91,
+    },
+
+    floatingCart: {
+      minHeight: 64,
+      paddingHorizontal: 14,
+      borderRadius: 21,
+      backgroundColor:
+        "#1F513B",
+      flexDirection: "row",
+      alignItems: "center",
+      shadowColor: "#14271B",
+      shadowOpacity: 0.2,
+      shadowRadius: 18,
+      shadowOffset: {
+        width: 0,
+        height: 9,
       },
-    ],
-  },
-});
+      elevation: 12,
+    },
+
+    floatingCartCount: {
+      width: 37,
+      height: 37,
+      borderRadius: 13,
+      backgroundColor:
+        "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    floatingCartCountText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    floatingCartText: {
+      flex: 1,
+      marginLeft: 11,
+    },
+
+    floatingCartTitle: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    floatingCartSubtitle: {
+      color: "#C9DDD0",
+      fontSize: 9,
+      marginTop: 2,
+    },
+
+    floatingCartPrice: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+      marginRight: 9,
+    },
+
+    pressed: {
+      opacity: 0.84,
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+  });

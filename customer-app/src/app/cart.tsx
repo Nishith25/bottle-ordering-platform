@@ -1,13 +1,19 @@
-// customer-app/src/app/cart.tsx
+import Ionicons from "@expo/vector-icons/Ionicons";
 
-import Ionicons from
-  "@expo/vector-icons/Ionicons";
+import {
+  useFocusEffect,
+  useRouter,
+} from "expo-router";
 
-import { useRouter } from
-  "expo-router";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 
 import {
   ActivityIndicator,
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,17 +21,26 @@ import {
   View,
 } from "react-native";
 
-import { SafeAreaView } from
-  "react-native-safe-area-context";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
-import BottleVisual from
-  "../components/BottleVisual";
+import BottleVisual from "../components/BottleVisual";
 
-import { useCart } from
-  "../context/CartContext";
+import {
+  useCart,
+} from "../context/CartContext";
+
+import {
+  useProducts,
+} from "../context/ProductContext";
+
+const STOCK_REFRESH_INTERVAL_MS =
+  10_000;
 
 export default function CartScreen() {
-  const router = useRouter();
+  const router =
+    useRouter();
 
   const {
     items,
@@ -35,7 +50,111 @@ export default function CartScreen() {
     increaseItem,
     decreaseItem,
     removeItem,
+    syncProducts,
   } = useCart();
+
+  const {
+    products,
+    loading: loadingProducts,
+    refreshing,
+    error: productError,
+    refreshProducts,
+  } = useProducts();
+
+  const refreshRunningRef =
+    useRef(false);
+
+  const refreshLiveProducts =
+    useCallback(async () => {
+      if (
+        refreshRunningRef.current
+      ) {
+        return;
+      }
+
+      refreshRunningRef.current =
+        true;
+
+      try {
+        await refreshProducts();
+      } finally {
+        refreshRunningRef.current =
+          false;
+      }
+    }, [
+      refreshProducts,
+    ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let screenActive = true;
+
+      let currentAppState =
+        AppState.currentState ??
+        "active";
+
+      const runRefresh = () => {
+        if (
+          !screenActive ||
+          currentAppState !==
+            "active"
+        ) {
+          return;
+        }
+
+        void refreshLiveProducts();
+      };
+
+      runRefresh();
+
+      const intervalId =
+        setInterval(
+          runRefresh,
+          STOCK_REFRESH_INTERVAL_MS
+        );
+
+      const appStateSubscription =
+        AppState.addEventListener(
+          "change",
+          (nextState) => {
+            currentAppState =
+              nextState;
+
+            if (
+              nextState ===
+              "active"
+            ) {
+              runRefresh();
+            }
+          }
+        );
+
+      return () => {
+        screenActive = false;
+
+        clearInterval(
+          intervalId
+        );
+
+        appStateSubscription.remove();
+      };
+    }, [
+      refreshLiveProducts,
+    ])
+  );
+
+  useEffect(() => {
+    if (
+      products.length > 0
+    ) {
+      syncProducts(
+        products
+      );
+    }
+  }, [
+    products,
+    syncProducts,
+  ]);
 
   const deliveryFee =
     subtotal === 0 ||
@@ -44,10 +163,17 @@ export default function CartScreen() {
       : 39;
 
   const total =
-    subtotal + deliveryFee;
+    subtotal +
+    deliveryFee;
+
+  const checkingLiveStock =
+    loadingProducts ||
+    refreshing;
 
   const handleClose = () => {
-    if (router.canGoBack()) {
+    if (
+      router.canGoBack()
+    ) {
       router.back();
       return;
     }
@@ -73,7 +199,9 @@ export default function CartScreen() {
           />
 
           <Text
-            style={styles.loadingText}
+            style={
+              styles.loadingText
+            }
           >
             Loading your cart
           </Text>
@@ -86,7 +214,9 @@ export default function CartScreen() {
     <SafeAreaView
       style={styles.safeArea}
     >
-      <View style={styles.header}>
+      <View
+        style={styles.header}
+      >
         <Pressable
           onPress={handleClose}
           style={({ pressed }) => [
@@ -106,7 +236,9 @@ export default function CartScreen() {
         <View
           style={styles.headerText}
         >
-          <Text style={styles.title}>
+          <Text
+            style={styles.title}
+          >
             Your cart
           </Text>
 
@@ -120,14 +252,44 @@ export default function CartScreen() {
           </Text>
         </View>
 
-        <View
-          style={styles.headerSpacer}
-        />
+        <Pressable
+          disabled={
+            checkingLiveStock
+          }
+          onPress={() => {
+            void refreshLiveProducts();
+          }}
+          style={({ pressed }) => [
+            styles.refreshButton,
+
+            checkingLiveStock &&
+              styles.refreshButtonDisabled,
+
+            pressed &&
+              !checkingLiveStock &&
+              styles.pressed,
+          ]}
+        >
+          {checkingLiveStock ? (
+            <ActivityIndicator
+              size="small"
+              color="#35694E"
+            />
+          ) : (
+            <Ionicons
+              name="refresh"
+              size={20}
+              color="#35694E"
+            />
+          )}
+        </Pressable>
       </View>
 
       {items.length === 0 ? (
         <View
-          style={styles.emptyContainer}
+          style={
+            styles.emptyContainer
+          }
         >
           <View
             style={styles.emptyIcon}
@@ -150,8 +312,7 @@ export default function CartScreen() {
               styles.emptyDescription
             }
           >
-            Add some fresh bottles before
-            continuing.
+            Add some fresh bottles before continuing.
           </Text>
 
           <Pressable
@@ -186,20 +347,57 @@ export default function CartScreen() {
               styles.scrollContent
             }
           >
-            <View style={styles.notice}>
-              <Ionicons
-                name="snow-outline"
-                size={20}
-                color="#35694E"
-              />
+            <View
+              style={
+                styles.notice
+              }
+            >
+              {checkingLiveStock ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#35694E"
+                />
+              ) : (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color="#35694E"
+                />
+              )}
 
               <Text
-                style={styles.noticeText}
+                style={
+                  styles.noticeText
+                }
               >
-                Refrigerate the bottles
-                after delivery.
+                {checkingLiveStock
+                  ? "Refreshing prices and live stock…"
+                  : "Cart quantities and prices are synchronized with live inventory."}
               </Text>
             </View>
+
+            {productError ? (
+              <View
+                style={
+                  styles.stockErrorCard
+                }
+              >
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={19}
+                  color="#9B632A"
+                />
+
+                <Text
+                  style={
+                    styles.stockErrorText
+                  }
+                >
+                  Live inventory could not be refreshed. The backend
+                  will validate stock again before checkout.
+                </Text>
+              </View>
+            ) : null}
 
             <View
               style={
@@ -210,157 +408,220 @@ export default function CartScreen() {
                 ({
                   product,
                   quantity,
-                }) => (
-                  <View
-                    key={product.id}
-                    style={styles.cartItem}
-                  >
-                    <View
-                      style={[
-                        styles.productVisual,
+                }) => {
+                  const productLimit =
+                    Math.max(
+                      0,
+                      Math.min(
+                        product.stockQuantity,
+                        50
+                      )
+                    );
 
-                        {
-                          backgroundColor:
-                            product.cardColor,
-                        },
-                      ]}
-                    >
-                      <BottleVisual
-                        label={
-                          product.shortName
-                        }
-                        liquidColor={
-                          product.liquidColor
-                        }
-                        accentColor={
-                          product.accentColor
-                        }
-                      />
-                    </View>
+                  const quantityLimitReached =
+                    !product.available ||
+                    productLimit <= 0 ||
+                    quantity >=
+                      productLimit;
 
+                  const lowStock =
+                    product.stockQuantity >
+                      0 &&
+                    product.stockQuantity <=
+                      product.lowStockThreshold;
+
+                  return (
                     <View
+                      key={product.id}
                       style={
-                        styles.productDetails
+                        styles.cartItem
                       }
                     >
-                      <Text
-                        style={
-                          styles.productName
-                        }
-                        numberOfLines={2}
-                      >
-                        {product.name}
-                      </Text>
+                      <View
+                        style={[
+                          styles.productVisual,
 
-                      <Text
-                        style={
-                          styles.productSize
-                        }
+                          {
+                            backgroundColor:
+                              product.cardColor,
+                          },
+                        ]}
                       >
-                        {product.sizeMl} ml
-                        bottle
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.productPrice
-                        }
-                      >
-                        ₹
-                        {product.price *
-                          quantity}
-                      </Text>
+                        <BottleVisual
+                          label={
+                            product.shortName
+                          }
+                          liquidColor={
+                            product.liquidColor
+                          }
+                          accentColor={
+                            product.accentColor
+                          }
+                        />
+                      </View>
 
                       <View
                         style={
-                          styles.itemActions
+                          styles.productDetails
                         }
                       >
-                        <View
+                        <Text
                           style={
-                            styles.quantityControl
+                            styles.productName
+                          }
+                          numberOfLines={2}
+                        >
+                          {product.name}
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.productSize
                           }
                         >
+                          {product.sizeMl} ml bottle
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.productPrice
+                          }
+                        >
+                          ₹
+                          {product.price *
+                            quantity}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.stockText,
+
+                            lowStock &&
+                              styles.lowStockText,
+                          ]}
+                        >
+                          {lowStock
+                            ? `Only ${product.stockQuantity} available`
+                            : `${product.stockQuantity} available`}
+                        </Text>
+
+                        <View
+                          style={
+                            styles.itemActions
+                          }
+                        >
+                          <View
+                            style={
+                              styles.quantityControl
+                            }
+                          >
+                            <Pressable
+                              onPress={() =>
+                                decreaseItem(
+                                  product.id
+                                )
+                              }
+                              style={
+                                styles.quantityButton
+                              }
+                            >
+                              <Ionicons
+                                name="remove"
+                                size={16}
+                                color="#28563E"
+                              />
+                            </Pressable>
+
+                            <Text
+                              style={
+                                styles.quantityText
+                              }
+                            >
+                              {quantity}
+                            </Text>
+
+                            <Pressable
+                              disabled={
+                                quantityLimitReached
+                              }
+                              onPress={() =>
+                                increaseItem(
+                                  product.id
+                                )
+                              }
+                              style={[
+                                styles.quantityButton,
+
+                                quantityLimitReached &&
+                                  styles.quantityButtonDisabled,
+                              ]}
+                            >
+                              <Ionicons
+                                name="add"
+                                size={16}
+                                color={
+                                  quantityLimitReached
+                                    ? "#A3ADA6"
+                                    : "#28563E"
+                                }
+                              />
+                            </Pressable>
+                          </View>
+
                           <Pressable
                             onPress={() =>
-                              decreaseItem(
+                              removeItem(
                                 product.id
                               )
                             }
-                            style={
-                              styles.quantityButton
-                            }
+                            style={({ pressed }) => [
+                              styles.removeButton,
+
+                              pressed &&
+                                styles.pressed,
+                            ]}
                           >
                             <Ionicons
-                              name="remove"
-                              size={16}
-                              color="#28563E"
-                            />
-                          </Pressable>
-
-                          <Text
-                            style={
-                              styles.quantityText
-                            }
-                          >
-                            {quantity}
-                          </Text>
-
-                          <Pressable
-                            onPress={() =>
-                              increaseItem(
-                                product.id
-                              )
-                            }
-                            style={
-                              styles.quantityButton
-                            }
-                          >
-                            <Ionicons
-                              name="add"
-                              size={16}
-                              color="#28563E"
+                              name="trash-outline"
+                              size={18}
+                              color="#A84C4C"
                             />
                           </Pressable>
                         </View>
 
-                        <Pressable
-                          onPress={() =>
-                            removeItem(
-                              product.id
-                            )
-                          }
-                          style={({ pressed }) => [
-                            styles.removeButton,
-
-                            pressed &&
-                              styles.pressed,
-                          ]}
-                        >
-                          <Ionicons
-                            name="trash-outline"
-                            size={18}
-                            color="#A84C4C"
-                          />
-                        </Pressable>
+                        {quantityLimitReached ? (
+                          <Text
+                            style={
+                              styles.limitText
+                            }
+                          >
+                            Maximum live stock selected
+                          </Text>
+                        ) : null}
                       </View>
                     </View>
-                  </View>
-                )
+                  );
+                }
               )}
             </View>
 
             <View
-              style={styles.summaryCard}
+              style={
+                styles.summaryCard
+              }
             >
               <Text
-                style={styles.summaryTitle}
+                style={
+                  styles.summaryTitle
+                }
               >
                 Order summary
               </Text>
 
               <View
-                style={styles.summaryRow}
+                style={
+                  styles.summaryRow
+                }
               >
                 <Text
                   style={
@@ -380,7 +641,9 @@ export default function CartScreen() {
               </View>
 
               <View
-                style={styles.summaryRow}
+                style={
+                  styles.summaryRow
+                }
               >
                 <Text
                   style={
@@ -406,16 +669,22 @@ export default function CartScreen() {
               />
 
               <View
-                style={styles.summaryRow}
+                style={
+                  styles.summaryRow
+                }
               >
                 <Text
-                  style={styles.totalLabel}
+                  style={
+                    styles.totalLabel
+                  }
                 >
                   Total
                 </Text>
 
                 <Text
-                  style={styles.totalValue}
+                  style={
+                    styles.totalValue
+                  }
                 >
                   ₹{total}
                 </Text>
@@ -424,7 +693,9 @@ export default function CartScreen() {
           </ScrollView>
 
           <View
-            style={styles.checkoutBar}
+            style={
+              styles.checkoutBar
+            }
           >
             <View>
               <Text
@@ -517,6 +788,21 @@ const styles =
         "center",
     },
 
+    refreshButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 16,
+      backgroundColor:
+        "#E5EFE7",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    refreshButtonDisabled: {
+      opacity: 0.7,
+    },
+
     headerText: {
       flex: 1,
       alignItems: "center",
@@ -534,10 +820,6 @@ const styles =
       marginTop: 3,
     },
 
-    headerSpacer: {
-      width: 44,
-    },
-
     scrollContent: {
       paddingHorizontal: 20,
       paddingBottom: 140,
@@ -545,7 +827,7 @@ const styles =
 
     notice: {
       padding: 14,
-      marginVertical: 10,
+      marginTop: 10,
       borderRadius: 17,
       backgroundColor:
         "#E5EFE7",
@@ -557,12 +839,32 @@ const styles =
     noticeText: {
       flex: 1,
       color: "#4C6456",
-      fontSize: 11,
+      fontSize: 10,
+      lineHeight: 16,
       fontWeight: "600",
+    },
+
+    stockErrorCard: {
+      padding: 13,
+      marginTop: 10,
+      borderRadius: 16,
+      backgroundColor:
+        "#FFF3DE",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+    },
+
+    stockErrorText: {
+      flex: 1,
+      color: "#78572B",
+      fontSize: 9,
+      lineHeight: 14,
     },
 
     itemsContainer: {
       gap: 12,
+      marginTop: 12,
     },
 
     cartItem: {
@@ -577,7 +879,7 @@ const styles =
 
     productVisual: {
       width: 104,
-      minHeight: 135,
+      minHeight: 145,
       borderRadius: 19,
       alignItems: "center",
       justifyContent:
@@ -609,11 +911,21 @@ const styles =
       marginTop: 8,
     },
 
+    stockText: {
+      color: "#5F7567",
+      fontSize: 8,
+      fontWeight: "700",
+      marginTop: 3,
+    },
+
+    lowStockText: {
+      color: "#8A681E",
+    },
+
     itemActions: {
-      flex: 1,
       marginTop: 12,
       flexDirection: "row",
-      alignItems: "flex-end",
+      alignItems: "center",
       justifyContent:
         "space-between",
     },
@@ -635,6 +947,10 @@ const styles =
         "center",
     },
 
+    quantityButtonDisabled: {
+      opacity: 0.5,
+    },
+
     quantityText: {
       minWidth: 23,
       textAlign: "center",
@@ -652,6 +968,14 @@ const styles =
       alignItems: "center",
       justifyContent:
         "center",
+    },
+
+    limitText: {
+      color: "#8A681E",
+      fontSize: 8,
+      lineHeight: 12,
+      fontWeight: "700",
+      marginTop: 7,
     },
 
     summaryCard: {
