@@ -72,9 +72,7 @@ function getAvailableStock(
     );
 
   if (
-    !Number.isFinite(
-      stock
-    )
+    !Number.isFinite(stock)
   ) {
     return 0;
   }
@@ -189,7 +187,8 @@ function isStoredCartItem(
         "object" &&
       typeof item.product.id ===
         "string" &&
-      item.product.id.length > 0 &&
+      item.product.id.length >
+        0 &&
       Number.isInteger(
         item.quantity
       ) &&
@@ -385,7 +384,6 @@ export function CartProvider({
                   product.id
                     ? {
                         ...item,
-
                         product,
 
                         quantity:
@@ -574,37 +572,44 @@ export function CartProvider({
                   item.product.id
                 );
 
+              /*
+               * Remove products that no longer exist or have been
+               * intentionally disabled by the admin.
+               */
               if (
-                !latestProduct
+                !latestProduct ||
+                !latestProduct.available
               ) {
                 changed = true;
                 continue;
               }
 
-              const productLimit =
-                getProductLimit(
+              const availableStock =
+                getAvailableStock(
                   latestProduct
                 );
 
-              if (
-                productLimit <= 0
-              ) {
-                changed = true;
-                continue;
-              }
-
+              /*
+               * Important:
+               *
+               * When stock temporarily reaches zero, keep the product
+               * in the cart. This allows checkout to resume when stock
+               * is restored instead of permanently forgetting the item.
+               */
               const nextQuantity =
-                Math.min(
-                  item.quantity,
-                  productLimit
-                );
-
-              if (
-                nextQuantity <= 0
-              ) {
-                changed = true;
-                continue;
-              }
+                availableStock <= 0
+                  ? Math.min(
+                      Math.max(
+                        1,
+                        item.quantity
+                      ),
+                      MAX_ORDER_QUANTITY
+                    )
+                  : Math.min(
+                      item.quantity,
+                      availableStock,
+                      MAX_ORDER_QUANTITY
+                    );
 
               const productChanged =
                 !areProductsEquivalent(
