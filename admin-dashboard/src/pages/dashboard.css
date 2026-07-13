@@ -1,0 +1,358 @@
+.dashboard-stock-alert {
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid #ead9a9;
+  border-radius: 22px;
+  background: #fffaf0;
+}
+
+.dashboard-stock-alert.danger {
+  border-color: #efc9c9;
+  background: #fff7f7;
+}
+
+.dashboard-stock-alert-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dashboard-stock-alert-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.dashboard-stock-alert-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border-radius: 15px;
+  background: #f2d98f;
+  color: #735412;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.dashboard-stock-alert.danger
+  .dashboard-stock-alert-icon {
+  background: #f2d5d5;
+  color: #943f3f;
+}
+
+.dashboard-stock-eyebrow {
+  color: #8c6a1d;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+}
+
+.dashboard-stock-alert.danger
+  .dashboard-stock-eyebrow {
+  color: #a04a4a;
+}
+
+.dashboard-stock-alert h3 {
+  margin: 5px 0 0;
+  color: #243129;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.dashboard-stock-alert p {
+  margin: 5px 0 0;
+  color: #707b74;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dashboard-stock-manage-button {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 13px;
+  background: #245c42;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition:
+    transform 150ms ease,
+    opacity 150ms ease;
+}
+
+.dashboard-stock-manage-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.dashboard-stock-summary {
+  margin-top: 17px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-stock-summary-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.dashboard-stock-summary-pill.warning {
+  background: #f8e8b9;
+  color: #765818;
+}
+
+.dashboard-stock-summary-pill.danger {
+  background: #f5dddd;
+  color: #964646;
+}
+
+.dashboard-stock-list {
+  margin-top: 15px;
+  display: grid;
+  gap: 9px;
+}
+
+.dashboard-stock-item {
+  padding: 13px 14px;
+  border: 1px solid rgba(53, 73, 62, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-stock-product {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.dashboard-stock-product strong {
+  display: block;
+  color: #26342c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dashboard-stock-product span {
+  display: block;
+  margin-top: 3px;
+  color: #7a847e;
+  font-size: 9px;
+}
+
+.dashboard-stock-status-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+}
+
+.dashboard-stock-status-dot.warning {
+  background: #d7a827;
+}
+
+.dashboard-stock-status-dot.danger {
+  background: #c95c5c;
+}
+
+.dashboard-stock-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 11px;
+}
+
+.dashboard-stock-quantity {
+  min-width: 70px;
+  text-align: right;
+}
+
+.dashboard-stock-quantity span {
+  display: block;
+  color: #7a847e;
+  font-size: 8px;
+}
+
+.dashboard-stock-quantity strong {
+  display: block;
+  margin-top: 2px;
+  color: #243129;
+  font-size: 16px;
+}
+
+.dashboard-stock-status {
+  min-width: 83px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.dashboard-stock-status.warning {
+  background: #f8e8b9;
+  color: #765818;
+}
+
+.dashboard-stock-status.danger {
+  background: #f5dddd;
+  color: #964646;
+}
+
+.dashboard-stock-item-link {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #bfd0c4;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #245c42;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dashboard-stock-item-link:hover {
+  background: #edf4ef;
+}
+
+.dashboard-stock-healthy {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border: 1px solid #cfe1d3;
+  border-radius: 19px;
+  background: #edf6ef;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-stock-healthy-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 13px;
+  background: #d6eadb;
+  color: #2d6845;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.dashboard-stock-healthy > div:nth-child(2) {
+  flex: 1;
+}
+
+.dashboard-stock-healthy strong {
+  display: block;
+  color: #294434;
+  font-size: 12px;
+}
+
+.dashboard-stock-healthy span {
+  display: block;
+  margin-top: 3px;
+  color: #66756c;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.dashboard-stock-healthy-link {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #bdd4c3;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #245c42;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .dashboard-stock-alert-header {
+    flex-direction: column;
+  }
+
+  .dashboard-stock-manage-button {
+    width: 100%;
+  }
+
+  .dashboard-stock-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-stock-item-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-stock-alert {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .dashboard-stock-alert-title-group {
+    gap: 10px;
+  }
+
+  .dashboard-stock-alert-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+    border-radius: 13px;
+  }
+
+  .dashboard-stock-item-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-stock-quantity {
+    text-align: left;
+  }
+
+  .dashboard-stock-status {
+    width: fit-content;
+  }
+
+  .dashboard-stock-item-link {
+    width: 100%;
+  }
+
+  .dashboard-stock-healthy {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-stock-healthy-link {
+    width: 100%;
+  }
+}
