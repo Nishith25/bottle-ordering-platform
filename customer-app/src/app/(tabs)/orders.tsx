@@ -27,8 +27,16 @@ import {
 } from "../../context/AuthContext";
 
 import {
+  useCart,
+} from "../../context/CartContext";
+
+import {
   useOrders,
 } from "../../context/OrderContext";
+
+import {
+  useProducts,
+} from "../../context/ProductContext";
 
 import {
   createOrderReview,
@@ -42,6 +50,10 @@ import type {
   OrderReview,
   OrderStatus,
 } from "../../services/api";
+
+import type {
+  Product,
+} from "../../data/products";
 
 type RefundStatus =
   | "not_required"
@@ -108,6 +120,14 @@ const DELIVERY_STATUS_LABELS: Record<
   cancelled:
     "Delivery cancelled",
 };
+
+function normalizeText(
+  value: unknown
+) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
 
 function getRefundStatus(
   order: RefundAwareOrder
@@ -183,6 +203,67 @@ function getTrackingButtonLabel(
   return "Track delivery";
 }
 
+function findMatchingProduct(
+  products: Product[],
+  orderItem: RefundAwareOrder["items"][number]
+) {
+  const orderProductId =
+    normalizeText(
+      orderItem.productId
+    );
+
+  const orderName =
+    normalizeText(
+      orderItem.name
+    );
+
+  return products.find(
+    (product) => {
+      const productIds = [
+        product.id,
+        product.databaseId,
+        product.name,
+        product.shortName,
+      ].map(normalizeText);
+
+      return (
+        productIds.includes(
+          orderProductId
+        ) ||
+        (
+          orderName.length >
+            0 &&
+          productIds.includes(
+            orderName
+          )
+        )
+      );
+    }
+  );
+}
+
+function showReorderAlert(
+  title: string,
+  message: string
+) {
+  if (
+    Platform.OS === "web" &&
+    typeof window !==
+      "undefined"
+  ) {
+    window.alert(
+      `${title}\n\n${message}`
+    );
+
+    return;
+  }
+
+  Alert.alert(
+    title,
+    message
+  );
+}
+
 export default function OrdersScreen() {
   const router = useRouter();
 
@@ -191,6 +272,15 @@ export default function OrdersScreen() {
     loading: authLoading,
     isAuthenticated,
   } = useAuth();
+
+  const {
+    addItems,
+  } = useCart();
+
+  const {
+    products,
+    refreshProducts,
+  } = useProducts();
 
   const {
     orders,
@@ -216,6 +306,13 @@ export default function OrdersScreen() {
   const [
     submittingReviewOrderId,
     setSubmittingReviewOrderId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    reorderingOrderId,
+    setReorderingOrderId,
   ] = useState<string | null>(
     null
   );
@@ -312,6 +409,135 @@ export default function OrdersScreen() {
       },
     });
   };
+
+  const handleReorder =
+    async (
+      order: RefundAwareOrder
+    ) => {
+      if (
+        reorderingOrderId
+      ) {
+        return;
+      }
+
+      setReorderingOrderId(
+        order._id
+      );
+
+      try {
+        await refreshProducts({
+          force: true,
+          showIndicator: true,
+        });
+
+        if (
+          products.length ===
+          0
+        ) {
+          showReorderAlert(
+            "Unable to reorder",
+            "Live product list is still loading. Please try again in a few seconds."
+          );
+
+          return;
+        }
+
+        const entries =
+          order.items
+            .map(
+              (orderItem) => {
+                const product =
+                  findMatchingProduct(
+                    products,
+                    orderItem
+                  );
+
+                if (!product) {
+                  return null;
+                }
+
+                return {
+                  product,
+
+                  quantity:
+                    Number(
+                      orderItem.quantity ||
+                        0
+                    ),
+                };
+              }
+            )
+            .filter(
+              (
+                entry
+              ): entry is {
+                product: Product;
+                quantity: number;
+              } =>
+                Boolean(entry)
+            );
+
+        const missingItems =
+          order.items.filter(
+            (orderItem) =>
+              !findMatchingProduct(
+                products,
+                orderItem
+              )
+          );
+
+        const result =
+          addItems(entries);
+
+        const skippedCount =
+          result.skippedItems.length +
+          missingItems.length;
+
+        if (
+          result.addedQuantity <=
+          0
+        ) {
+          showReorderAlert(
+            "Could not add items",
+            "None of the previous order items are currently available in live stock."
+          );
+
+          return;
+        }
+
+        const messageParts = [
+          `${result.addedQuantity} bottle${result.addedQuantity === 1 ? "" : "s"} added to your cart.`,
+        ];
+
+        if (
+          result.adjustedItems.length >
+          0
+        ) {
+          messageParts.push(
+            `${result.adjustedItems.length} item${result.adjustedItems.length === 1 ? "" : "s"} adjusted based on live stock.`
+          );
+        }
+
+        if (
+          skippedCount > 0
+        ) {
+          messageParts.push(
+            `${skippedCount} item${skippedCount === 1 ? "" : "s"} skipped because unavailable or out of stock.`
+          );
+        }
+
+        showReorderAlert(
+          "Order added to cart",
+          messageParts.join("\n")
+        );
+
+        router.push("/cart");
+      } finally {
+        setReorderingOrderId(
+          null
+        );
+      }
+    };
 
   const requestCancellation = (
     order: RefundAwareOrder
@@ -638,6 +864,10 @@ export default function OrdersScreen() {
               item._id
             );
 
+          const isReordering =
+            reorderingOrderId ===
+            item._id;
+
           return (
             <View
               style={styles.orderCard}
@@ -828,6 +1058,51 @@ export default function OrdersScreen() {
                 >
                   ₹{item.total}
                 </Text>
+              </View>
+
+              <View
+                style={
+                  styles.orderActionsRow
+                }
+              >
+                <Pressable
+                  disabled={
+                    isReordering
+                  }
+                  onPress={() => {
+                    void handleReorder(
+                      item
+                    );
+                  }}
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.reorderButton,
+
+                    isReordering &&
+                      styles.reorderButtonDisabled,
+
+                    pressed &&
+                      !isReordering &&
+                      styles.pressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="repeat-outline"
+                    size={17}
+                    color="#245C42"
+                  />
+
+                  <Text
+                    style={
+                      styles.reorderButtonText
+                    }
+                  >
+                    {isReordering
+                      ? "Adding..."
+                      : "Order again"}
+                  </Text>
+                </Pressable>
               </View>
 
               {showDeliveryTracking ? (
@@ -1757,6 +2032,39 @@ const styles =
     totalValue: {
       color: "#203128",
       fontSize: 16,
+      fontWeight: "900",
+    },
+
+    orderActionsRow: {
+      marginTop: 13,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    reorderButton: {
+      minHeight: 43,
+      paddingHorizontal: 15,
+      borderRadius: 14,
+      backgroundColor:
+        "#E5EFE7",
+      borderWidth: 1,
+      borderColor:
+        "#D5E5DA",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 8,
+    },
+
+    reorderButtonDisabled: {
+      opacity: 0.6,
+    },
+
+    reorderButtonText: {
+      color: "#245C42",
+      fontSize: 10,
       fontWeight: "900",
     },
 

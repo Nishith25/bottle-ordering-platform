@@ -19,6 +19,27 @@ export type CartItem = {
   quantity: number;
 };
 
+export type AddCartItemsInput = {
+  product: Product;
+  quantity: number;
+};
+
+export type AddCartItemsResult = {
+  addedItemCount: number;
+  addedQuantity: number;
+
+  adjustedItems: Array<{
+    productName: string;
+    requestedQuantity: number;
+    addedQuantity: number;
+  }>;
+
+  skippedItems: Array<{
+    productName: string;
+    reason: string;
+  }>;
+};
+
 type CartContextValue = {
   items: CartItem[];
   itemCount: number;
@@ -28,6 +49,10 @@ type CartContextValue = {
   addItem: (
     product: Product
   ) => void;
+
+  addItems: (
+    entries: AddCartItemsInput[]
+  ) => AddCartItemsResult;
 
   increaseItem: (
     productId: string
@@ -408,6 +433,203 @@ export function CartProvider({
       []
     );
 
+  const addItems =
+    useCallback(
+      (
+        entries:
+          AddCartItemsInput[]
+      ): AddCartItemsResult => {
+        const result:
+          AddCartItemsResult = {
+            addedItemCount: 0,
+            addedQuantity: 0,
+            adjustedItems: [],
+            skippedItems: [],
+          };
+
+        if (
+          entries.length ===
+          0
+        ) {
+          return result;
+        }
+
+        const normalizedEntries =
+          entries
+            .map((entry) => ({
+              product:
+                entry.product,
+
+              quantity:
+                Math.floor(
+                  Number(
+                    entry.quantity || 0
+                  )
+                ),
+            }))
+            .filter(
+              (entry) =>
+                entry.quantity >
+                  0 &&
+                entry.product
+            );
+
+        if (
+          normalizedEntries.length ===
+          0
+        ) {
+          return result;
+        }
+
+        const nextItems =
+          [...items];
+
+        for (
+          const entry of
+          normalizedEntries
+        ) {
+          const product =
+            entry.product;
+
+          const requestedQuantity =
+            entry.quantity;
+
+          const productLimit =
+            getProductLimit(
+              product
+            );
+
+          if (
+            productLimit <= 0
+          ) {
+            result.skippedItems.push({
+              productName:
+                product.name,
+
+              reason:
+                "Out of stock or unavailable",
+            });
+
+            continue;
+          }
+
+          const existingIndex =
+            nextItems.findIndex(
+              (item) =>
+                item.product.id ===
+                product.id
+            );
+
+          const existingQuantity =
+            existingIndex >= 0
+              ? nextItems[existingIndex]
+                  .quantity
+              : 0;
+
+          const remainingCapacity =
+            Math.max(
+              productLimit -
+                existingQuantity,
+              0
+            );
+
+          if (
+            remainingCapacity <= 0
+          ) {
+            result.skippedItems.push({
+              productName:
+                product.name,
+
+              reason:
+                "Maximum live stock already selected",
+            });
+
+            continue;
+          }
+
+          const quantityToAdd =
+            Math.min(
+              requestedQuantity,
+              remainingCapacity
+            );
+
+          if (
+            quantityToAdd <= 0
+          ) {
+            result.skippedItems.push({
+              productName:
+                product.name,
+
+              reason:
+                "Unable to add this item",
+            });
+
+            continue;
+          }
+
+          if (
+            quantityToAdd <
+            requestedQuantity
+          ) {
+            result.adjustedItems.push({
+              productName:
+                product.name,
+
+              requestedQuantity,
+
+              addedQuantity:
+                quantityToAdd,
+            });
+          }
+
+          if (
+            existingIndex >= 0
+          ) {
+            nextItems[
+              existingIndex
+            ] = {
+              ...nextItems[
+                existingIndex
+              ],
+
+              product,
+
+              quantity:
+                existingQuantity +
+                quantityToAdd,
+            };
+          } else {
+            nextItems.push({
+              product,
+
+              quantity:
+                quantityToAdd,
+            });
+          }
+
+          result.addedItemCount +=
+            1;
+
+          result.addedQuantity +=
+            quantityToAdd;
+        }
+
+        if (
+          result.addedQuantity >
+          0
+        ) {
+          setItems(
+            nextItems
+          );
+        }
+
+        return result;
+      },
+      [
+        items,
+      ]
+    );
+
   const increaseItem =
     useCallback(
       (
@@ -572,10 +794,6 @@ export function CartProvider({
                   item.product.id
                 );
 
-              /*
-               * Remove products that no longer exist or have been
-               * intentionally disabled by the admin.
-               */
               if (
                 !latestProduct ||
                 !latestProduct.available
@@ -589,13 +807,6 @@ export function CartProvider({
                   latestProduct
                 );
 
-              /*
-               * Important:
-               *
-               * When stock temporarily reaches zero, keep the product
-               * in the cart. This allows checkout to resume when stock
-               * is restored instead of permanently forgetting the item.
-               */
               const nextQuantity =
                 availableStock <= 0
                   ? Math.min(
@@ -703,6 +914,7 @@ export function CartProvider({
         subtotal,
         hydrated,
         addItem,
+        addItems,
         increaseItem,
         decreaseItem,
         removeItem,
@@ -716,6 +928,7 @@ export function CartProvider({
         subtotal,
         hydrated,
         addItem,
+        addItems,
         increaseItem,
         decreaseItem,
         removeItem,
