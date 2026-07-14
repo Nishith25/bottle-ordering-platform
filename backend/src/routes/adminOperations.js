@@ -83,6 +83,7 @@ function buildUserSnapshot(user) {
 function getCustomerName(order) {
   return (
     cleanText(order.customerSnapshot?.fullName) ||
+    cleanText(order.customerSnapshot?.name) ||
     cleanText(order.deliveryAddress?.fullName) ||
     cleanText(order.deliveryAddress?.name) ||
     cleanText(order.customerName) ||
@@ -107,6 +108,7 @@ function getDeliverySlotLabel(order) {
   return (
     cleanText(order.deliverySchedule?.slotLabel) ||
     cleanText(order.deliverySchedule?.deliverySlotLabel) ||
+    cleanText(order.deliverySchedule?.slot) ||
     cleanText(order.deliverySlotLabel) ||
     "Slot not selected"
   );
@@ -123,9 +125,11 @@ function getDeliveryDateId(order) {
 function getDeliveryPartnerName(order) {
   return (
     cleanText(order.deliveryPartnerSnapshot?.fullName) ||
+    cleanText(order.deliveryPartnerSnapshot?.name) ||
     cleanText(order.assignedDeliveryPartnerSnapshot?.fullName) ||
-    cleanText(order.deliveryPartner?.fullName) ||
-    cleanText(order.assignedDeliveryPartner?.fullName) ||
+    cleanText(order.assignedDeliveryPartnerSnapshot?.name) ||
+    cleanText(order.deliveryAssignment?.partnerName) ||
+    cleanText(order.deliveryAssignment?.fullName) ||
     "Not assigned"
   );
 }
@@ -135,9 +139,7 @@ function formatAddress(address) {
     return "";
   }
 
-  if (
-    typeof address === "string"
-  ) {
+  if (typeof address === "string") {
     return address;
   }
 
@@ -412,18 +414,14 @@ router.get(
           "deliverySchedule.deliveryDateId":
             dateId,
         })
-          .populate(
-            "user",
-            "fullName name email phone mobile"
-          )
-          .populate(
-            "deliveryPartner",
-            "fullName name email phone mobile"
-          )
-          .populate(
-            "assignedDeliveryPartner",
-            "fullName name email phone mobile"
-          )
+          .populate({
+            path: "user",
+            select:
+              "fullName name email phone mobile",
+            options: {
+              strictPopulate: false,
+            },
+          })
           .sort({
             "deliverySchedule.startMinutes": 1,
             createdAt: 1,
@@ -467,10 +465,12 @@ router.get(
 
         data: {
           dateId,
+
           summary:
             buildSummary(
               normalizedOrders
             ),
+
           orders:
             normalizedOrders,
         },
