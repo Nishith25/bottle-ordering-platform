@@ -230,7 +230,7 @@ export default function SalesReportPage() {
           </h2>
 
           <p>
-            Track revenue, bottle sales, COD/online split, cancellations and estimated gross profit.
+            Track revenue, bottle sales, COD/online split, cancellations, real costs, expenses and estimated gross profit.
           </p>
         </div>
 
@@ -329,7 +329,7 @@ export default function SalesReportPage() {
         </label>
 
         <label>
-          Cost per bottle
+          Fallback cost / bottle
           <input
             type="number"
             min="0"
@@ -412,13 +412,13 @@ export default function SalesReportPage() {
 
             <article className="sales-summary-card">
               <span>
-                Active orders
+                Total cost
               </span>
 
               <strong>
-                {
-                  report.summary.activeOrderCount
-                }
+                {formatCurrency(
+                  report.summary.estimatedCost
+                )}
               </strong>
             </article>
 
@@ -467,6 +467,39 @@ export default function SalesReportPage() {
                   )}
                 </small>
               ) : null}
+            </div>
+
+            <div>
+              <span>
+                Product cost
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  report.summary
+                    .estimatedProductCost
+                )}
+              </strong>
+
+              <small>
+                Direct bottle production cost
+              </small>
+            </div>
+
+            <div>
+              <span>
+                Expenses
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  report.summary.expenseTotal
+                )}
+              </strong>
+
+              <small>
+                Extra business expenses
+              </small>
             </div>
 
             <div>
@@ -541,7 +574,7 @@ export default function SalesReportPage() {
                 </h3>
 
                 <p>
-                  Bottles sold, revenue and estimated gross profit by product.
+                  Bottles sold, revenue, real cost and estimated gross profit by product.
                 </p>
               </div>
             </div>
@@ -569,6 +602,7 @@ export default function SalesReportPage() {
                       <th>Bottle</th>
                       <th>Sold</th>
                       <th>Revenue</th>
+                      <th>Cost / bottle</th>
                       <th>Est. cost</th>
                       <th>Est. profit</th>
                     </tr>
@@ -607,6 +641,12 @@ export default function SalesReportPage() {
                           <td>
                             {formatCurrency(
                               product.revenue
+                            )}
+                          </td>
+
+                          <td>
+                            {formatCurrency(
+                              product.costPerBottle
                             )}
                           </td>
 
@@ -736,7 +776,7 @@ export default function SalesReportPage() {
             </strong>
 
             <p>
-              Estimated profit is calculated as gross revenue minus bottles sold × cost per bottle. Update the cost per bottle field to match your actual average cost.
+              Estimated profit is calculated as gross revenue minus product-wise bottle costs and daily business expenses. If a product cost is not configured, the fallback cost per bottle is used.
             </p>
           </section>
         </>

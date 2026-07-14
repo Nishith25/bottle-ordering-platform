@@ -12,6 +12,7 @@ import DeliveryLayout from "./layout/DeliveryLayout";
 
 import BatchLabelsPage from "./pages/BatchLabelsPage";
 import BatchRegisterPage from "./pages/BatchRegisterPage";
+import CostingPage from "./pages/CostingPage";
 import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
@@ -20,16 +21,16 @@ import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
 import DeliverySlotsPage from "./pages/DeliverySlotsPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
+import OperationsPage from "./pages/OperationsPage";
 import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
 import ProductionPlanPage from "./pages/ProductionPlanPage";
+import SalesReportPage from "./pages/SalesReportPage";
 import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
-import SalesReportPage from "./pages/SalesReportPage";
-import OperationsPage from "./pages/OperationsPage";
 
 export default function App() {
   return (
@@ -86,20 +87,25 @@ export default function App() {
             />
 
             <Route
-  path="/operations"
-  element={
-    <OperationsPage />
-  }
-/>
+              path="/operations"
+              element={
+                <OperationsPage />
+              }
+            />
 
             <Route
-  path="/sales-report"
-  element={
-    <SalesReportPage />
-  }
-/>
+              path="/sales-report"
+              element={
+                <SalesReportPage />
+              }
+            />
 
-
+            <Route
+              path="/costing"
+              element={
+                <CostingPage />
+              }
+            />
 
             <Route
               path="/production-plan"

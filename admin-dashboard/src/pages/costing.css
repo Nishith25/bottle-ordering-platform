@@ -1,0 +1,291 @@
+.costing-page {
+  display: grid;
+  gap: 18px;
+}
+
+.costing-heading {
+  align-items: flex-start;
+}
+
+.costing-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.costing-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.costing-summary-card {
+  padding: 18px;
+  border: 1px solid #e3e9e5;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(24, 50, 35, 0.06);
+}
+
+.costing-summary-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: #6a766f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.costing-summary-card strong {
+  color: #1d2b23;
+  font-size: 24px;
+}
+
+.costing-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.costing-section-header h3 {
+  margin: 0;
+  color: #1d2b23;
+  font-size: 17px;
+}
+
+.costing-section-header p {
+  margin: 5px 0 0;
+  color: #6f7a73;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.product-cost-list {
+  display: grid;
+  gap: 14px;
+}
+
+.product-cost-card {
+  border: 1px solid #e2e9e4;
+  border-radius: 20px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.product-cost-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 16px;
+  background: #f6faf6;
+  border-bottom: 1px solid #e5ece6;
+}
+
+.product-cost-header strong {
+  display: block;
+  color: #1d2b23;
+  font-size: 15px;
+}
+
+.product-cost-header span {
+  display: block;
+  margin-top: 3px;
+  color: #65736b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.product-total-cost {
+  text-align: right;
+}
+
+.cost-input-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.cost-input-grid label,
+.expense-filter-row label,
+.expense-form label {
+  display: grid;
+  gap: 7px;
+  color: #54665b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.cost-input-grid input,
+.expense-filter-row input,
+.expense-form input,
+.expense-form select,
+.expense-form textarea {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d9e2dc;
+  border-radius: 13px;
+  color: #203128;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.expense-form textarea {
+  min-height: 88px;
+  padding-top: 12px;
+  resize: vertical;
+}
+
+.product-cost-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.product-cost-actions span {
+  color: #617168;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.expense-filter-row {
+  display: grid;
+  grid-template-columns: 1fr 220px 220px;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #f7faf7;
+}
+
+.expense-filter-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.costing-eyebrow {
+  color: #6c786f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.expense-filter-row strong {
+  color: #1d2b23;
+  font-size: 16px;
+}
+
+.expense-form {
+  display: grid;
+  grid-template-columns: 180px 1fr 180px 160px 220px;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.expense-form .full-width {
+  grid-column: 1 / -1;
+}
+
+.expense-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.expense-list {
+  display: grid;
+  gap: 12px;
+}
+
+.expense-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px;
+  border: 1px solid #e3e9e5;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.expense-card strong {
+  display: block;
+  color: #1d2b23;
+  font-size: 14px;
+}
+
+.expense-card span {
+  display: block;
+  margin-top: 4px;
+  color: #6d7a72;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.expense-card p {
+  margin: 8px 0 0;
+  color: #65736b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.expense-card-right {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  align-content: start;
+}
+
+.danger-light-button {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid #f1c5c5;
+  border-radius: 12px;
+  color: #a33d3d;
+  background: #fff6f6;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.danger-light-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 1100px) {
+  .costing-summary-grid,
+  .cost-input-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .expense-filter-row,
+  .expense-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .costing-summary-grid,
+  .cost-input-grid,
+  .expense-filter-row,
+  .expense-form {
+    grid-template-columns: 1fr;
+  }
+
+  .product-cost-header,
+  .product-cost-actions,
+  .expense-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-total-cost,
+  .expense-card-right {
+    text-align: left;
+    justify-items: start;
+  }
+}

@@ -8,6 +8,8 @@ const {
 } = require("../middleware/auth");
 
 const Order = require("../models/Order");
+const ProductCost = require("../models/ProductCost");
+const BusinessExpense = require("../models/BusinessExpense");
 
 const router = express.Router();
 
@@ -59,35 +61,6 @@ function parseDateId(value, fallback) {
     throw error;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-
-  const parsedDate =
-    new Date(
-      Date.UTC(
-        year,
-        month - 1,
-        day
-      )
-    );
-
-  if (
-    parsedDate.getUTCFullYear() !==
-      year ||
-    parsedDate.getUTCMonth() !==
-      month - 1 ||
-    parsedDate.getUTCDate() !==
-      day
-  ) {
-    const error = new Error(
-      "Please select a valid date."
-    );
-
-    error.statusCode = 400;
-    throw error;
-  }
-
   return dateId;
 }
 
@@ -104,18 +77,6 @@ function createIstRange(
     new Date(
       `${toDateId}T00:00:00.000+05:30`
     );
-
-  if (
-    Number.isNaN(from.getTime()) ||
-    Number.isNaN(to.getTime())
-  ) {
-    const error = new Error(
-      "Please select a valid date range."
-    );
-
-    error.statusCode = 400;
-    throw error;
-  }
 
   const toExclusive =
     new Date(
@@ -170,11 +131,65 @@ function addMoney(value) {
     : 0;
 }
 
+function getCostTotal(cost, fallback) {
+  if (!cost) {
+    return fallback;
+  }
+
+  const base =
+    Number(cost.bottleCost || 0) +
+    Number(cost.printingCost || 0) +
+    Number(cost.fruitCost || 0) +
+    Number(cost.juiceCost || 0) +
+    Number(cost.packagingCost || 0) +
+    Number(cost.deliveryCost || 0) +
+    Number(cost.otherCost || 0);
+
+  return Math.round(
+    base *
+      (1 +
+        Number(
+          cost.wastagePercent || 0
+        ) /
+          100)
+  );
+}
+
+function buildExpenseSummary(expenses) {
+  const categoryTotals = {};
+  let totalAmount = 0;
+
+  for (const expense of expenses) {
+    const amount =
+      Number(expense.amount || 0);
+
+    totalAmount += amount;
+
+    categoryTotals[
+      expense.category
+    ] =
+      Number(
+        categoryTotals[
+          expense.category
+        ] || 0
+      ) + amount;
+  }
+
+  return {
+    totalAmount:
+      Math.round(totalAmount),
+
+    categoryTotals,
+  };
+}
+
 function buildSalesReport({
   orders,
   fromDateId,
   toDateId,
-  costPerBottle,
+  fallbackCostPerBottle,
+  productCostMap,
+  expenses,
 }) {
   const productMap =
     new Map();
@@ -195,6 +210,9 @@ function buildSalesReport({
       bottles: 0,
     },
   };
+
+  const expenseSummary =
+    buildExpenseSummary(expenses);
 
   const summary = {
     orderCount: 0,
@@ -217,6 +235,8 @@ function buildSalesReport({
     cancelledValue: 0,
     refundedValue: 0,
 
+    estimatedProductCost: 0,
+    expenseTotal: expenseSummary.totalAmount,
     estimatedCost: 0,
     estimatedGrossProfit: 0,
   };
@@ -353,9 +373,16 @@ function buildSalesReport({
         cleanText(item.productId) ||
         String(item.product || "");
 
+      const unitCost =
+        getCostTotal(
+          productCostMap.get(productId),
+          fallbackCostPerBottle
+        );
+
       if (!productMap.has(productId)) {
         productMap.set(productId, {
           productId,
+
           name:
             item.name ||
             productId,
@@ -372,6 +399,9 @@ function buildSalesReport({
           revenue: 0,
           orderCount: 0,
 
+          costPerBottle:
+            unitCost,
+
           estimatedCost: 0,
           estimatedGrossProfit: 0,
         });
@@ -386,8 +416,12 @@ function buildSalesReport({
       productRow.quantitySold += quantity;
       productRow.revenue += itemValue;
       productRow.orderCount += 1;
+      productRow.estimatedCost +=
+        quantity * unitCost;
 
       orderBottleCount += quantity;
+      summary.estimatedProductCost +=
+        quantity * unitCost;
     }
 
     summary.bottlesSold += orderBottleCount;
@@ -395,34 +429,30 @@ function buildSalesReport({
     paymentSplit[paymentMethod].bottles += orderBottleCount;
   }
 
-  const estimatedCost =
-    summary.bottlesSold * costPerBottle;
-
   summary.estimatedCost =
-    estimatedCost;
+    summary.estimatedProductCost +
+    summary.expenseTotal;
 
   summary.estimatedGrossProfit =
     summary.grossRevenue -
-    estimatedCost;
+    summary.estimatedCost;
 
   const productTotals =
     [...productMap.values()]
-      .map((product) => {
-        const estimatedProductCost =
-          product.quantitySold *
-          costPerBottle;
+      .map((product) => ({
+        ...product,
 
-        return {
-          ...product,
+        estimatedCost:
+          Math.round(
+            product.estimatedCost
+          ),
 
-          estimatedCost:
-            estimatedProductCost,
-
-          estimatedGrossProfit:
+        estimatedGrossProfit:
+          Math.round(
             product.revenue -
-            estimatedProductCost,
-        };
-      })
+              product.estimatedCost
+          ),
+      }))
       .sort(
         (left, right) =>
           right.quantitySold -
@@ -445,7 +475,7 @@ function buildSalesReport({
   return {
     fromDateId,
     toDateId,
-    costPerBottle,
+    fallbackCostPerBottle,
 
     summary: {
       ...summary,
@@ -500,6 +530,16 @@ function buildSalesReport({
           summary.refundedValue
         ),
 
+      estimatedProductCost:
+        Math.round(
+          summary.estimatedProductCost
+        ),
+
+      expenseTotal:
+        Math.round(
+          summary.expenseTotal
+        ),
+
       estimatedCost:
         Math.round(
           summary.estimatedCost
@@ -510,6 +550,8 @@ function buildSalesReport({
           summary.estimatedGrossProfit
         ),
     },
+
+    expenseSummary,
 
     bestSellingProduct,
 
@@ -540,15 +582,15 @@ router.get(
           fromDateId
         );
 
-      const costPerBottleValue =
+      const fallbackValue =
         Number(req.query.costPerBottle);
 
-      const costPerBottle =
+      const fallbackCostPerBottle =
         Number.isFinite(
-          costPerBottleValue
+          fallbackValue
         ) &&
-        costPerBottleValue >= 0
-          ? costPerBottleValue
+        fallbackValue >= 0
+          ? fallbackValue
           : 30;
 
       const {
@@ -559,8 +601,12 @@ router.get(
         toDateId
       );
 
-      const orders =
-        await Order.find({
+      const [
+        orders,
+        productCosts,
+        expenses,
+      ] = await Promise.all([
+        Order.find({
           createdAt: {
             $gte: from,
             $lt: toExclusive,
@@ -572,14 +618,36 @@ router.get(
           .sort({
             createdAt: 1,
           })
-          .lean();
+          .lean(),
+
+        ProductCost.find({}).lean(),
+
+        BusinessExpense.find({
+          expenseDateId: {
+            $gte: fromDateId,
+            $lte: toDateId,
+          },
+        }).lean(),
+      ]);
+
+      const productCostMap =
+        new Map(
+          productCosts.map(
+            (cost) => [
+              cost.productId,
+              cost,
+            ]
+          )
+        );
 
       const report =
         buildSalesReport({
           orders,
           fromDateId,
           toDateId,
-          costPerBottle,
+          fallbackCostPerBottle,
+          productCostMap,
+          expenses,
         });
 
       return res.status(200).json({

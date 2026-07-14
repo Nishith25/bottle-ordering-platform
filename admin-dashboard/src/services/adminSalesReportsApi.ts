@@ -11,6 +11,7 @@ export type SalesReportProductTotal = {
   quantitySold: number;
   revenue: number;
   orderCount: number;
+  costPerBottle: number;
   estimatedCost: number;
   estimatedGrossProfit: number;
 };
@@ -27,7 +28,7 @@ export type SalesReportDateTotal = {
 export type AdminSalesReport = {
   fromDateId: string;
   toDateId: string;
-  costPerBottle: number;
+  fallbackCostPerBottle: number;
 
   summary: {
     orderCount: number;
@@ -45,8 +46,15 @@ export type AdminSalesReport = {
     onlinePaidAmount: number;
     cancelledValue: number;
     refundedValue: number;
+    estimatedProductCost: number;
+    expenseTotal: number;
     estimatedCost: number;
     estimatedGrossProfit: number;
+  };
+
+  expenseSummary: {
+    totalAmount: number;
+    categoryTotals: Record<string, number>;
   };
 
   bestSellingProduct:

@@ -26,11 +26,15 @@ const PAGE_TITLES:
 
     "/orders":
       "Order management",
-      "/operations":
-  "Daily operations",
 
-      "/sales-report":
-  "Sales & profit report",
+    "/operations":
+      "Daily operations",
+
+    "/sales-report":
+      "Sales & profit report",
+
+    "/costing":
+      "Costing & expenses",
 
     "/production-plan":
       "Production & packing plan",
@@ -135,10 +139,8 @@ export default function AdminLayout() {
 
       navigate(
         "/login",
-
         {
-          replace:
-            true,
+          replace: true,
         }
       );
     };
@@ -197,22 +199,31 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
-  to="/operations"
-  icon="▣"
-  label="Operations"
-  onClick={
-    closeMobileMenu
-  }
-/>
+            to="/operations"
+            icon="▣"
+            label="Operations"
+            onClick={
+              closeMobileMenu
+            }
+          />
 
           <NavigationLink
-  to="/sales-report"
-  icon="₹"
-  label="Sales report"
-  onClick={
-    closeMobileMenu
-  }
-/>
+            to="/sales-report"
+            icon="₹"
+            label="Sales report"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/costing"
+            icon="▥"
+            label="Costing"
+            onClick={
+              closeMobileMenu
+            }
+          />
 
           <NavigationLink
             to="/production-plan"

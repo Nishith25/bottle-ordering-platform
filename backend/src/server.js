@@ -10,6 +10,7 @@ const connectDB = require("./config/db");
 
 const adminRoutes = require("./routes/admin");
 const adminBatchRoutes = require("./routes/adminBatches");
+const adminCostingRoutes = require("./routes/adminCosting");
 const adminCouponRoutes = require("./routes/adminCoupons");
 const adminDeliveryPartnerRoutes = require(
   "./routes/adminDeliveryPartners"
@@ -22,6 +23,9 @@ const adminInventoryRoutes = require(
 );
 const adminOrderRoutes = require(
   "./routes/adminOrders"
+);
+const adminOperationsRoutes = require(
+  "./routes/adminOperations"
 );
 const adminSalesReportRoutes = require(
   "./routes/adminSalesReports"
@@ -37,9 +41,6 @@ const adminSubscriptionRoutes = require(
 );
 const adminUserRoutes = require(
   "./routes/adminUsers"
-);
-const adminOperationsRoutes = require(
-  "./routes/adminOperations"
 );
 
 const authRoutes = require("./routes/auth");
@@ -119,12 +120,6 @@ const HOST = String(
   process.env.HOST || "0.0.0.0"
 ).trim();
 
-/*
- * Normalises origins so these are treated equally:
- *
- * https://example.com
- * https://example.com/
- */
 function normalizeOrigin(value) {
   return String(value || "")
     .trim()
@@ -142,11 +137,6 @@ const backendPublicOrigin = normalizeOrigin(
   process.env.BACKEND_PUBLIC_URL || ""
 );
 
-/*
- * BACKEND_PUBLIC_URL is added automatically because the
- * Razorpay checkout page is served from the backend itself
- * and calls /verify, /fail and /abandon from that origin.
- */
 const allowedOrigins = [
   ...new Set([
     ...configuredOrigins,
@@ -155,12 +145,6 @@ const allowedOrigins = [
       ? [backendPublicOrigin]
       : []),
 
-    /*
-     * Safe local development defaults.
-     * These do not affect production security because they
-     * only permit browser requests originating from these
-     * exact local addresses.
-     */
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:8081",
@@ -184,11 +168,6 @@ app.use(
         "same-origin-allow-popups",
     },
 
-    /*
-     * Razorpay Checkout loads external scripts and opens
-     * secure payment windows. The dedicated checkout route
-     * also removes CSP before sending its HTML.
-     */
     crossOriginResourcePolicy: {
       policy: "cross-origin",
     },
@@ -197,17 +176,7 @@ app.use(
 
 app.use(
   cors({
-    origin(
-      origin,
-      callback
-    ) {
-      /*
-       * Requests without an Origin header include:
-       * - curl
-       * - server-to-server calls
-       * - native mobile requests
-       * - Razorpay webhooks
-       */
+    origin(origin, callback) {
       if (!origin) {
         return callback(
           null,
@@ -237,9 +206,7 @@ app.use(
 
       error.statusCode = 403;
 
-      return callback(
-        error
-      );
+      return callback(error);
     },
 
     credentials: true,
@@ -270,12 +237,6 @@ app.use(
   })
 );
 
-/*
- * Raw webhook routes must remain before express.json().
- *
- * Razorpay signatures must be verified against the
- * unmodified request body.
- */
 app.post(
   "/api/payments/razorpay/webhook",
 
@@ -294,7 +255,6 @@ app.post(
 
 app.use(
   "/api/webhooks/razorpay/subscriptions",
-
   razorpaySubscriptionWebhookRoutes
 );
 
@@ -500,6 +460,11 @@ app.use(
 );
 
 app.use(
+  "/api/admin/costing",
+  adminCostingRoutes
+);
+
+app.use(
   "/api/admin/operations",
   adminOperationsRoutes
 );
@@ -532,9 +497,7 @@ app.use(
     res,
     next
   ) => {
-    console.error(
-      error
-    );
+    console.error(error);
 
     if (
       error.code ===
@@ -567,15 +530,12 @@ app.use(
       );
 
     return res
-      .status(
-        statusCode
-      )
+      .status(statusCode)
       .json({
         success: false,
 
         message:
-          statusCode ===
-          500
+          statusCode === 500
             ? "An unexpected server error occurred."
             : error.message,
 
@@ -595,10 +555,6 @@ async function startServer() {
   try {
     await connectDB();
 
-    /*
-     * Creates only missing default slots.
-     * Existing admin configuration is preserved.
-     */
     await ensureDefaultDeliverySlots();
 
     app.listen(
@@ -634,7 +590,6 @@ async function startServer() {
   } catch (error) {
     console.error(
       "Unable to start backend:",
-
       error.message
     );
 
