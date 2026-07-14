@@ -30,6 +30,9 @@ const PAGE_TITLES:
     "/production-plan":
       "Production & packing plan",
 
+    "/batch-register":
+      "Batch register",
+
     "/delivery-partners":
       "Delivery partner management",
 
@@ -189,6 +192,15 @@ export default function AdminLayout() {
             to="/production-plan"
             icon="▧"
             label="Production plan"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/batch-register"
+            icon="▨"
+            label="Batch register"
             onClick={
               closeMobileMenu
             }

@@ -1,0 +1,333 @@
+.batch-register-page {
+  display: grid;
+  gap: 18px;
+}
+
+.batch-heading {
+  align-items: flex-start;
+}
+
+.batch-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.batch-date-panel {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.batch-date-panel > div {
+  display: grid;
+  gap: 4px;
+}
+
+.batch-eyebrow {
+  color: #6c786f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.batch-date-panel strong {
+  color: #1d2b23;
+  font-size: 18px;
+}
+
+.batch-date-panel label,
+.batch-form label {
+  display: grid;
+  gap: 7px;
+  color: #54665b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.batch-date-panel input,
+.batch-date-panel select,
+.batch-form input,
+.batch-form select,
+.batch-form textarea {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d9e2dc;
+  border-radius: 13px;
+  color: #203128;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.batch-form textarea {
+  min-height: 90px;
+  padding-top: 12px;
+  resize: vertical;
+}
+
+.batch-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.batch-summary-card {
+  padding: 18px;
+  border: 1px solid #e3e9e5;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(24, 50, 35, 0.06);
+}
+
+.batch-summary-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: #6a766f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.batch-summary-card strong {
+  color: #1d2b23;
+  font-size: 24px;
+}
+
+.create-batch-panel,
+.batch-list-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.batch-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.batch-section-header h3 {
+  margin: 0;
+  color: #1d2b23;
+  font-size: 17px;
+}
+
+.batch-section-header p {
+  margin: 5px 0 0;
+  color: #6f7a73;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.next-batch-card {
+  min-width: 240px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #eef6ee;
+  text-align: right;
+}
+
+.next-batch-card span,
+.batch-print-date {
+  display: block;
+  color: #65736b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.next-batch-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #245c42;
+  font-size: 15px;
+}
+
+.batch-form {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 1fr 0.7fr;
+  gap: 14px;
+}
+
+.batch-form .full-width {
+  grid-column: 1 / -1;
+}
+
+.batch-form-note {
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: #f6faf6;
+  color: #58675e;
+}
+
+.batch-form-note strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #245c42;
+  font-size: 12px;
+}
+
+.batch-form-note p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.batch-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.batch-record-list {
+  display: grid;
+  gap: 14px;
+}
+
+.batch-record-card {
+  border: 1px solid #e2e9e4;
+  border-radius: 20px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.batch-record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 16px;
+  background: #f6faf6;
+  border-bottom: 1px solid #e5ece6;
+}
+
+.batch-record-header strong {
+  display: block;
+  color: #1d2b23;
+  font-size: 15px;
+}
+
+.batch-record-header span {
+  display: block;
+  margin-top: 3px;
+  color: #627168;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.batch-status-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #245c42;
+  background: #e7f3ea;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.batch-record-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.batch-record-grid div {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8faf8;
+}
+
+.batch-record-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: #7a857e;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.batch-record-grid strong {
+  display: block;
+  color: #1d2b23;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.batch-notes {
+  margin: 0;
+  padding: 0 16px 16px;
+  color: #627168;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1000px) {
+  .batch-date-panel,
+  .batch-section-header,
+  .batch-record-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .batch-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .batch-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .batch-record-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .next-batch-card {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+@media (max-width: 620px) {
+  .batch-summary-grid,
+  .batch-form,
+  .batch-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-heading-actions {
+    width: 100%;
+  }
+
+  .batch-heading-actions button {
+    flex: 1;
+  }
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .batch-heading-actions,
+  .batch-date-panel,
+  .batch-summary-grid,
+  .create-batch-panel {
+    display: none !important;
+  }
+
+  .admin-main,
+  .page-container {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .panel {
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .batch-record-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

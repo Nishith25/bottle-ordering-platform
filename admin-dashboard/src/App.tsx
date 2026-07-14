@@ -10,6 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
 import DeliveryLayout from "./layout/DeliveryLayout";
 
+import BatchRegisterPage from "./pages/BatchRegisterPage";
 import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
@@ -85,6 +86,13 @@ export default function App() {
               path="/production-plan"
               element={
                 <ProductionPlanPage />
+              }
+            />
+
+            <Route
+              path="/batch-register"
+              element={
+                <BatchRegisterPage />
               }
             />
 

@@ -9,6 +9,7 @@ const morgan = require("morgan");
 const connectDB = require("./config/db");
 
 const adminRoutes = require("./routes/admin");
+const adminBatchRoutes = require("./routes/adminBatches");
 const adminCouponRoutes = require("./routes/adminCoupons");
 const adminDeliveryPartnerRoutes = require(
   "./routes/adminDeliveryPartners"
@@ -450,6 +451,11 @@ app.use(
 app.use(
   "/api/admin/coupons",
   adminCouponRoutes
+);
+
+app.use(
+  "/api/admin/batches",
+  adminBatchRoutes
 );
 
 app.use(
