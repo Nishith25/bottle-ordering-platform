@@ -66,6 +66,12 @@ type RefundStatus =
   | "processed"
   | "failed";
 
+type OrderFilter =
+  | "all"
+  | "active"
+  | "delivered"
+  | "cancelled";
+
 type RefundAwareOrder =
   CustomerOrder & {
     paymentGateway?:
@@ -125,6 +131,28 @@ const DELIVERY_STATUS_LABELS: Record<
   cancelled:
     "Delivery cancelled",
 };
+
+const ORDER_FILTERS: Array<{
+  key: OrderFilter;
+  label: string;
+}> = [
+  {
+    key: "all",
+    label: "All",
+  },
+  {
+    key: "active",
+    label: "Active",
+  },
+  {
+    key: "delivered",
+    label: "Delivered",
+  },
+  {
+    key: "cancelled",
+    label: "Cancelled",
+  },
+];
 
 function normalizeText(
   value: unknown
@@ -206,6 +234,72 @@ function getTrackingButtonLabel(
   }
 
   return "Track delivery";
+}
+
+function filterOrder(
+  order: RefundAwareOrder,
+  filter: OrderFilter
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "delivered") {
+    return (
+      order.orderStatus ===
+      "delivered"
+    );
+  }
+
+  if (filter === "cancelled") {
+    return (
+      order.orderStatus ===
+      "cancelled"
+    );
+  }
+
+  return [
+    "placed",
+    "confirmed",
+    "preparing",
+    "out_for_delivery",
+  ].includes(order.orderStatus);
+}
+
+function getEmptyFilterTitle(
+  filter: OrderFilter
+) {
+  if (filter === "active") {
+    return "No active orders";
+  }
+
+  if (filter === "delivered") {
+    return "No delivered orders";
+  }
+
+  if (filter === "cancelled") {
+    return "No cancelled orders";
+  }
+
+  return "No orders yet";
+}
+
+function getEmptyFilterDescription(
+  filter: OrderFilter
+) {
+  if (filter === "active") {
+    return "Placed, confirmed and out-for-delivery orders will appear here.";
+  }
+
+  if (filter === "delivered") {
+    return "Completed orders will appear here.";
+  }
+
+  if (filter === "cancelled") {
+    return "Cancelled and refunded orders will appear here.";
+  }
+
+  return "Your first bottle order will appear here.";
 }
 
 function findMatchingProduct(
@@ -297,6 +391,14 @@ export default function OrdersScreen() {
   } = useOrders();
 
   const [
+    orderFilter,
+    setOrderFilter,
+  ] =
+    useState<OrderFilter>(
+      "all"
+    );
+
+  const [
     reviews,
     setReviews,
   ] = useState<OrderReview[]>(
@@ -335,6 +437,63 @@ export default function OrdersScreen() {
   ] = useState<string | null>(
     null
   );
+
+  const filteredOrders =
+    useMemo(
+      () =>
+        (
+          orders as RefundAwareOrder[]
+        ).filter((order) =>
+          filterOrder(
+            order,
+            orderFilter
+          )
+        ),
+      [
+        orders,
+        orderFilter,
+      ]
+    );
+
+  const filterCounts =
+    useMemo(() => {
+      const allOrders =
+        orders as RefundAwareOrder[];
+
+      return {
+        all:
+          allOrders.length,
+
+        active:
+          allOrders.filter(
+            (order) =>
+              filterOrder(
+                order,
+                "active"
+              )
+          ).length,
+
+        delivered:
+          allOrders.filter(
+            (order) =>
+              filterOrder(
+                order,
+                "delivered"
+              )
+          ).length,
+
+        cancelled:
+          allOrders.filter(
+            (order) =>
+              filterOrder(
+                order,
+                "cancelled"
+              )
+          ).length,
+      };
+    }, [
+      orders,
+    ]);
 
   const reviewsByOrderId =
     useMemo(() => {
@@ -814,6 +973,62 @@ export default function OrdersScreen() {
         </Text>
       </View>
 
+      <View style={styles.filterContainer}>
+        {ORDER_FILTERS.map(
+          (filter) => {
+            const active =
+              orderFilter ===
+              filter.key;
+
+            return (
+              <Pressable
+                key={filter.key}
+                onPress={() =>
+                  setOrderFilter(
+                    filter.key
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.filterChip,
+
+                  active &&
+                    styles.filterChipActive,
+
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+
+                    active &&
+                      styles.filterTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+
+                <Text
+                  style={[
+                    styles.filterCount,
+
+                    active &&
+                      styles.filterCountActive,
+                  ]}
+                >
+                  {
+                    filterCounts[
+                      filter.key
+                    ]
+                  }
+                </Text>
+              </Pressable>
+            );
+          }
+        )}
+      </View>
+
       {error || reviewError ? (
         <View
           style={styles.errorCard}
@@ -833,9 +1048,7 @@ export default function OrdersScreen() {
       ) : null}
 
       <FlatList
-        data={
-          orders as RefundAwareOrder[]
-        }
+        data={filteredOrders}
         keyExtractor={(order) =>
           order._id
         }
@@ -850,7 +1063,8 @@ export default function OrdersScreen() {
           false
         }
         contentContainerStyle={
-          orders.length === 0
+          filteredOrders.length ===
+          0
             ? styles.emptyListContent
             : styles.listContent
         }
@@ -871,7 +1085,9 @@ export default function OrdersScreen() {
             <Text
               style={styles.stateTitle}
             >
-              No orders yet
+              {getEmptyFilterTitle(
+                orderFilter
+              )}
             </Text>
 
             <Text
@@ -879,31 +1095,35 @@ export default function OrdersScreen() {
                 styles.stateDescription
               }
             >
-              Your first bottle order
-              will appear here.
+              {getEmptyFilterDescription(
+                orderFilter
+              )}
             </Text>
 
-            <Pressable
-              onPress={() =>
-                router.push(
-                  "/(tabs)/bottles"
-                )
-              }
-              style={({ pressed }) => [
-                styles.loginButton,
-
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.loginButtonText
+            {orderFilter ===
+            "all" ? (
+              <Pressable
+                onPress={() =>
+                  router.push(
+                    "/(tabs)/bottles"
+                  )
                 }
+                style={({ pressed }) => [
+                  styles.loginButton,
+
+                  pressed &&
+                    styles.pressed,
+                ]}
               >
-                Browse bottles
-              </Text>
-            </Pressable>
+                <Text
+                  style={
+                    styles.loginButtonText
+                  }
+                >
+                  Browse bottles
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => {
@@ -1919,7 +2139,7 @@ const styles =
     header: {
       paddingHorizontal: 20,
       paddingTop: 13,
-      paddingBottom: 18,
+      paddingBottom: 14,
     },
 
     eyebrow: {
@@ -1942,6 +2162,65 @@ const styles =
       fontSize: 12,
       lineHeight: 19,
       marginTop: 7,
+    },
+
+    filterContainer: {
+      paddingHorizontal: 20,
+      paddingBottom: 12,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+
+    filterChip: {
+      minHeight: 38,
+      paddingHorizontal: 13,
+      borderRadius: 14,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E1E7E2",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+    },
+
+    filterChipActive: {
+      backgroundColor:
+        "#245C42",
+      borderColor:
+        "#245C42",
+    },
+
+    filterText: {
+      color: "#5F6F66",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    filterTextActive: {
+      color: "#FFFFFF",
+    },
+
+    filterCount: {
+      minWidth: 20,
+      overflow: "hidden",
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 999,
+      backgroundColor:
+        "#E8F0EA",
+      color: "#245C42",
+      fontSize: 9,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+
+    filterCountActive: {
+      backgroundColor:
+        "rgba(255,255,255,0.18)",
+      color: "#FFFFFF",
     },
 
     listContent: {
