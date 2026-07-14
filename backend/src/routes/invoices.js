@@ -858,10 +858,6 @@ function buildInvoiceHtml(invoice) {
         gap: 20px;
       }
 
-      table {
-        table-layout: fixed;
-      }
-
       th {
         padding: 10px 6px;
         font-size: 9px;
@@ -999,7 +995,7 @@ function buildInvoiceHtml(invoice) {
 
 <body>
   <div class="print-actions">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button id="printButton" type="button">Print / Save as PDF</button>
   </div>
 
   <main class="invoice-page">
@@ -1079,6 +1075,16 @@ function buildInvoiceHtml(invoice) {
       <strong>Note:</strong> Keep refrigerated at 0–4°C. Consume fresh as instructed on the bottle. This invoice is system generated.
     </footer>
   </main>
+
+  <script>
+    document.getElementById("printButton").addEventListener("click", function () {
+      if (typeof window.print === "function") {
+        window.print();
+      } else {
+        alert("Print is not available in this browser. Use the browser share menu to save or print this invoice.");
+      }
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -1249,6 +1255,11 @@ router.get(
       res.setHeader(
         "Content-Type",
         "text/html; charset=utf-8"
+      );
+
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';"
       );
 
       return res.status(200).send(
