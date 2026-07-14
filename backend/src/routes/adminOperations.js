@@ -104,14 +104,92 @@ function getCustomerPhone(order) {
   );
 }
 
+function formatMinutesToTime(minutes) {
+  const numberValue =
+    Number(minutes);
+
+  if (
+    !Number.isFinite(numberValue) ||
+    numberValue < 0
+  ) {
+    return "";
+  }
+
+  const hours =
+    Math.floor(numberValue / 60);
+
+  const mins =
+    numberValue % 60;
+
+  const suffix =
+    hours >= 12 ? "PM" : "AM";
+
+  const hour12 =
+    hours % 12 || 12;
+
+  return `${hour12}:${String(mins).padStart(2, "0")} ${suffix}`;
+}
+
 function getDeliverySlotLabel(order) {
-  return (
-    cleanText(order.deliverySchedule?.slotLabel) ||
-    cleanText(order.deliverySchedule?.deliverySlotLabel) ||
-    cleanText(order.deliverySchedule?.slot) ||
-    cleanText(order.deliverySlotLabel) ||
-    "Slot not selected"
-  );
+  const schedule =
+    order.deliverySchedule || {};
+
+  const directLabel =
+    cleanText(schedule.slotLabel) ||
+    cleanText(schedule.deliverySlotLabel) ||
+    cleanText(schedule.label) ||
+    cleanText(schedule.slotName) ||
+    cleanText(order.deliverySlotLabel);
+
+  if (directLabel) {
+    return directLabel;
+  }
+
+  const nestedSlot =
+    schedule.slot &&
+    typeof schedule.slot === "object"
+      ? schedule.slot
+      : null;
+
+  const nestedLabel =
+    cleanText(nestedSlot?.label) ||
+    cleanText(nestedSlot?.slotLabel) ||
+    cleanText(nestedSlot?.name);
+
+  if (nestedLabel) {
+    return nestedLabel;
+  }
+
+  const startMinutes =
+    schedule.startMinutes ??
+    schedule.deliverySlotStartMinutes ??
+    nestedSlot?.startMinutes;
+
+  const endMinutes =
+    schedule.endMinutes ??
+    schedule.deliverySlotEndMinutes ??
+    nestedSlot?.endMinutes;
+
+  const startLabel =
+    formatMinutesToTime(startMinutes);
+
+  const endLabel =
+    formatMinutesToTime(endMinutes);
+
+  if (startLabel && endLabel) {
+    return `${startLabel} – ${endLabel}`;
+  }
+
+  const slotCode =
+    cleanText(schedule.slotCode) ||
+    cleanText(schedule.deliverySlotCode) ||
+    cleanText(nestedSlot?.code);
+
+  if (slotCode) {
+    return slotCode;
+  }
+
+  return "Slot not selected";
 }
 
 function getDeliveryDateId(order) {
