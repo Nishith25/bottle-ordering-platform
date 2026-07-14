@@ -10,6 +10,7 @@ import {
 import {
   Alert,
   FlatList,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -42,6 +43,10 @@ import {
   createOrderReview,
   fetchMyOrderReviews,
 } from "../../services/api";
+
+import {
+  createCustomerInvoicePrintLink,
+} from "../../services/customerInvoicesApi";
 
 import type {
   CreateOrderReviewInput,
@@ -242,7 +247,7 @@ function findMatchingProduct(
   );
 }
 
-function showReorderAlert(
+function showSimpleAlert(
   title: string,
   message: string
 ) {
@@ -313,6 +318,13 @@ export default function OrdersScreen() {
   const [
     reorderingOrderId,
     setReorderingOrderId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    invoiceOrderId,
+    setInvoiceOrderId,
   ] = useState<string | null>(
     null
   );
@@ -410,6 +422,57 @@ export default function OrdersScreen() {
     });
   };
 
+  const handleOpenInvoice =
+    async (
+      order: RefundAwareOrder
+    ) => {
+      if (
+        !token ||
+        invoiceOrderId
+      ) {
+        return;
+      }
+
+      setInvoiceOrderId(
+        order._id
+      );
+
+      try {
+        const invoiceUrl =
+          await createCustomerInvoicePrintLink(
+            token,
+            order.orderNumber ||
+              order._id
+          );
+
+        const supported =
+          await Linking.canOpenURL(
+            invoiceUrl
+          );
+
+        if (!supported) {
+          throw new Error(
+            "Unable to open invoice link on this device."
+          );
+        }
+
+        await Linking.openURL(
+          invoiceUrl
+        );
+      } catch (requestError) {
+        showSimpleAlert(
+          "Unable to open invoice",
+          requestError instanceof Error
+            ? requestError.message
+            : "Please try again."
+        );
+      } finally {
+        setInvoiceOrderId(
+          null
+        );
+      }
+    };
+
   const handleReorder =
     async (
       order: RefundAwareOrder
@@ -434,7 +497,7 @@ export default function OrdersScreen() {
           products.length ===
           0
         ) {
-          showReorderAlert(
+          showSimpleAlert(
             "Unable to reorder",
             "Live product list is still loading. Please try again in a few seconds."
           );
@@ -497,7 +560,7 @@ export default function OrdersScreen() {
           result.addedQuantity <=
           0
         ) {
-          showReorderAlert(
+          showSimpleAlert(
             "Could not add items",
             "None of the previous order items are currently available in live stock."
           );
@@ -526,7 +589,7 @@ export default function OrdersScreen() {
           );
         }
 
-        showReorderAlert(
+        showSimpleAlert(
           "Order added to cart",
           messageParts.join("\n")
         );
@@ -868,6 +931,10 @@ export default function OrdersScreen() {
             reorderingOrderId ===
             item._id;
 
+          const isOpeningInvoice =
+            invoiceOrderId ===
+            item._id;
+
           return (
             <View
               style={styles.orderCard}
@@ -1101,6 +1168,45 @@ export default function OrdersScreen() {
                     {isReordering
                       ? "Adding..."
                       : "Order again"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={
+                    isOpeningInvoice
+                  }
+                  onPress={() => {
+                    void handleOpenInvoice(
+                      item
+                    );
+                  }}
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.invoiceButton,
+
+                    isOpeningInvoice &&
+                      styles.reorderButtonDisabled,
+
+                    pressed &&
+                      !isOpeningInvoice &&
+                      styles.pressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="document-text-outline"
+                    size={17}
+                    color="#245C42"
+                  />
+
+                  <Text
+                    style={
+                      styles.invoiceButtonText
+                    }
+                  >
+                    {isOpeningInvoice
+                      ? "Opening..."
+                      : "Invoice"}
                   </Text>
                 </Pressable>
               </View>
@@ -2039,6 +2145,7 @@ const styles =
       marginTop: 13,
       flexDirection: "row",
       alignItems: "center",
+      flexWrap: "wrap",
       gap: 10,
     },
 
@@ -2058,11 +2165,33 @@ const styles =
       gap: 8,
     },
 
+    invoiceButton: {
+      minHeight: 43,
+      paddingHorizontal: 15,
+      borderRadius: 14,
+      backgroundColor:
+        "#F2F7F3",
+      borderWidth: 1,
+      borderColor:
+        "#D5E5DA",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 8,
+    },
+
     reorderButtonDisabled: {
       opacity: 0.6,
     },
 
     reorderButtonText: {
+      color: "#245C42",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    invoiceButtonText: {
       color: "#245C42",
       fontSize: 10,
       fontWeight: "900",
