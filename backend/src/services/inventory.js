@@ -1,4 +1,5 @@
 const Product = require("../models/Product");
+const InventoryMovement = require("../models/InventoryMovement");
 
 function createInventoryError(message, statusCode = 409) {
   const error = new Error(message);
@@ -7,12 +8,40 @@ function createInventoryError(message, statusCode = 409) {
   return error;
 }
 
-/*
- * A completed Order stores items in order.items.
- *
- * A pending Razorpay PaymentSession stores items in:
- * paymentSession.orderDraft.items.
- */
+function cleanText(value) {
+  return String(value ?? "").trim();
+}
+
+function getObjectId(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value._id) {
+    return value._id;
+  }
+
+  return value;
+}
+
+function getActorSnapshot(actor) {
+  if (!actor) {
+    return null;
+  }
+
+  return {
+    fullName:
+      cleanText(actor.fullName) ||
+      cleanText(actor.name),
+
+    email:
+      cleanText(actor.email).toLowerCase(),
+
+    role:
+      cleanText(actor.role),
+  };
+}
+
 function getInventoryItems(record) {
   if (Array.isArray(record?.items)) {
     return record.items;
@@ -25,17 +54,122 @@ function getInventoryItems(record) {
   return [];
 }
 
+function inferRecordSource(record) {
+  if (record?.orderNumber) {
+    return {
+      sourceType: "order",
+      source: "order",
+      order: getObjectId(record),
+      orderNumber: cleanText(record.orderNumber),
+      paymentSession: null,
+    };
+  }
+
+  if (
+    record?.razorpayOrderId ||
+    record?.orderDraft
+  ) {
+    return {
+      sourceType: "payment_session",
+      source: "payment_session",
+      order: null,
+      orderNumber: "",
+      paymentSession: getObjectId(record),
+    };
+  }
+
+  return {
+    sourceType: "system",
+    source: "system",
+    order: null,
+    orderNumber: "",
+    paymentSession: null,
+  };
+}
+
+async function createInventoryMovement({
+  product,
+  movementType,
+  direction,
+  quantityChange,
+  stockBefore,
+  stockAfter,
+  lowStockThresholdBefore = null,
+  lowStockThresholdAfter = null,
+  source = "",
+  sourceType = "",
+  order = null,
+  orderNumber = "",
+  paymentSession = null,
+  actor = null,
+  reason = "",
+  metadata = {},
+  session,
+}) {
+  await InventoryMovement.create(
+    [
+      {
+        product:
+          product._id,
+
+        productId:
+          product.productId,
+
+        productName:
+          product.name,
+
+        movementType,
+        direction,
+        quantityChange,
+        stockBefore,
+        stockAfter,
+        lowStockThresholdBefore,
+        lowStockThresholdAfter,
+        source,
+        sourceType,
+        order,
+        orderNumber,
+        paymentSession,
+        actor:
+          actor?._id ||
+          actor ||
+          null,
+
+        actorSnapshot:
+          getActorSnapshot(actor),
+
+        reason:
+          cleanText(reason),
+
+        metadata,
+      },
+    ],
+    {
+      session,
+    }
+  );
+}
+
 async function reserveProductInventory({
   products,
   quantitiesByProductId,
   session,
+  source = "stock_reserved",
+  sourceType = "system",
+  actor = null,
+  reason = "Stock reserved for checkout.",
+  metadata = {},
 }) {
   for (const product of products) {
-    const quantity = quantitiesByProductId.get(
-      product.productId
-    );
+    const quantity =
+      quantitiesByProductId.get(
+        product.productId
+      );
 
-    if (!Number.isInteger(quantity) || quantity < 1) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1
+    ) {
       throw createInventoryError(
         `Invalid quantity for ${product.name}.`
       );
@@ -55,48 +189,90 @@ async function reserveProductInventory({
       );
     }
 
-    const result = await Product.updateOne(
-      {
-        _id: product._id,
-        available: true,
-        stockQuantity: {
-          $gte: quantity,
+    const stockBeforeProduct =
+      await Product.findOneAndUpdate(
+        {
+          _id: product._id,
+          available: true,
+
+          stockQuantity: {
+            $gte: quantity,
+          },
         },
-      },
 
-      {
-        $inc: {
-          stockQuantity: -quantity,
+        {
+          $inc: {
+            stockQuantity:
+              -quantity,
+          },
         },
-      },
 
-      {
-        session,
-      }
-    );
+        {
+          new: false,
+          session,
+        }
+      );
 
-    if (result.modifiedCount !== 1) {
+    if (!stockBeforeProduct) {
       throw createInventoryError(
         `${product.name} stock changed while the order was being placed. Please refresh your cart and try again.`
       );
     }
+
+    const stockBefore =
+      Number(
+        stockBeforeProduct.stockQuantity ??
+          0
+      );
+
+    const stockAfter =
+      stockBefore - quantity;
+
+    await createInventoryMovement({
+      product:
+        stockBeforeProduct,
+
+      movementType:
+        "reserve",
+
+      direction:
+        "out",
+
+      quantityChange:
+        -quantity,
+
+      stockBefore,
+      stockAfter,
+
+      lowStockThresholdBefore:
+        stockBeforeProduct.lowStockThreshold,
+
+      lowStockThresholdAfter:
+        stockBeforeProduct.lowStockThreshold,
+
+      source,
+      sourceType,
+      actor,
+      reason,
+
+      metadata: {
+        ...metadata,
+        quantity,
+      },
+
+      session,
+    });
   }
 }
 
-/**
- * Restores stock that was reserved for an Order or PaymentSession.
- *
- * Idempotency is provided by:
- *
- * - inventoryReserved
- * - inventoryRestored
- *
- * The caller must save the record inside the same MongoDB transaction
- * after this function updates those fields.
- */
 async function restoreOrderInventory({
   order,
   session,
+  source = "",
+  sourceType = "",
+  actor = null,
+  reason = "",
+  metadata = {},
 }) {
   if (!order?.inventoryReserved) {
     return false;
@@ -115,7 +291,8 @@ async function restoreOrderInventory({
     );
   }
 
-  const quantitiesByProduct = new Map();
+  const quantitiesByProduct =
+    new Map();
 
   for (const item of items) {
     const productId = String(
@@ -124,7 +301,8 @@ async function restoreOrderInventory({
         ""
     ).trim();
 
-    const quantity = Number(item?.quantity);
+    const quantity =
+      Number(item?.quantity);
 
     if (
       !productId ||
@@ -139,48 +317,126 @@ async function restoreOrderInventory({
 
     quantitiesByProduct.set(
       productId,
-      (quantitiesByProduct.get(productId) || 0) + quantity
+
+      (quantitiesByProduct.get(
+        productId
+      ) || 0) + quantity
     );
   }
 
-  const operations = [
-    ...quantitiesByProduct.entries(),
-  ].map(([productId, quantity]) => ({
-    updateOne: {
-      filter: {
-        _id: productId,
-      },
+  const inferredSource =
+    inferRecordSource(order);
 
-      update: {
-        $inc: {
-          stockQuantity: quantity,
+  const movementSource =
+    source ||
+    `${
+      inferredSource.source
+    }_stock_restored`;
+
+  const movementSourceType =
+    sourceType ||
+    inferredSource.sourceType;
+
+  const movementReason =
+    cleanText(reason) ||
+    cleanText(
+      order.cancellationReason
+    ) ||
+    cleanText(
+      order.failureReason
+    ) ||
+    "Reserved stock restored.";
+
+  for (const [
+    productId,
+    quantity,
+  ] of quantitiesByProduct.entries()) {
+    const productBefore =
+      await Product.findByIdAndUpdate(
+        productId,
+
+        {
+          $inc: {
+            stockQuantity:
+              quantity,
+          },
         },
-      },
-    },
-  }));
 
-  if (operations.length > 0) {
-    const result = await Product.bulkWrite(
-      operations,
-      {
-        session,
-        ordered: true,
-      }
-    );
+        {
+          new: false,
+          session,
+        }
+      );
 
-    const matchedCount =
-      Number(result.matchedCount ?? result.nMatched ?? 0);
-
-    if (matchedCount !== operations.length) {
+    if (!productBefore) {
       throw createInventoryError(
         "One or more reserved products could not be found while restoring stock.",
         500
       );
     }
+
+    const stockBefore =
+      Number(
+        productBefore.stockQuantity ??
+          0
+      );
+
+    const stockAfter =
+      stockBefore + quantity;
+
+    await createInventoryMovement({
+      product:
+        productBefore,
+
+      movementType:
+        "restore",
+
+      direction:
+        "in",
+
+      quantityChange:
+        quantity,
+
+      stockBefore,
+      stockAfter,
+
+      lowStockThresholdBefore:
+        productBefore.lowStockThreshold,
+
+      lowStockThresholdAfter:
+        productBefore.lowStockThreshold,
+
+      source:
+        movementSource,
+
+      sourceType:
+        movementSourceType,
+
+      order:
+        inferredSource.order,
+
+      orderNumber:
+        inferredSource.orderNumber,
+
+      paymentSession:
+        inferredSource.paymentSession,
+
+      actor,
+      reason:
+        movementReason,
+
+      metadata: {
+        ...metadata,
+        quantity,
+      },
+
+      session,
+    });
   }
 
   order.inventoryRestored = true;
-  order.inventoryRestoredAt = new Date();
+  order.inventoryRestoredAt =
+    new Date();
 
   return true;
 }

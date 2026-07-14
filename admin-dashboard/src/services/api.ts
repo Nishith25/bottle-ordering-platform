@@ -93,6 +93,78 @@ export type AdminProduct = {
   updatedAt: string;
 };
 
+export type AdminInventoryMovement = {
+  _id: string;
+  product: string;
+  productId: string;
+  productName: string;
+
+  movementType:
+    | "reserve"
+    | "restore"
+    | "manual_adjustment"
+    | "manual_set"
+    | "threshold_update";
+
+  direction:
+    | "in"
+    | "out"
+    | "neutral";
+
+  quantityChange: number;
+  stockBefore: number;
+  stockAfter: number;
+  lowStockThresholdBefore:
+    | number
+    | null;
+
+  lowStockThresholdAfter:
+    | number
+    | null;
+
+  source: string;
+
+  sourceType:
+    | ""
+    | "admin"
+    | "order"
+    | "payment_session"
+    | "system";
+
+  order:
+    | string
+    | null;
+
+  orderNumber: string;
+
+  paymentSession:
+    | string
+    | null;
+
+  actor:
+    | string
+    | {
+        _id: string;
+        fullName?: string;
+        email?: string;
+        role?: string;
+      }
+    | null;
+
+  actorSnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  reason: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProductPayload = {
   productId: string;
   name: string;
@@ -233,6 +305,16 @@ type ProductResponse =
     };
   };
 
+type InventoryMovementsResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      movements:
+        AdminInventoryMovement[];
+    };
+  };
+
 type DeliverySlotsResponse =
   ApiBaseResponse & {
     count: number;
@@ -284,6 +366,68 @@ function normaliseProduct(
 
     sortOrder:
       product.sortOrder ?? 0,
+  };
+}
+
+function normaliseMovement(
+  movement: AdminInventoryMovement
+): AdminInventoryMovement {
+  return {
+    ...movement,
+
+    quantityChange:
+      Number(
+        movement.quantityChange ??
+          0
+      ),
+
+    stockBefore:
+      Number(
+        movement.stockBefore ??
+          0
+      ),
+
+    stockAfter:
+      Number(
+        movement.stockAfter ??
+          0
+      ),
+
+    lowStockThresholdBefore:
+      movement.lowStockThresholdBefore ===
+        null ||
+      movement.lowStockThresholdBefore ===
+        undefined
+        ? null
+        : Number(
+            movement.lowStockThresholdBefore
+          ),
+
+    lowStockThresholdAfter:
+      movement.lowStockThresholdAfter ===
+        null ||
+      movement.lowStockThresholdAfter ===
+        undefined
+        ? null
+        : Number(
+            movement.lowStockThresholdAfter
+          ),
+
+    productName:
+      movement.productName ||
+      movement.productId,
+
+    reason:
+      movement.reason ?? "",
+
+    source:
+      movement.source ?? "",
+
+    orderNumber:
+      movement.orderNumber ?? "",
+
+    metadata:
+      movement.metadata ?? {},
   };
 }
 
@@ -347,18 +491,19 @@ async function apiRequest<T>(
   }
 
   try {
-    const response = await fetch(
-      `${API_BASE_URL}${path}`,
-      {
-        ...requestOptions,
+    const response =
+      await fetch(
+        `${API_BASE_URL}${path}`,
+        {
+          ...requestOptions,
 
-        headers:
-          requestHeaders,
+          headers:
+            requestHeaders,
 
-        signal:
-          controller.signal,
-      }
-    );
+          signal:
+            controller.signal,
+        }
+      );
 
     const responseText =
       await response.text();
@@ -367,14 +512,16 @@ async function apiRequest<T>(
       T & ApiBaseResponse;
 
     try {
-      payload = responseText
-        ? JSON.parse(
-            responseText
-          )
-        : ({
-            success:
-              response.ok,
-          } as T & ApiBaseResponse);
+      payload =
+        responseText
+          ? JSON.parse(
+              responseText
+            )
+          : ({
+              success:
+                response.ok,
+            } as T &
+              ApiBaseResponse);
     } catch {
       throw new Error(
         "The server returned an invalid response."
@@ -570,6 +717,53 @@ export async function fetchAdminProducts(
 
   return response.data.products.map(
     normaliseProduct
+  );
+}
+
+export async function fetchAdminInventoryMovements(
+  token: string,
+  options: {
+    productId?: string;
+    limit?: number;
+  } = {}
+): Promise<AdminInventoryMovement[]> {
+  requireToken(token);
+
+  const params =
+    new URLSearchParams();
+
+  if (
+    options.productId &&
+    options.productId !== "all"
+  ) {
+    params.set(
+      "productId",
+      options.productId
+    );
+  }
+
+  if (options.limit) {
+    params.set(
+      "limit",
+      String(options.limit)
+    );
+  }
+
+  const query =
+    params.toString();
+
+  const response =
+    await apiRequest<InventoryMovementsResponse>(
+      `/api/admin/inventory/movements${
+        query ? `?${query}` : ""
+      }`,
+      {
+        token,
+      }
+    );
+
+  return response.data.movements.map(
+    normaliseMovement
   );
 }
 
@@ -784,36 +978,25 @@ export async function fetchAdminDeliverySlots(
     "includeInactive",
     String(
       options.includeInactive ??
-      true
+        true
     )
   );
 
   const cleanPincode =
     String(
-      options.pincode ??
-      ""
+      options.pincode ?? ""
     )
-      .replace(
-        /\D/g,
-        ""
-      )
-      .slice(
-        0,
-        6
-      );
+      .replace(/\D/g, "")
+      .slice(0, 6);
 
-  if (
-    cleanPincode
-  ) {
+  if (cleanPincode) {
     searchParams.set(
       "pincode",
       cleanPincode
     );
   }
 
-  if (
-    options.date
-  ) {
+  if (options.date) {
     searchParams.set(
       "date",
       options.date
@@ -839,8 +1022,7 @@ export async function fetchAdminDeliverySlots(
 
 export async function createAdminDeliverySlot(
   token: string,
-  payload:
-    AdminDeliverySlotPayload
+  payload: AdminDeliverySlotPayload
 ): Promise<AdminDeliverySlotConfiguration> {
   requireToken(token);
 
@@ -869,9 +1051,7 @@ export async function updateAdminDeliverySlot(
 ): Promise<AdminDeliverySlotConfiguration> {
   requireToken(token);
 
-  if (
-    !slotId.trim()
-  ) {
+  if (!slotId.trim()) {
     throw new Error(
       "Delivery-slot ID is missing."
     );
@@ -902,9 +1082,7 @@ export async function disableAdminDeliverySlot(
 ): Promise<AdminDeliverySlotConfiguration> {
   requireToken(token);
 
-  if (
-    !slotId.trim()
-  ) {
+  if (!slotId.trim()) {
     throw new Error(
       "Delivery-slot ID is missing."
     );

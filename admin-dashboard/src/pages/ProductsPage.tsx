@@ -14,8 +14,10 @@ import {
   adjustAdminProductStock,
   archiveAdminProduct,
   createAdminProduct,
+  fetchAdminInventoryMovements,
   fetchAdminProducts,
   updateAdminProduct,
+  type AdminInventoryMovement,
   type AdminProduct,
   type ProductCategory,
   type ProductPayload,
@@ -94,6 +96,117 @@ function getStockState(
   };
 }
 
+function formatMovementType(
+  movementType:
+    AdminInventoryMovement["movementType"]
+) {
+  const labels: Record<
+    AdminInventoryMovement["movementType"],
+    string
+  > = {
+    reserve:
+      "Stock reserved",
+
+    restore:
+      "Stock restored",
+
+    manual_adjustment:
+      "Manual adjustment",
+
+    manual_set:
+      "Manual stock set",
+
+    threshold_update:
+      "Threshold updated",
+  };
+
+  return labels[movementType];
+}
+
+function formatMovementDate(
+  value: string
+) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }
+  ).format(new Date(value));
+}
+
+function formatQuantityChange(
+  value: number
+) {
+  if (value > 0) {
+    return `+${value}`;
+  }
+
+  return String(value);
+}
+
+function getMovementClass(
+  movement: AdminInventoryMovement
+) {
+  if (
+    movement.quantityChange > 0
+  ) {
+    return "movement-in";
+  }
+
+  if (
+    movement.quantityChange < 0
+  ) {
+    return "movement-out";
+  }
+
+  return "movement-neutral";
+}
+
+function getActorName(
+  movement: AdminInventoryMovement
+) {
+  if (
+    movement.actorSnapshot?.fullName
+  ) {
+    return movement.actorSnapshot.fullName;
+  }
+
+  if (
+    movement.actor &&
+    typeof movement.actor ===
+      "object" &&
+    movement.actor.fullName
+  ) {
+    return movement.actor.fullName;
+  }
+
+  if (
+    movement.sourceType === "admin"
+  ) {
+    return "Admin";
+  }
+
+  if (
+    movement.sourceType === "order"
+  ) {
+    return "Order";
+  }
+
+  if (
+    movement.sourceType ===
+    "payment_session"
+  ) {
+    return "Payment session";
+  }
+
+  return "System";
+}
+
 export default function ProductsPage() {
   const { token } =
     useAdminAuth();
@@ -101,8 +214,21 @@ export default function ProductsPage() {
   const [products, setProducts] =
     useState<AdminProduct[]>([]);
 
+  const [
+    movements,
+    setMovements,
+  ] =
+    useState<AdminInventoryMovement[]>(
+      []
+    );
+
   const [loading, setLoading] =
     useState(true);
+
+  const [
+    movementLoading,
+    setMovementLoading,
+  ] = useState(false);
 
   const [saving, setSaving] =
     useState(false);
@@ -110,11 +236,20 @@ export default function ProductsPage() {
   const [
     updatingProductId,
     setUpdatingProductId,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [error, setError] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    movementError,
+    setMovementError,
+  ] =
     useState<string | null>(
       null
     );
@@ -127,15 +262,21 @@ export default function ProductsPage() {
   const [search, setSearch] =
     useState("");
 
+  const [
+    historyProductId,
+    setHistoryProductId,
+  ] = useState("all");
+
   const [formOpen, setFormOpen] =
     useState(false);
 
   const [
     editingProductId,
     setEditingProductId,
-  ] = useState<
-    string | null
-  >(null);
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const [form, setForm] =
     useState<ProductFormState>(
@@ -170,9 +311,59 @@ export default function ProductsPage() {
       }
     }, [token]);
 
+  const loadMovements =
+    useCallback(
+      async (
+        selectedProductId =
+          historyProductId
+      ) => {
+        if (!token) {
+          return;
+        }
+
+        setMovementLoading(true);
+        setMovementError(null);
+
+        try {
+          const data =
+            await fetchAdminInventoryMovements(
+              token,
+              {
+                productId:
+                  selectedProductId ===
+                  "all"
+                    ? undefined
+                    : selectedProductId,
+
+                limit: 60,
+              }
+            );
+
+          setMovements(data);
+        } catch (requestError) {
+          setMovementError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to load stock history."
+          );
+        } finally {
+          setMovementLoading(false);
+        }
+      },
+      [
+        token,
+        historyProductId,
+      ]
+    );
+
   useEffect(() => {
     void loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    void loadMovements();
+  }, [loadMovements]);
 
   const filteredProducts =
     useMemo(() => {
@@ -521,6 +712,7 @@ export default function ProductsPage() {
 
       resetForm();
       await loadProducts();
+      await loadMovements();
     } catch (requestError) {
       setError(
         requestError instanceof
@@ -614,6 +806,7 @@ export default function ProductsPage() {
         );
 
         await loadProducts();
+        await loadMovements();
       } catch (requestError) {
         setError(
           requestError instanceof
@@ -678,6 +871,28 @@ export default function ProductsPage() {
       }
     };
 
+  const handleHistoryFilterChange =
+    (
+      productId: string
+    ) => {
+      setHistoryProductId(
+        productId
+      );
+
+      void loadMovements(
+        productId
+      );
+    };
+
+  const openHistoryForProduct =
+    (
+      product: AdminProduct
+    ) => {
+      handleHistoryFilterChange(
+        product.productId
+      );
+    };
+
   return (
     <div className="products-page">
       <div className="page-heading-row">
@@ -687,8 +902,7 @@ export default function ProductsPage() {
           </h2>
 
           <p>
-            Manage bottles, prices,
-            availability and live stock.
+            Manage bottles, prices, availability and live stock.
           </p>
         </div>
 
@@ -789,6 +1003,175 @@ export default function ProductsPage() {
         </button>
       </section>
 
+      <section className="panel inventory-history-panel">
+        <div className="inventory-history-header">
+          <div>
+            <h3>
+              Stock movement history
+            </h3>
+
+            <p>
+              Audit log for admin updates, order reservations and stock restoration.
+            </p>
+          </div>
+
+          <div className="inventory-history-controls">
+            <select
+              value={
+                historyProductId
+              }
+              onChange={(event) =>
+                handleHistoryFilterChange(
+                  event.target.value
+                )
+              }
+            >
+              <option value="all">
+                All bottles
+              </option>
+
+              {products.map(
+                (product) => (
+                  <option
+                    key={
+                      product.productId
+                    }
+                    value={
+                      product.productId
+                    }
+                  >
+                    {product.name}
+                  </option>
+                )
+              )}
+            </select>
+
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={
+                movementLoading
+              }
+              onClick={() => {
+                void loadMovements();
+              }}
+            >
+              {movementLoading
+                ? "Loading..."
+                : "Refresh history"}
+            </button>
+          </div>
+        </div>
+
+        {movementError ? (
+          <div className="inline-error compact-error">
+            {movementError}
+          </div>
+        ) : null}
+
+        {movementLoading &&
+        movements.length === 0 ? (
+          <div className="page-state compact">
+            <div className="spinner" />
+
+            <p>
+              Loading stock history
+            </p>
+          </div>
+        ) : movements.length ===
+          0 ? (
+          <div className="inventory-history-empty">
+            No stock movements recorded yet. New changes will appear here.
+          </div>
+        ) : (
+          <div className="inventory-history-list">
+            {movements.map(
+              (movement) => (
+                <article
+                  key={
+                    movement._id
+                  }
+                  className="inventory-history-item"
+                >
+                  <div className="inventory-history-main">
+                    <div
+                      className={`inventory-movement-badge ${getMovementClass(
+                        movement
+                      )}`}
+                    >
+                      {formatQuantityChange(
+                        movement.quantityChange
+                      )}
+                    </div>
+
+                    <div>
+                      <strong>
+                        {
+                          movement.productName
+                        }
+                      </strong>
+
+                      <span>
+                        {formatMovementType(
+                          movement.movementType
+                        )}
+                      </span>
+
+                      {movement.reason ? (
+                        <small>
+                          {
+                            movement.reason
+                          }
+                        </small>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="inventory-history-meta">
+                    <span>
+                      Stock:{" "}
+                      {
+                        movement.stockBefore
+                      }{" "}
+                      →{" "}
+                      {
+                        movement.stockAfter
+                      }
+                    </span>
+
+                    {movement.orderNumber ? (
+                      <span>
+                        Order:{" "}
+                        {
+                          movement.orderNumber
+                        }
+                      </span>
+                    ) : null}
+
+                    <span>
+                      By:{" "}
+                      {
+                        getActorName(
+                          movement
+                        )
+                      }
+                    </span>
+
+                    <span>
+                      {
+                        formatMovementDate(
+                          movement.createdAt
+                        )
+                      }
+                    </span>
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        )}
+      </section>
+
       <section className="panel product-table-panel">
         {loading &&
         products.length === 0 ? (
@@ -811,8 +1194,7 @@ export default function ProductsPage() {
             </h3>
 
             <p>
-              Add a bottle or change your
-              search.
+              Add a bottle or change your search.
             </p>
           </div>
         ) : (
@@ -1015,6 +1397,21 @@ export default function ProductsPage() {
                                     : "Show"}
                               </button>
 
+                              <button
+                                type="button"
+                                className="table-action"
+                                disabled={
+                                  isUpdating
+                                }
+                                onClick={() =>
+                                  openHistoryForProduct(
+                                    product
+                                  )
+                                }
+                              >
+                                History
+                              </button>
+
                               {product.available ? (
                                 <button
                                   type="button"
@@ -1146,8 +1543,7 @@ export default function ProductsPage() {
                     onChange={(event) =>
                       updateField(
                         "category",
-                        event.target
-                          .value as ProductCategory
+                        event.target.value as ProductCategory
                       )
                     }
                   >
@@ -1303,8 +1699,7 @@ export default function ProductsPage() {
 
                 <label className="form-field full-width">
                   <span>
-                    Ingredients, separated by
-                    commas
+                    Ingredients, separated by commas
                   </span>
 
                   <input
@@ -1423,11 +1818,7 @@ export default function ProductsPage() {
                 </strong>
 
                 <p>
-                  Visibility and stock are
-                  separate. A visible product
-                  with zero stock will appear
-                  as out of stock and cannot
-                  be added to the cart.
+                  Visibility and stock are separate. A visible product with zero stock will appear as out of stock and cannot be added to the cart.
                 </p>
               </div>
 
