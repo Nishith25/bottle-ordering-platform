@@ -560,14 +560,14 @@ function buildInvoiceHtml(invoice) {
       .map(
         (item, index) => `
           <tr>
-            <td>${index + 1}</td>
-            <td>
+            <td class="serial-cell">${index + 1}</td>
+            <td class="item-cell">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${item.sizeMl ? `${escapeHtml(item.sizeMl)} ml` : ""}</span>
             </td>
-            <td>${escapeHtml(item.quantity)}</td>
-            <td>${escapeHtml(formatCurrency(item.price))}</td>
-            <td>${escapeHtml(formatCurrency(item.lineTotal))}</td>
+            <td class="qty-cell">${escapeHtml(item.quantity)}</td>
+            <td class="money-cell">${escapeHtml(formatCurrency(item.price))}</td>
+            <td class="money-cell">${escapeHtml(formatCurrency(item.lineTotal))}</td>
           </tr>
         `
       )
@@ -578,23 +578,50 @@ function buildInvoiceHtml(invoice) {
 <head>
   <meta charset="utf-8" />
   <title>Invoice ${escapeHtml(invoice.invoiceNumber)}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
   <style>
     * {
       box-sizing: border-box;
     }
 
+    html,
     body {
+      width: 100%;
+      max-width: 100%;
       margin: 0;
-      padding: 24px;
+      overflow-x: hidden;
+    }
+
+    body {
+      padding: 16px;
       background: #f3f7f4;
       color: #17251d;
       font-family: Arial, Helvetica, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    .print-actions {
+      width: 100%;
+      max-width: 860px;
+      margin: 0 auto 12px;
+      text-align: right;
+    }
+
+    button {
+      min-height: 42px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 12px;
+      background: #155d3e;
+      color: #ffffff;
+      font-weight: 800;
+      cursor: pointer;
     }
 
     .invoice-page {
-      max-width: 900px;
+      width: 100%;
+      max-width: 860px;
       margin: 0 auto;
       background: #ffffff;
       border: 1px solid #dfe8e2;
@@ -604,8 +631,8 @@ function buildInvoiceHtml(invoice) {
     }
 
     .invoice-header {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 1fr auto;
       gap: 24px;
       padding: 28px;
       background: #0f3b26;
@@ -614,7 +641,9 @@ function buildInvoiceHtml(invoice) {
 
     .brand h1 {
       margin: 0 0 8px;
-      font-size: 28px;
+      font-size: 30px;
+      line-height: 1.1;
+      word-break: break-word;
     }
 
     .brand div {
@@ -630,12 +659,20 @@ function buildInvoiceHtml(invoice) {
 
     .invoice-title h2 {
       margin: 0 0 8px;
-      font-size: 24px;
+      font-size: 26px;
+      line-height: 1.1;
     }
 
     .invoice-title strong {
       display: block;
+      color: #d7eadc;
       font-size: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .invoice-title p {
+      margin: 8px 0 0;
       color: #d7eadc;
     }
 
@@ -661,6 +698,8 @@ function buildInvoiceHtml(invoice) {
     h3 {
       margin: 8px 0 8px;
       font-size: 16px;
+      line-height: 1.35;
+      word-break: break-word;
     }
 
     p {
@@ -668,29 +707,45 @@ function buildInvoiceHtml(invoice) {
       color: #52625a;
       font-size: 13px;
       line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
     }
 
     th {
-      padding: 12px;
+      padding: 12px 10px;
       background: #f5faf6;
       color: #65736b;
-      font-size: 11px;
+      font-size: 10px;
       text-align: left;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       border-bottom: 1px solid #e1e9e4;
+      white-space: nowrap;
     }
 
     td {
-      padding: 13px 12px;
+      padding: 13px 10px;
+      color: #1d2b23;
       font-size: 13px;
       border-bottom: 1px solid #edf2ef;
       vertical-align: top;
+      word-break: break-word;
+    }
+
+    td strong {
+      display: block;
+      line-height: 1.25;
     }
 
     td span {
@@ -700,22 +755,48 @@ function buildInvoiceHtml(invoice) {
       font-size: 11px;
     }
 
+    .serial-cell {
+      width: 38px;
+    }
+
+    .item-cell {
+      width: 34%;
+    }
+
+    .qty-cell {
+      width: 54px;
+      text-align: center;
+    }
+
+    .money-cell {
+      width: 88px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
     .totals {
       display: grid;
       justify-content: end;
       gap: 8px;
       padding: 20px 28px;
+      border-bottom: 1px solid #e7eee9;
     }
 
     .total-row {
       display: grid;
-      grid-template-columns: 180px 140px;
+      grid-template-columns: minmax(120px, 180px) minmax(90px, 140px);
       gap: 18px;
+      align-items: center;
       font-size: 14px;
     }
 
     .total-row span:first-child {
       color: #607067;
+    }
+
+    .total-row strong {
+      text-align: right;
+      white-space: nowrap;
     }
 
     .grand-total {
@@ -733,24 +814,165 @@ function buildInvoiceHtml(invoice) {
       line-height: 1.6;
     }
 
-    .print-actions {
-      max-width: 900px;
-      margin: 0 auto 16px;
-      text-align: right;
+    @media (max-width: 640px) {
+      body {
+        padding: 10px;
+      }
+
+      .print-actions {
+        padding: 0;
+      }
+
+      .print-actions button {
+        width: 100%;
+      }
+
+      .invoice-page {
+        border-radius: 16px;
+      }
+
+      .invoice-header {
+        grid-template-columns: 1fr;
+        gap: 18px;
+        padding: 22px;
+      }
+
+      .brand h1 {
+        font-size: 28px;
+      }
+
+      .invoice-title {
+        text-align: left;
+      }
+
+      .invoice-title h2 {
+        font-size: 24px;
+      }
+
+      .section {
+        padding: 20px 18px;
+      }
+
+      .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      table {
+        table-layout: fixed;
+      }
+
+      th {
+        padding: 10px 6px;
+        font-size: 9px;
+        letter-spacing: 0.04em;
+      }
+
+      td {
+        padding: 12px 6px;
+        font-size: 12px;
+      }
+
+      td span {
+        font-size: 10px;
+      }
+
+      .serial-cell {
+        width: 28px;
+      }
+
+      .item-cell {
+        width: 38%;
+      }
+
+      .qty-cell {
+        width: 38px;
+      }
+
+      .money-cell {
+        width: 70px;
+        font-size: 12px;
+      }
+
+      .totals {
+        justify-content: stretch;
+        padding: 18px;
+      }
+
+      .total-row {
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        width: 100%;
+      }
+
+      .grand-total {
+        font-size: 19px;
+      }
+
+      .invoice-footer {
+        padding: 18px;
+      }
     }
 
-    button {
-      min-height: 42px;
-      padding: 0 18px;
-      border: 0;
-      border-radius: 12px;
-      background: #155d3e;
-      color: #ffffff;
-      font-weight: 800;
-      cursor: pointer;
+    @media (max-width: 380px) {
+      body {
+        padding: 8px;
+      }
+
+      .invoice-header {
+        padding: 20px 16px;
+      }
+
+      .brand h1 {
+        font-size: 25px;
+      }
+
+      .invoice-title h2 {
+        font-size: 22px;
+      }
+
+      .section {
+        padding: 18px 14px;
+      }
+
+      th {
+        font-size: 8px;
+        padding: 9px 4px;
+      }
+
+      td {
+        font-size: 11px;
+        padding: 11px 4px;
+      }
+
+      .item-cell {
+        width: 40%;
+      }
+
+      .money-cell {
+        width: 64px;
+      }
+
+      .totals {
+        padding: 16px 14px;
+      }
+
+      .invoice-footer {
+        padding: 16px 14px 20px;
+      }
     }
 
     @media print {
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+
+      html,
+      body {
+        overflow: visible;
+      }
+
       body {
         padding: 0;
         background: #ffffff;
@@ -765,6 +987,11 @@ function buildInvoiceHtml(invoice) {
         border: 0;
         border-radius: 0;
         box-shadow: none;
+      }
+
+      .invoice-header {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
     }
   </style>
@@ -807,21 +1034,23 @@ function buildInvoiceHtml(invoice) {
     </section>
 
     <section class="section">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Rate</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="serial-cell">#</th>
+              <th class="item-cell">Item</th>
+              <th class="qty-cell">Qty</th>
+              <th class="money-cell">Rate</th>
+              <th class="money-cell">Amount</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          ${itemRows}
-        </tbody>
-      </table>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="totals">
