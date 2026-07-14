@@ -33,6 +33,13 @@ const ORDER_STATUSES = [
   "cancelled",
 ];
 
+const PRODUCTION_ORDER_STATUSES = [
+  "placed",
+  "confirmed",
+  "preparing",
+  "out_for_delivery",
+];
+
 const ALLOWED_TRANSITIONS = {
   placed: [
     "confirmed",
@@ -53,6 +60,9 @@ const ALLOWED_TRANSITIONS = {
   cancelled: [],
 };
 
+const IST_OFFSET_MS =
+  5.5 * 60 * 60 * 1000;
+
 function cleanText(value) {
   return String(value ?? "").trim();
 }
@@ -62,6 +72,307 @@ function escapeRegex(value) {
     /[.*+?^${}()|[\]\\]/g,
     "\\$&"
   );
+}
+
+function getTodayDateIdInIst() {
+  return new Date(
+    Date.now() + IST_OFFSET_MS
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+function parseDeliveryDateId(value) {
+  const dateId =
+    cleanText(value) ||
+    getTodayDateIdInIst();
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      dateId
+    );
+
+  if (!match) {
+    const error = new Error(
+      "Please select a valid delivery date."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const parsedDate =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+  if (
+    parsedDate.getUTCFullYear() !==
+      year ||
+    parsedDate.getUTCMonth() !==
+      month - 1 ||
+    parsedDate.getUTCDate() !==
+      day
+  ) {
+    const error = new Error(
+      "Please select a valid delivery date."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return dateId;
+}
+
+function formatAddress(address = {}) {
+  return [
+    address.houseDetails,
+    address.areaDetails,
+    address.landmark
+      ? `near ${address.landmark}`
+      : "",
+    address.area,
+    address.city,
+    address.pincode,
+  ]
+    .map(cleanText)
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getCustomerName(order) {
+  if (
+    order.user &&
+    typeof order.user === "object" &&
+    order.user.fullName
+  ) {
+    return order.user.fullName;
+  }
+
+  return order.deliveryAddress?.fullName || "";
+}
+
+function getCustomerPhone(order) {
+  if (
+    order.user &&
+    typeof order.user === "object" &&
+    order.user.phone
+  ) {
+    return order.user.phone;
+  }
+
+  return order.deliveryAddress?.phone || "";
+}
+
+function getItemValue(item) {
+  const storedLineTotal =
+    Number(item.lineTotal || 0);
+
+  if (
+    Number.isFinite(storedLineTotal) &&
+    storedLineTotal > 0
+  ) {
+    return storedLineTotal;
+  }
+
+  return (
+    Number(item.price || 0) *
+    Number(item.quantity || 0)
+  );
+}
+
+function buildProductionPlan({
+  deliveryDateId,
+  orders,
+}) {
+  const productTotalsMap =
+    new Map();
+
+  const slotTotalsMap =
+    new Map();
+
+  const packingOrders =
+    orders.map((order) => {
+      const totalBottles =
+        order.items.reduce(
+          (total, item) =>
+            total +
+            Number(item.quantity || 0),
+          0
+        );
+
+      const slotCode =
+        cleanText(
+          order.deliverySchedule
+            ?.deliverySlotCode
+        ) ||
+        cleanText(
+          order.deliverySchedule
+            ?.deliverySlot
+        );
+
+      const slotLabel =
+        cleanText(
+          order.deliverySchedule
+            ?.deliverySlot
+        ) || "Unspecified slot";
+
+      const slotStartMinutes =
+        Number(
+          order.deliverySchedule
+            ?.deliverySlotStartMinutes ??
+            99999
+        );
+
+      if (!slotTotalsMap.has(slotCode)) {
+        slotTotalsMap.set(slotCode, {
+          slotCode,
+          slotLabel,
+          slotStartMinutes,
+          orderCount: 0,
+          totalBottles: 0,
+        });
+      }
+
+      const slotTotal =
+        slotTotalsMap.get(slotCode);
+
+      slotTotal.orderCount += 1;
+      slotTotal.totalBottles += totalBottles;
+
+      for (const item of order.items) {
+        const productId =
+          cleanText(item.productId) ||
+          String(item.product || "");
+
+        if (!productTotalsMap.has(productId)) {
+          productTotalsMap.set(productId, {
+            productId,
+            name: item.name,
+            shortName: item.shortName,
+            sizeMl: item.sizeMl,
+            totalQuantity: 0,
+            totalValue: 0,
+          });
+        }
+
+        const productTotal =
+          productTotalsMap.get(productId);
+
+        productTotal.totalQuantity +=
+          Number(item.quantity || 0);
+
+        productTotal.totalValue +=
+          getItemValue(item);
+      }
+
+      return {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        orderStatus: order.orderStatus,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        customerName: getCustomerName(order),
+        customerPhone: getCustomerPhone(order),
+        deliveryDateId:
+          order.deliverySchedule
+            ?.deliveryDateId ||
+          deliveryDateId,
+        deliveryDateLabel:
+          order.deliverySchedule
+            ?.deliveryDateLabel || "",
+        deliverySlot: slotLabel,
+        deliverySlotCode: slotCode,
+        deliverySlotStartMinutes:
+          slotStartMinutes,
+        addressLine:
+          formatAddress(
+            order.deliveryAddress
+          ),
+        deliveryAddress:
+          order.deliveryAddress,
+        items: order.items.map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          shortName: item.shortName,
+          quantity: item.quantity,
+          sizeMl: item.sizeMl,
+          lineTotal:
+            getItemValue(item),
+        })),
+        totalBottles,
+        total: order.total,
+        createdAt: order.createdAt,
+      };
+    });
+
+  const productTotals = [
+    ...productTotalsMap.values(),
+  ].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+
+  const slotTotals = [
+    ...slotTotalsMap.values(),
+  ].sort(
+    (left, right) =>
+      left.slotStartMinutes -
+        right.slotStartMinutes ||
+      left.slotLabel.localeCompare(
+        right.slotLabel
+      )
+  );
+
+  return {
+    deliveryDateId,
+
+    summary: {
+      orderCount: packingOrders.length,
+
+      totalBottles:
+        packingOrders.reduce(
+          (total, order) =>
+            total + order.totalBottles,
+          0
+        ),
+
+      totalValue:
+        packingOrders.reduce(
+          (total, order) =>
+            total +
+            Number(order.total || 0),
+          0
+        ),
+
+      productCount:
+        productTotals.length,
+
+      slotCount:
+        slotTotals.length,
+    },
+
+    productTotals,
+    slotTotals,
+
+    orders:
+      packingOrders.sort(
+        (left, right) =>
+          left.deliverySlotStartMinutes -
+            right.deliverySlotStartMinutes ||
+          left.orderNumber.localeCompare(
+            right.orderNumber
+          )
+      ),
+  };
 }
 
 async function findPopulatedOrder(orderId) {
@@ -76,6 +387,55 @@ async function findPopulatedOrder(orderId) {
     )
     .lean();
 }
+
+router.get(
+  "/production-plan",
+  async (req, res, next) => {
+    try {
+      const deliveryDateId =
+        parseDeliveryDateId(
+          req.query.date ||
+            req.query.deliveryDateId
+        );
+
+      const orders =
+        await Order.find({
+          "deliverySchedule.deliveryDateId":
+            deliveryDateId,
+
+          orderStatus: {
+            $in:
+              PRODUCTION_ORDER_STATUSES,
+          },
+        })
+          .populate(
+            "user",
+            "fullName email phone role"
+          )
+          .sort({
+            "deliverySchedule.deliverySlotStartMinutes": 1,
+            createdAt: 1,
+          })
+          .lean();
+
+      const plan =
+        buildProductionPlan({
+          deliveryDateId,
+          orders,
+        });
+
+      return res.status(200).json({
+        success: true,
+
+        data: {
+          plan,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
 
 router.get(
   "/",

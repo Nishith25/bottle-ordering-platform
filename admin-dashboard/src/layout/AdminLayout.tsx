@@ -27,6 +27,9 @@ const PAGE_TITLES:
     "/orders":
       "Order management",
 
+    "/production-plan":
+      "Production & packing plan",
+
     "/delivery-partners":
       "Delivery partner management",
 
@@ -177,6 +180,15 @@ export default function AdminLayout() {
             to="/orders"
             icon="▤"
             label="Orders"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/production-plan"
+            icon="▧"
+            label="Production plan"
             onClick={
               closeMobileMenu
             }

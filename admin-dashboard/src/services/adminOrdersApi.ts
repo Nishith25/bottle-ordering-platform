@@ -82,6 +82,9 @@ export type AdminOrder = {
     deliveryDateId: string;
     deliveryDateLabel: string;
     deliverySlot: string;
+    deliverySlotCode?: string;
+    deliverySlotStartMinutes?: number;
+    deliverySlotEndMinutes?: number;
   };
 
   subtotal: number;
@@ -221,6 +224,84 @@ export type AdminOrderStatusCounts =
     number
   >;
 
+export type ProductionPlanProductTotal = {
+  productId: string;
+  name: string;
+  shortName: string;
+  sizeMl: number;
+  totalQuantity: number;
+  totalValue: number;
+};
+
+export type ProductionPlanSlotTotal = {
+  slotCode: string;
+  slotLabel: string;
+  slotStartMinutes: number;
+  orderCount: number;
+  totalBottles: number;
+};
+
+export type ProductionPlanOrder = {
+  _id: string;
+  orderNumber: string;
+  orderStatus: AdminOrderStatus;
+  paymentMethod: "cod" | "online";
+  paymentStatus: AdminOrderPaymentStatus;
+  customerName: string;
+  customerPhone: string;
+  deliveryDateId: string;
+  deliveryDateLabel: string;
+  deliverySlot: string;
+  deliverySlotCode: string;
+  deliverySlotStartMinutes: number;
+  addressLine: string;
+
+  deliveryAddress: {
+    fullName: string;
+    phone: string;
+    pincode: string;
+    houseDetails: string;
+    areaDetails: string;
+    landmark: string;
+    area: string;
+    city: string;
+  };
+
+  items: Array<{
+    productId: string;
+    name: string;
+    shortName: string;
+    quantity: number;
+    sizeMl: number;
+    lineTotal: number;
+  }>;
+
+  totalBottles: number;
+  total: number;
+  createdAt: string;
+};
+
+export type AdminProductionPlan = {
+  deliveryDateId: string;
+
+  summary: {
+    orderCount: number;
+    totalBottles: number;
+    totalValue: number;
+    productCount: number;
+    slotCount: number;
+  };
+
+  productTotals:
+    ProductionPlanProductTotal[];
+
+  slotTotals:
+    ProductionPlanSlotTotal[];
+
+  orders:
+    ProductionPlanOrder[];
+};
+
 type AdminOrdersResponse = {
   success: boolean;
   message?: string;
@@ -240,6 +321,15 @@ type AdminOrderResponse = {
 
   data: {
     order: AdminOrder;
+  };
+};
+
+type ProductionPlanResponse = {
+  success: boolean;
+  message?: string;
+
+  data: {
+    plan: AdminProductionPlan;
   };
 };
 
@@ -348,6 +438,29 @@ export async function fetchAdminOrders(
     );
 
   return response.data;
+}
+
+export async function fetchAdminProductionPlan(
+  token: string,
+  deliveryDateId: string
+): Promise<AdminProductionPlan> {
+  const parameters =
+    new URLSearchParams();
+
+  if (deliveryDateId.trim()) {
+    parameters.set(
+      "date",
+      deliveryDateId.trim()
+    );
+  }
+
+  const response =
+    await request<ProductionPlanResponse>(
+      `/api/admin/orders/production-plan?${parameters.toString()}`,
+      token
+    );
+
+  return response.data.plan;
 }
 
 export async function updateAdminOrderStatus(

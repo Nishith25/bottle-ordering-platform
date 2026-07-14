@@ -21,6 +21,7 @@ import LoginPage from "./pages/LoginPage";
 import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
+import ProductionPlanPage from "./pages/ProductionPlanPage";
 import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
@@ -77,6 +78,13 @@ export default function App() {
               path="/orders"
               element={
                 <OrdersPage />
+              }
+            />
+
+            <Route
+              path="/production-plan"
+              element={
+                <ProductionPlanPage />
               }
             />
 
