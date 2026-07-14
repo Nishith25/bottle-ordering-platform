@@ -27,6 +27,9 @@ const PAGE_TITLES:
     "/orders":
       "Order management",
 
+    "/invoices":
+      "Invoices",
+
     "/operations":
       "Daily operations",
 
@@ -193,6 +196,15 @@ export default function AdminLayout() {
             to="/orders"
             icon="▤"
             label="Orders"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/invoices"
+            icon="▥"
+            label="Invoices"
             onClick={
               closeMobileMenu
             }

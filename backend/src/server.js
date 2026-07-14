@@ -51,6 +51,7 @@ const deliveryOrderRoutes = require(
 const deliverySlotRoutes = require(
   "./routes/deliverySlots"
 );
+const invoiceRoutes = require("./routes/invoices");
 const locationRoutes = require("./routes/locations");
 const notificationRoutes = require(
   "./routes/notifications"
@@ -352,6 +353,11 @@ app.use(
 app.use(
   "/api/orders",
   orderRoutes
+);
+
+app.use(
+  "/api/invoices",
+  invoiceRoutes
 );
 
 app.use(
