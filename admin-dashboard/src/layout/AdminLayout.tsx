@@ -26,6 +26,8 @@ const PAGE_TITLES:
 
     "/orders":
       "Order management",
+      "/operations":
+  "Daily operations",
 
       "/sales-report":
   "Sales & profit report",
@@ -193,6 +195,15 @@ export default function AdminLayout() {
               closeMobileMenu
             }
           />
+
+          <NavigationLink
+  to="/operations"
+  icon="▣"
+  label="Operations"
+  onClick={
+    closeMobileMenu
+  }
+/>
 
           <NavigationLink
   to="/sales-report"

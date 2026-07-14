@@ -29,6 +29,7 @@ import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
 import SalesReportPage from "./pages/SalesReportPage";
+import OperationsPage from "./pages/OperationsPage";
 
 export default function App() {
   return (
@@ -85,11 +86,20 @@ export default function App() {
             />
 
             <Route
+  path="/operations"
+  element={
+    <OperationsPage />
+  }
+/>
+
+            <Route
   path="/sales-report"
   element={
     <SalesReportPage />
   }
 />
+
+
 
             <Route
               path="/production-plan"
