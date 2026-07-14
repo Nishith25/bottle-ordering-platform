@@ -183,21 +183,21 @@ export default function BatchLabelsPage() {
     }
 
     const selectedExists =
-      selectedBatchId &&
-      batches.some(
-        (batch) =>
-          batch._id ===
-          selectedBatchId
-      );
+      selectedBatchId
+        ? batches.some(
+            (batch) =>
+              batch._id === selectedBatchId
+          )
+        : false;
 
     if (!selectedExists) {
       const fallbackBatch =
-        initialBatchId &&
-        batches.find(
-          (batch) =>
-            batch._id ===
-            initialBatchId
-        );
+        initialBatchId
+          ? batches.find(
+              (batch) =>
+                batch._id === initialBatchId
+            )
+          : null;
 
       setSelectedBatchId(
         fallbackBatch?._id ||
@@ -211,29 +211,37 @@ export default function BatchLabelsPage() {
   ]);
 
   const selectedBatch =
-    useMemo(() => {
-      return (
-        batches.find(
-          (batch) =>
-            batch._id ===
-            selectedBatchId
-        ) || null
-      );
-    }, [
-      batches,
-      selectedBatchId,
-    ]);
+    useMemo<AdminBatchRecord | null>(
+      () => {
+        if (!selectedBatchId) {
+          return null;
+        }
+
+        return (
+          batches.find(
+            (batch) =>
+              batch._id === selectedBatchId
+          ) || null
+        );
+      },
+      [
+        batches,
+        selectedBatchId,
+      ]
+    );
 
   useEffect(() => {
-    if (selectedBatch) {
-      setLabelCount(
-        String(
-          selectedBatch.quantityPacked ||
-            1
-        )
-      );
+    if (!selectedBatch) {
+      return;
     }
-  }, [selectedBatch?._id]);
+
+    setLabelCount(
+      String(
+        selectedBatch.quantityPacked ||
+          1
+      )
+    );
+  }, [selectedBatch]);
 
   const labels =
     useMemo(() => {
