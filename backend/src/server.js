@@ -23,6 +23,9 @@ const adminInventoryRoutes = require(
 const adminOrderRoutes = require(
   "./routes/adminOrders"
 );
+const adminSalesReportRoutes = require(
+  "./routes/adminSalesReports"
+);
 const adminSubscriptionChargeRoutes = require(
   "./routes/adminSubscriptionCharges"
 );
@@ -486,6 +489,11 @@ app.use(
 app.use(
   "/api/admin/inventory",
   adminInventoryRoutes
+);
+
+app.use(
+  "/api/admin/reports",
+  adminSalesReportRoutes
 );
 
 app.use(

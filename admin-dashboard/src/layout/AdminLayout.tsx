@@ -27,6 +27,9 @@ const PAGE_TITLES:
     "/orders":
       "Order management",
 
+      "/sales-report":
+  "Sales & profit report",
+
     "/production-plan":
       "Production & packing plan",
 
@@ -190,6 +193,15 @@ export default function AdminLayout() {
               closeMobileMenu
             }
           />
+
+          <NavigationLink
+  to="/sales-report"
+  icon="₹"
+  label="Sales report"
+  onClick={
+    closeMobileMenu
+  }
+/>
 
           <NavigationLink
             to="/production-plan"
