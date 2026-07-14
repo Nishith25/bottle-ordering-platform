@@ -308,9 +308,18 @@ function getInvoiceNumber(order) {
       )
     ).replace(/-/g, "");
 
+  const orderNumber =
+    cleanText(order.orderNumber);
+
   const orderPart =
-    cleanText(order.orderNumber) ||
-    String(order._id).slice(-8).toUpperCase();
+    orderNumber
+      ? orderNumber
+          .replace(/^BO-\d{8}-/i, "")
+          .replace(/^BO-/i, "")
+          .toUpperCase()
+      : String(order._id)
+          .slice(-8)
+          .toUpperCase();
 
   return `SS-${dateId}-${orderPart}`;
 }
