@@ -1442,3 +1442,34 @@ button:disabled {
       repeat(4, minmax(0, 1fr));
   }
 }
+.admin-shell {
+  min-height: 100vh;
+}
+
+.sidebar {
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-navigation {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.sidebar-navigation::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-navigation::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+}
