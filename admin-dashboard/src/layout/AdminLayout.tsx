@@ -33,6 +33,9 @@ const PAGE_TITLES:
     "/batch-register":
       "Batch register",
 
+    "/batch-labels":
+      "Batch label print",
+
     "/delivery-partners":
       "Delivery partner management",
 
@@ -201,6 +204,15 @@ export default function AdminLayout() {
             to="/batch-register"
             icon="▨"
             label="Batch register"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/batch-labels"
+            icon="▥"
+            label="Label print"
             onClick={
               closeMobileMenu
             }

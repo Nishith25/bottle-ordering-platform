@@ -1,0 +1,289 @@
+.batch-labels-page {
+  display: grid;
+  gap: 18px;
+}
+
+.batch-labels-heading {
+  align-items: flex-start;
+}
+
+.batch-labels-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.batch-label-controls {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1fr 1.6fr 0.8fr;
+  gap: 14px;
+  align-items: end;
+}
+
+.batch-label-controls > div {
+  display: grid;
+  gap: 4px;
+}
+
+.label-control-eyebrow {
+  color: #6c786f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.batch-label-controls strong {
+  color: #1d2b23;
+  font-size: 17px;
+}
+
+.batch-label-controls label {
+  display: grid;
+  gap: 7px;
+  color: #54665b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.batch-label-controls input,
+.batch-label-controls select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d9e2dc;
+  border-radius: 13px;
+  color: #203128;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.selected-batch-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.selected-batch-panel div {
+  padding: 14px;
+  border-radius: 16px;
+  background: #f7faf7;
+}
+
+.selected-batch-panel span {
+  display: block;
+  margin-bottom: 6px;
+  color: #69776e;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.selected-batch-panel strong {
+  color: #1d2b23;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.label-sheet-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.label-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.label-sheet-header h3 {
+  margin: 0;
+  color: #1d2b23;
+  font-size: 17px;
+}
+
+.label-sheet-header p {
+  margin: 5px 0 0;
+  color: #6f7a73;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.label-sheet-header span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #245c42;
+  background: #eef6ee;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.label-sheet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.batch-sticker-label {
+  min-height: 138px;
+  padding: 12px;
+  border: 1px dashed #aab8ad;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1d2b23;
+  display: grid;
+  gap: 8px;
+}
+
+.sticker-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sticker-top-row strong {
+  color: #173528;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.sticker-top-row span {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #245c42;
+  background: #eef6ee;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.sticker-batch-number {
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: #f2f7f3;
+  color: #245c42;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  word-break: break-word;
+}
+
+.sticker-detail-grid {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 5px 8px;
+  align-items: baseline;
+}
+
+.sticker-detail-grid span {
+  color: #6b776e;
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sticker-detail-grid strong {
+  color: #22342a;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.sticker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 7px;
+  border-top: 1px solid #e7eee8;
+}
+
+.sticker-footer span {
+  color: #245c42;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.sticker-footer small {
+  color: #819088;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+  .batch-label-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .selected-batch-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .label-sheet {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .batch-label-controls,
+  .selected-batch-panel,
+  .label-sheet {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-labels-actions {
+    width: 100%;
+  }
+
+  .batch-labels-actions button {
+    flex: 1;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .batch-labels-heading,
+  .batch-label-controls,
+  .selected-batch-panel,
+  .label-sheet-header {
+    display: none !important;
+  }
+
+  .admin-main,
+  .page-container,
+  .batch-labels-page,
+  .panel,
+  .label-sheet-panel {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  .label-sheet {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4mm !important;
+  }
+
+  .batch-sticker-label {
+    min-height: 32mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px dashed #222;
+    border-radius: 2mm;
+  }
+}

@@ -10,6 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
 import DeliveryLayout from "./layout/DeliveryLayout";
 
+import BatchLabelsPage from "./pages/BatchLabelsPage";
 import BatchRegisterPage from "./pages/BatchRegisterPage";
 import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -93,6 +94,13 @@ export default function App() {
               path="/batch-register"
               element={
                 <BatchRegisterPage />
+              }
+            />
+
+            <Route
+              path="/batch-labels"
+              element={
+                <BatchLabelsPage />
               }
             />
 

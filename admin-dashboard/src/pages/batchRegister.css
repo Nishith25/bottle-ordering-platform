@@ -331,3 +331,18 @@
     page-break-inside: avoid;
   }
 }
+.batch-record-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 16px 16px;
+}
+
+.batch-record-actions .secondary-button {
+  min-height: 38px;
+}
+
+@media print {
+  .batch-record-actions {
+    display: none !important;
+  }
+}

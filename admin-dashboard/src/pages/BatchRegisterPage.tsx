@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 
+import {
+  useNavigate,
+} from "react-router-dom";
+
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
@@ -124,6 +128,9 @@ function getCreatedBy(
 export default function BatchRegisterPage() {
   const { token } =
     useAdminAuth();
+
+  const navigate =
+    useNavigate();
 
   const [products, setProducts] =
     useState<AdminProduct[]>([]);
@@ -415,6 +422,41 @@ export default function BatchRegisterPage() {
       }
     };
 
+  const openLabelPrint =
+    (
+      batch?: AdminBatchRecord
+    ) => {
+      const params =
+        new URLSearchParams();
+
+      params.set(
+        "date",
+        selectedDate
+      );
+
+      if (
+        batch?.productId ||
+        productFilter !== "all"
+      ) {
+        params.set(
+          "productId",
+          batch?.productId ||
+            productFilter
+        );
+      }
+
+      if (batch?._id) {
+        params.set(
+          "batchId",
+          batch._id
+        );
+      }
+
+      navigate(
+        `/batch-labels?${params.toString()}`
+      );
+    };
+
   return (
     <div className="batch-register-page">
       <div className="page-heading-row batch-heading">
@@ -451,6 +493,19 @@ export default function BatchRegisterPage() {
             }
           >
             Tomorrow
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={
+              batches.length === 0
+            }
+            onClick={() =>
+              openLabelPrint()
+            }
+          >
+            Print labels
           </button>
 
           <button
@@ -873,6 +928,20 @@ export default function BatchRegisterPage() {
                       {batch.notes}
                     </p>
                   ) : null}
+
+                  <div className="batch-record-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        openLabelPrint(
+                          batch
+                        )
+                      }
+                    >
+                      Print labels
+                    </button>
+                  </div>
                 </article>
               )
             )}
