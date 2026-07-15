@@ -24,6 +24,9 @@ const adminFollowUpsRoutes = require(
 const adminInventoryRoutes = require(
   "./routes/adminInventory"
 );
+const adminNotificationRoutes = require(
+  "./routes/adminNotifications"
+);
 const adminOrderRoutes = require(
   "./routes/adminOrders"
 );
@@ -114,6 +117,10 @@ const {
 const {
   startCustomerFollowUpAutomationWorker,
 } = require("./services/customerFollowUpAutomation");
+
+const {
+  startAdminNotificationWorker,
+} = require("./services/adminNotificationService");
 
 const app = express();
 
@@ -433,6 +440,11 @@ app.use(
 );
 
 app.use(
+  "/api/admin/notifications",
+  adminNotificationRoutes
+);
+
+app.use(
   "/api/admin/coupons",
   adminCouponRoutes
 );
@@ -604,6 +616,7 @@ async function startServer() {
         startSubscriptionDeliveryWorker();
         startPushReceiptWorker();
         startCustomerFollowUpAutomationWorker();
+        startAdminNotificationWorker();
       }
     );
   } catch (error) {

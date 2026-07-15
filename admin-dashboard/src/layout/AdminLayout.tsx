@@ -19,6 +19,10 @@ import {
   fetchAdminFollowUps,
 } from "../services/adminFollowUpsApi";
 
+import {
+  fetchAdminNotifications,
+} from "../services/adminNotificationsApi";
+
 const PAGE_TITLES:
   Record<
     string,
@@ -41,6 +45,9 @@ const PAGE_TITLES:
 
     "/follow-ups":
       "Follow-up Center",
+
+    "/notifications":
+      "Notification Center",
 
     "/sales-report":
       "Sales & profit report",
@@ -132,6 +139,12 @@ export default function AdminLayout() {
   ] =
     useState(0);
 
+  const [
+    unreadNotificationCount,
+    setUnreadNotificationCount,
+  ] =
+    useState(0);
+
   const pageTitle =
     getPageTitle(
       location.pathname
@@ -145,37 +158,57 @@ export default function AdminLayout() {
       .toUpperCase() ||
     "A";
 
-  const loadFollowUpBadge =
+  const loadBadges =
     useCallback(async () => {
       if (!token) {
         setUrgentFollowUpCount(0);
+        setUnreadNotificationCount(0);
         return;
       }
 
       try {
-        const result =
-          await fetchAdminFollowUps(
-            token,
-            {
-              status:
-                "pending",
-              limit: 1,
-            }
-          );
+        const [
+          followUpResult,
+          notificationResult,
+        ] =
+          await Promise.all([
+            fetchAdminFollowUps(
+              token,
+              {
+                status:
+                  "pending",
+                limit: 1,
+              }
+            ),
+
+            fetchAdminNotifications(
+              token,
+              {
+                unreadOnly:
+                  true,
+                limit: 1,
+              }
+            ),
+          ]);
 
         setUrgentFollowUpCount(
-          result.summary.overdue +
-            result.summary.today
+          followUpResult.summary.overdue +
+            followUpResult.summary.today
+        );
+
+        setUnreadNotificationCount(
+          notificationResult.summary.unread
         );
       } catch {
         setUrgentFollowUpCount(0);
+        setUnreadNotificationCount(0);
       }
     }, [
       token,
     ]);
 
   useEffect(() => {
-    void loadFollowUpBadge();
+    void loadBadges();
 
     const intervalId =
       window.setInterval(
@@ -184,7 +217,7 @@ export default function AdminLayout() {
             document.visibilityState ===
             "visible"
           ) {
-            void loadFollowUpBadge();
+            void loadBadges();
           }
         },
         60_000
@@ -194,9 +227,9 @@ export default function AdminLayout() {
       () => {
         if (
           document.visibilityState ===
-          "visible"
+            "visible"
         ) {
-          void loadFollowUpBadge();
+          void loadBadges();
         }
       };
 
@@ -216,7 +249,7 @@ export default function AdminLayout() {
       );
     };
   }, [
-    loadFollowUpBadge,
+    loadBadges,
   ]);
 
   const closeMobileMenu =
@@ -315,6 +348,18 @@ export default function AdminLayout() {
             label="Follow-ups"
             badge={
               urgentFollowUpCount
+            }
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/notifications"
+            icon="🔔"
+            label="Notifications"
+            badge={
+              unreadNotificationCount
             }
             onClick={
               closeMobileMenu
@@ -522,8 +567,98 @@ export default function AdminLayout() {
             </h1>
           </div>
 
-          <div className="topbar-role">
-            Administrator
+          <div
+            style={{
+              display:
+                "flex",
+              alignItems:
+                "center",
+              gap:
+                10,
+              marginLeft:
+                "auto",
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Open notifications"
+              onClick={() =>
+                navigate(
+                  "/notifications"
+                )
+              }
+              style={{
+                position:
+                  "relative",
+                width:
+                  42,
+                height:
+                  42,
+                border:
+                  "1px solid #dbe5dd",
+                borderRadius:
+                  14,
+                background:
+                  "#ffffff",
+                color:
+                  "#245c42",
+                cursor:
+                  "pointer",
+                fontSize:
+                  17,
+                fontWeight:
+                  900,
+              }}
+            >
+              🔔
+
+              {unreadNotificationCount >
+              0 ? (
+                <span
+                  style={{
+                    position:
+                      "absolute",
+                    top:
+                      -5,
+                    right:
+                      -5,
+                    minWidth:
+                      19,
+                    height:
+                      19,
+                    padding:
+                      "0 5px",
+                    borderRadius:
+                      999,
+                    background:
+                      "#c95c5c",
+                    color:
+                      "#ffffff",
+                    display:
+                      "inline-flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
+                    fontSize:
+                      9,
+                    fontWeight:
+                      900,
+                    lineHeight:
+                      1,
+                  }}
+                >
+                  {unreadNotificationCount >
+                  99
+                    ? "99+"
+                    : unreadNotificationCount}
+                </span>
+              ) : null}
+            </button>
+
+            <div className="topbar-role">
+              Administrator
+            </div>
           </div>
         </header>
 

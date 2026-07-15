@@ -23,6 +23,7 @@ import FollowUpsPage from "./pages/FollowUpsPage";
 import InvoicePrintPage from "./pages/InvoicePrintPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import OperationsPage from "./pages/OperationsPage";
 import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
@@ -106,6 +107,13 @@ export default function App() {
               path="/follow-ups"
               element={
                 <FollowUpsPage />
+              }
+            />
+
+            <Route
+              path="/notifications"
+              element={
+                <NotificationsPage />
               }
             />
 
