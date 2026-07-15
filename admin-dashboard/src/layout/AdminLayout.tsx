@@ -1,4 +1,6 @@
 import {
+  useCallback,
+  useEffect,
   useState,
 } from "react";
 
@@ -12,6 +14,10 @@ import {
 import {
   useAdminAuth,
 } from "../context/AuthContext";
+
+import {
+  fetchAdminFollowUps,
+} from "../services/adminFollowUpsApi";
 
 const PAGE_TITLES:
   Record<
@@ -109,6 +115,7 @@ export default function AdminLayout() {
 
   const {
     user,
+    token,
     logout,
   } =
     useAdminAuth();
@@ -118,6 +125,12 @@ export default function AdminLayout() {
     setMobileMenuOpen,
   ] =
     useState(false);
+
+  const [
+    urgentFollowUpCount,
+    setUrgentFollowUpCount,
+  ] =
+    useState(0);
 
   const pageTitle =
     getPageTitle(
@@ -131,6 +144,80 @@ export default function AdminLayout() {
       .charAt(0)
       .toUpperCase() ||
     "A";
+
+  const loadFollowUpBadge =
+    useCallback(async () => {
+      if (!token) {
+        setUrgentFollowUpCount(0);
+        return;
+      }
+
+      try {
+        const result =
+          await fetchAdminFollowUps(
+            token,
+            {
+              status:
+                "pending",
+              limit: 1,
+            }
+          );
+
+        setUrgentFollowUpCount(
+          result.summary.overdue +
+            result.summary.today
+        );
+      } catch {
+        setUrgentFollowUpCount(0);
+      }
+    }, [
+      token,
+    ]);
+
+  useEffect(() => {
+    void loadFollowUpBadge();
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          if (
+            document.visibilityState ===
+            "visible"
+          ) {
+            void loadFollowUpBadge();
+          }
+        },
+        60_000
+      );
+
+    const handleVisibilityChange =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          void loadFollowUpBadge();
+        }
+      };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    return () => {
+      window.clearInterval(
+        intervalId
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    };
+  }, [
+    loadFollowUpBadge,
+  ]);
 
   const closeMobileMenu =
     () => {
@@ -226,6 +313,9 @@ export default function AdminLayout() {
             to="/follow-ups"
             icon="⏰"
             label="Follow-ups"
+            badge={
+              urgentFollowUpCount
+            }
             onClick={
               closeMobileMenu
             }
@@ -449,11 +539,13 @@ function NavigationLink({
   to,
   icon,
   label,
+  badge = 0,
   onClick,
 }: {
   to: string;
   icon: string;
   label: string;
+  badge?: number;
   onClick: () => void;
 }) {
   return (
@@ -479,6 +571,43 @@ function NavigationLink({
       <span>
         {label}
       </span>
+
+      {badge > 0 ? (
+        <span
+          style={{
+            marginLeft:
+              "auto",
+            minWidth:
+              18,
+            height:
+              18,
+            padding:
+              "0 6px",
+            borderRadius:
+              999,
+            background:
+              "#c95c5c",
+            color:
+              "#ffffff",
+            display:
+              "inline-flex",
+            alignItems:
+              "center",
+            justifyContent:
+              "center",
+            fontSize:
+              9,
+            fontWeight:
+              900,
+            lineHeight:
+              1,
+          }}
+        >
+          {badge > 99
+            ? "99+"
+            : badge}
+        </span>
+      ) : null}
     </NavLink>
   );
 }

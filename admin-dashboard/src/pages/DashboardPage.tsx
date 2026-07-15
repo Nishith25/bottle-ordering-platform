@@ -23,10 +23,27 @@ import {
   type DashboardData,
 } from "../services/api";
 
+import {
+  fetchAdminFollowUps,
+  updateAdminFollowUpStatus,
+  type AdminFollowUp,
+  type AdminFollowUpsSummary,
+} from "../services/adminFollowUpsApi";
+
 import "./dashboard.css";
 
 const DASHBOARD_REFRESH_INTERVAL_MS =
   30_000;
+
+const EMPTY_FOLLOW_UP_SUMMARY: AdminFollowUpsSummary =
+  {
+    total: 0,
+    pending: 0,
+    overdue: 0,
+    today: 0,
+    done: 0,
+    cancelled: 0,
+  };
 
 function formatCurrency(
   value: number
@@ -53,6 +70,35 @@ function formatStatus(
     );
 }
 
+function formatDateTime(
+  value?: string | null
+) {
+  if (!value) {
+    return "—";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "Unknown";
+  }
+
+  return date.toLocaleString(
+    "en-IN",
+    {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }
+  );
+}
+
 function getStockStatus(
   product: AdminProduct
 ) {
@@ -69,6 +115,47 @@ function getStockStatus(
     label: "Low stock",
     className: "warning",
   };
+}
+
+function getFollowUpCustomerName(
+  followUp: AdminFollowUp
+) {
+  if (
+    followUp.customer &&
+    typeof followUp.customer ===
+      "object"
+  ) {
+    return (
+      followUp.customer.fullName ||
+      "Customer"
+    );
+  }
+
+  return "Customer";
+}
+
+function getFollowUpCustomerPhone(
+  followUp: AdminFollowUp
+) {
+  if (
+    followUp.customer &&
+    typeof followUp.customer ===
+      "object"
+  ) {
+    return followUp.customer.phone || "";
+  }
+
+  return "";
+}
+
+function isFollowUpOverdue(
+  followUp: AdminFollowUp
+) {
+  return (
+    followUp.status === "pending" &&
+    new Date(followUp.dueAt).getTime() <
+      Date.now()
+  );
 }
 
 export default function DashboardPage() {
@@ -90,6 +177,30 @@ export default function DashboardPage() {
   ] =
     useState<AdminProduct[]>(
       []
+    );
+
+  const [
+    urgentFollowUps,
+    setUrgentFollowUps,
+  ] =
+    useState<AdminFollowUp[]>(
+      []
+    );
+
+  const [
+    followUpSummary,
+    setFollowUpSummary,
+  ] =
+    useState<AdminFollowUpsSummary>(
+      EMPTY_FOLLOW_UP_SUMMARY
+    );
+
+  const [
+    followUpActionId,
+    setFollowUpActionId,
+  ] =
+    useState<string | null>(
+      null
     );
 
   const [
@@ -187,6 +298,7 @@ export default function DashboardPage() {
               const [
                 dashboardData,
                 productData,
+                followUpData,
               ] =
                 await Promise.all([
                   fetchAdminDashboard(
@@ -195,6 +307,15 @@ export default function DashboardPage() {
 
                   fetchAdminProducts(
                     token
+                  ),
+
+                  fetchAdminFollowUps(
+                    token,
+                    {
+                      status:
+                        "pending",
+                      limit: 6,
+                    }
                   ),
                 ]);
 
@@ -210,6 +331,14 @@ export default function DashboardPage() {
 
               setProducts(
                 productData
+              );
+
+              setUrgentFollowUps(
+                followUpData.followUps
+              );
+
+              setFollowUpSummary(
+                followUpData.summary
               );
             } catch (
               requestError
@@ -301,6 +430,41 @@ export default function DashboardPage() {
     loadDashboard,
   ]);
 
+  const handleMarkFollowUpDone =
+    async (
+      followUp: AdminFollowUp
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      setFollowUpActionId(
+        followUp._id
+      );
+
+      setError(null);
+
+      try {
+        await updateAdminFollowUpStatus(
+          token,
+          followUp._id,
+          "done"
+        );
+
+        await loadDashboard({
+          showIndicator: true,
+        });
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to update follow-up."
+        );
+      } finally {
+        setFollowUpActionId(null);
+      }
+    };
+
   const inventoryAlerts =
     useMemo(
       () =>
@@ -353,6 +517,10 @@ export default function DashboardPage() {
   const lowStockCount =
     inventoryAlerts.length -
     outOfStockCount;
+
+  const urgentFollowUpCount =
+    followUpSummary.overdue +
+    followUpSummary.today;
 
   if (
     loading &&
@@ -466,6 +634,20 @@ export default function DashboardPage() {
 
     {
       label:
+        "Follow-ups today",
+
+      value:
+        followUpSummary.today,
+
+      detail:
+        `${followUpSummary.overdue} overdue · ${followUpSummary.pending} pending`,
+
+      symbol:
+        "⏰",
+    },
+
+    {
+      label:
         "Active subscriptions",
 
       value:
@@ -538,6 +720,205 @@ export default function DashboardPage() {
           {error}
         </div>
       ) : null}
+
+      {urgentFollowUpCount >
+      0 ? (
+        <section
+          className={[
+            "dashboard-followup-alert",
+
+            followUpSummary.overdue >
+            0
+              ? "danger"
+              : "warning",
+          ].join(" ")}
+        >
+          <div className="dashboard-followup-alert-header">
+            <div className="dashboard-followup-alert-title-group">
+              <div className="dashboard-followup-alert-icon">
+                ⏰
+              </div>
+
+              <div>
+                <span className="dashboard-followup-eyebrow">
+                  CUSTOMER FOLLOW-UPS
+                </span>
+
+                <h3>
+                  Follow-ups need attention
+                </h3>
+
+                <p>
+                  Call or update customers before pending reminders are missed.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to="/follow-ups"
+              className="dashboard-followup-manage-button"
+            >
+              Open Follow-up Center
+            </Link>
+          </div>
+
+          <div className="dashboard-followup-summary">
+            {followUpSummary.overdue >
+            0 ? (
+              <span className="dashboard-followup-summary-pill danger">
+                {followUpSummary.overdue} overdue
+              </span>
+            ) : null}
+
+            {followUpSummary.today >
+            0 ? (
+              <span className="dashboard-followup-summary-pill warning">
+                {followUpSummary.today} due today
+              </span>
+            ) : null}
+
+            {followUpSummary.pending >
+            0 ? (
+              <span className="dashboard-followup-summary-pill neutral">
+                {followUpSummary.pending} pending total
+              </span>
+            ) : null}
+          </div>
+
+          {urgentFollowUps.length >
+          0 ? (
+            <div className="dashboard-followup-list">
+              {urgentFollowUps.map(
+                (followUp) => {
+                  const overdue =
+                    isFollowUpOverdue(
+                      followUp
+                    );
+
+                  const phone =
+                    getFollowUpCustomerPhone(
+                      followUp
+                    );
+
+                  return (
+                    <article
+                      key={
+                        followUp._id
+                      }
+                      className={[
+                        "dashboard-followup-item",
+
+                        overdue
+                          ? "danger"
+                          : "warning",
+                      ].join(" ")}
+                    >
+                      <div className="dashboard-followup-main">
+                        <div className="dashboard-followup-status-dot" />
+
+                        <div>
+                          <strong>
+                            {
+                              followUp.title
+                            }
+                          </strong>
+
+                          <span>
+                            {getFollowUpCustomerName(
+                              followUp
+                            )}
+                            {phone
+                              ? ` · +91 ${phone}`
+                              : ""}
+                          </span>
+
+                          {followUp.description ? (
+                            <small>
+                              {
+                                followUp.description
+                              }
+                            </small>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="dashboard-followup-item-actions">
+                        <div className="dashboard-followup-due">
+                          <span>
+                            Due
+                          </span>
+
+                          <strong>
+                            {formatDateTime(
+                              followUp.dueAt
+                            )}
+                          </strong>
+                        </div>
+
+                        <span
+                          className={[
+                            "dashboard-followup-status",
+
+                            overdue
+                              ? "danger"
+                              : "warning",
+                          ].join(" ")}
+                        >
+                          {overdue
+                            ? "Overdue"
+                            : "Today"}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="dashboard-followup-done-button"
+                          disabled={
+                            followUpActionId ===
+                            followUp._id
+                          }
+                          onClick={() => {
+                            void handleMarkFollowUpDone(
+                              followUp
+                            );
+                          }}
+                        >
+                          {followUpActionId ===
+                          followUp._id
+                            ? "Saving..."
+                            : "Mark done"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                }
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <section className="dashboard-followup-healthy">
+          <div className="dashboard-followup-healthy-icon">
+            ✓
+          </div>
+
+          <div>
+            <strong>
+              No urgent follow-ups
+            </strong>
+
+            <span>
+              There are no overdue or today follow-ups.
+            </span>
+          </div>
+
+          <Link
+            to="/follow-ups"
+            className="dashboard-followup-healthy-link"
+          >
+            View follow-ups
+          </Link>
+        </section>
+      )}
 
       {inventoryAlerts.length >
       0 ? (
