@@ -8,6 +8,10 @@ import {
   useState,
 } from "react";
 
+import {
+  useSearchParams,
+} from "react-router-dom";
+
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
@@ -49,6 +53,19 @@ const CANCELLABLE_STATUSES = [
   "placed",
   "confirmed",
   "preparing",
+];
+
+const VALID_ROLE_FILTERS = [
+  "all",
+  "customer",
+  "admin",
+  "delivery",
+];
+
+const VALID_STATUS_FILTERS = [
+  "all",
+  "active",
+  "inactive",
 ];
 
 type FollowUpDraft = {
@@ -184,6 +201,28 @@ function isFollowUpOverdue(
     new Date(followUp.dueAt).getTime() <
       Date.now()
   );
+}
+
+function normalizeRoleFilter(value: string | null) {
+  const cleanValue =
+    String(value ?? "").trim();
+
+  return VALID_ROLE_FILTERS.includes(
+    cleanValue
+  )
+    ? cleanValue
+    : "all";
+}
+
+function normalizeStatusFilter(value: string | null) {
+  const cleanValue =
+    String(value ?? "").trim();
+
+  return VALID_STATUS_FILTERS.includes(
+    cleanValue
+  )
+    ? cleanValue
+    : "all";
 }
 
 function buildPackingSlipHtml(
@@ -372,6 +411,11 @@ export default function UsersPage() {
   const { token } =
     useAdminAuth();
 
+  const [
+    searchParams,
+    setSearchParams,
+  ] = useSearchParams();
+
   const [users, setUsers] =
     useState<
       AdminManagedUser[]
@@ -483,6 +527,94 @@ export default function UsersPage() {
     useState<
       string | null
     >(null);
+
+  const updateUrlFilters =
+    useCallback(
+      ({
+        nextRole = roleFilter,
+        nextStatus = statusFilter,
+        nextSearch = submittedSearch,
+        replace = false,
+      }: {
+        nextRole?: string;
+        nextStatus?: string;
+        nextSearch?: string;
+        replace?: boolean;
+      }) => {
+        const params =
+          new URLSearchParams();
+
+        const cleanRole =
+          normalizeRoleFilter(
+            nextRole
+          );
+
+        const cleanStatus =
+          normalizeStatusFilter(
+            nextStatus
+          );
+
+        const cleanSearch =
+          nextSearch.trim();
+
+        if (cleanRole !== "all") {
+          params.set(
+            "role",
+            cleanRole
+          );
+        }
+
+        if (cleanStatus !== "all") {
+          params.set(
+            "status",
+            cleanStatus
+          );
+        }
+
+        if (cleanSearch) {
+          params.set(
+            "search",
+            cleanSearch
+          );
+        }
+
+        setSearchParams(
+          params,
+          {
+            replace,
+          }
+        );
+      },
+      [
+        roleFilter,
+        statusFilter,
+        submittedSearch,
+        setSearchParams,
+      ]
+    );
+
+  useEffect(() => {
+    const urlSearch =
+      String(
+        searchParams.get("search") ??
+          ""
+      ).trim();
+
+    const urlRole =
+      normalizeRoleFilter(
+        searchParams.get("role")
+      );
+
+    const urlStatus =
+      normalizeStatusFilter(
+        searchParams.get("status")
+      );
+
+    setSearch(urlSearch);
+    setSubmittedSearch(urlSearch);
+    setRoleFilter(urlRole);
+    setStatusFilter(urlStatus);
+  }, [searchParams]);
 
   const loadUsers =
     useCallback(async () => {
@@ -606,6 +738,29 @@ export default function UsersPage() {
     void loadUsers();
   }, [loadUsers]);
 
+  useEffect(() => {
+    if (
+      loading ||
+      detailsLoading ||
+      selectedUserId ||
+      !submittedSearch ||
+      users.length !== 1
+    ) {
+      return;
+    }
+
+    void loadCustomerDetails(
+      users[0]._id
+    );
+  }, [
+    loading,
+    detailsLoading,
+    selectedUserId,
+    submittedSearch,
+    users,
+    loadCustomerDetails,
+  ]);
+
   const pendingFollowUpCount =
     useMemo(() => {
       return (
@@ -621,9 +776,59 @@ export default function UsersPage() {
   ) => {
     event.preventDefault();
 
+    const cleanSearch =
+      search.trim();
+
     setSubmittedSearch(
-      search.trim()
+      cleanSearch
     );
+
+    updateUrlFilters({
+      nextSearch:
+        cleanSearch,
+    });
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    setSubmittedSearch("");
+    setSelectedUserId(null);
+    setCustomerDetails(null);
+    setDetailsError(null);
+
+    updateUrlFilters({
+      nextSearch: "",
+    });
+  };
+
+  const handleRoleFilterChange = (
+    nextRole: string
+  ) => {
+    const cleanRole =
+      normalizeRoleFilter(
+        nextRole
+      );
+
+    setRoleFilter(cleanRole);
+
+    updateUrlFilters({
+      nextRole: cleanRole,
+    });
+  };
+
+  const handleStatusFilterChange = (
+    nextStatus: string
+  ) => {
+    const cleanStatus =
+      normalizeStatusFilter(
+        nextStatus
+      );
+
+    setStatusFilter(cleanStatus);
+
+    updateUrlFilters({
+      nextStatus: cleanStatus,
+    });
   };
 
   const handleStatusToggle =
@@ -1267,6 +1472,12 @@ export default function UsersPage() {
         </div>
       ) : null}
 
+      {submittedSearch ? (
+        <div className="inline-success">
+          Showing customers for “{submittedSearch}”.
+        </div>
+      ) : null}
+
       <div className="user-summary-grid">
         <UserSummaryCard
           label="Total accounts"
@@ -1340,12 +1551,9 @@ export default function UsersPage() {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                setSearch("");
-                setSubmittedSearch(
-                  ""
-                );
-              }}
+              onClick={
+                handleClearSearch
+              }
             >
               Clear
             </button>
@@ -1359,7 +1567,7 @@ export default function UsersPage() {
             <select
               value={roleFilter}
               onChange={(event) =>
-                setRoleFilter(
+                handleRoleFilterChange(
                   event.target.value
                 )
               }
@@ -1390,7 +1598,7 @@ export default function UsersPage() {
                 statusFilter
               }
               onChange={(event) =>
-                setStatusFilter(
+                handleStatusFilterChange(
                   event.target.value
                 )
               }

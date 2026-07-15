@@ -1,11 +1,13 @@
-// admin-dashboard/src/pages/FollowUpsPage.tsx
-
 import {
   type FormEvent,
   useCallback,
   useEffect,
   useState,
 } from "react";
+
+import {
+  useSearchParams,
+} from "react-router-dom";
 
 import { useAdminAuth } from "../context/AuthContext";
 
@@ -104,6 +106,32 @@ const CATEGORY_OPTIONS: Array<{
   },
 ];
 
+const VALID_STATUS_FILTERS = new Set<string>(
+  FILTER_OPTIONS.map((option) => option.value)
+);
+
+const VALID_CATEGORY_FILTERS = new Set<string>(
+  CATEGORY_OPTIONS.map((option) => option.value)
+);
+
+function normalizeStatusFilter(value: string | null): AdminFollowUpFilter {
+  const cleanValue = String(value ?? "").trim();
+
+  return VALID_STATUS_FILTERS.has(cleanValue)
+    ? (cleanValue as AdminFollowUpFilter)
+    : "pending";
+}
+
+function normalizeCategoryFilter(
+  value: string | null
+): AdminFollowUpCategory | "all" {
+  const cleanValue = String(value ?? "").trim();
+
+  return VALID_CATEGORY_FILTERS.has(cleanValue)
+    ? (cleanValue as AdminFollowUpCategory | "all")
+    : "all";
+}
+
 function formatDate(
   value?: string | null
 ) {
@@ -180,6 +208,9 @@ export default function FollowUpsPage() {
   const { token } =
     useAdminAuth();
 
+  const [searchParams, setSearchParams] =
+    useSearchParams();
+
   const [
     followUps,
     setFollowUps,
@@ -237,6 +268,84 @@ export default function FollowUpsPage() {
     useState<
       string | null
     >(null);
+
+  const updateUrlFilters =
+    useCallback(
+      ({
+        nextStatus = statusFilter,
+        nextCategory = categoryFilter,
+        nextSearch = submittedSearch,
+        replace = false,
+      }: {
+        nextStatus?: AdminFollowUpFilter;
+        nextCategory?: AdminFollowUpCategory | "all";
+        nextSearch?: string;
+        replace?: boolean;
+      }) => {
+        const params =
+          new URLSearchParams();
+
+        if (nextStatus !== "pending") {
+          params.set(
+            "status",
+            nextStatus
+          );
+        }
+
+        if (nextCategory !== "all") {
+          params.set(
+            "category",
+            nextCategory
+          );
+        }
+
+        const cleanSearch =
+          nextSearch.trim();
+
+        if (cleanSearch) {
+          params.set(
+            "search",
+            cleanSearch
+          );
+        }
+
+        setSearchParams(
+          params,
+          {
+            replace,
+          }
+        );
+      },
+      [
+        setSearchParams,
+        statusFilter,
+        categoryFilter,
+        submittedSearch,
+      ]
+    );
+
+  useEffect(() => {
+    const urlStatus =
+      normalizeStatusFilter(
+        searchParams.get("status")
+      );
+
+    const urlCategory =
+      normalizeCategoryFilter(
+        searchParams.get("category")
+      );
+
+    const urlSearch =
+      String(
+        searchParams.get("search") ??
+          ""
+      ).trim();
+
+    setStatusFilter(urlStatus);
+    setCategoryFilter(urlCategory);
+    setSearch(urlSearch);
+    setSubmittedSearch(urlSearch);
+  }, [searchParams]);
 
   const loadFollowUps =
     useCallback(async () => {
@@ -298,9 +407,50 @@ export default function FollowUpsPage() {
   ) => {
     event.preventDefault();
 
+    const cleanSearch =
+      search.trim();
+
     setSubmittedSearch(
-      search.trim()
+      cleanSearch
     );
+
+    updateUrlFilters({
+      nextSearch:
+        cleanSearch,
+    });
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    setSubmittedSearch("");
+
+    updateUrlFilters({
+      nextSearch: "",
+    });
+  };
+
+  const handleStatusFilterChange = (
+    nextStatus: AdminFollowUpFilter
+  ) => {
+    setStatusFilter(
+      nextStatus
+    );
+
+    updateUrlFilters({
+      nextStatus,
+    });
+  };
+
+  const handleCategoryFilterChange = (
+    nextCategory: AdminFollowUpCategory | "all"
+  ) => {
+    setCategoryFilter(
+      nextCategory
+    );
+
+    updateUrlFilters({
+      nextCategory,
+    });
   };
 
   const handleRunAutomation =
@@ -472,6 +622,12 @@ export default function FollowUpsPage() {
         </div>
       ) : null}
 
+      {submittedSearch ? (
+        <div className="inline-success">
+          Showing follow-ups for “{submittedSearch}”.
+        </div>
+      ) : null}
+
       <div className="followup-summary-grid">
         <FollowUpSummaryCard
           label="Pending"
@@ -519,7 +675,7 @@ export default function FollowUpsPage() {
                     : ""
                 }
                 onClick={() =>
-                  setStatusFilter(
+                  handleStatusFilterChange(
                     option.value
                   )
                 }
@@ -537,7 +693,7 @@ export default function FollowUpsPage() {
             <select
               value={categoryFilter}
               onChange={(event) =>
-                setCategoryFilter(
+                handleCategoryFilterChange(
                   event.target
                     .value as
                     | AdminFollowUpCategory
@@ -590,12 +746,9 @@ export default function FollowUpsPage() {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                setSearch("");
-                setSubmittedSearch(
-                  ""
-                );
-              }}
+              onClick={
+                handleClearSearch
+              }
             >
               Clear
             </button>

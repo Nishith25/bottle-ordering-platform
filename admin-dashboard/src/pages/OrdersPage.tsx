@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 
+import {
+  useSearchParams,
+} from "react-router-dom";
+
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
@@ -70,6 +74,19 @@ const EMPTY_COUNTS: AdminOrderStatusCounts = {
   delivered: 0,
   cancelled: 0,
 };
+
+const VALID_STATUS_FILTERS = new Set<string>([
+  "all",
+  ...Object.keys(STATUS_LABELS),
+]);
+
+function normalizeStatusFilter(value: string | null) {
+  const cleanValue = String(value ?? "").trim();
+
+  return VALID_STATUS_FILTERS.has(cleanValue)
+    ? cleanValue
+    : "all";
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -141,20 +158,61 @@ function getRefundSuccessMessage(order: AdminOrder) {
 
 export default function OrdersPage() {
   const { token } = useAdminAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [partners, setPartners] = useState<DeliveryPartner[]>([]);
   const [statusCounts, setStatusCounts] =
     useState<AdminOrderStatusCounts>(EMPTY_COUNTS);
+
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
+
   const [selectedPartnerByOrder, setSelectedPartnerByOrder] =
     useState<Record<string, string>>({});
+
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const updateUrlFilters = useCallback(
+    ({
+      nextStatus = statusFilter,
+      nextSearch = submittedSearch,
+      replace = false,
+    }: {
+      nextStatus?: string;
+      nextSearch?: string;
+      replace?: boolean;
+    }) => {
+      const params = new URLSearchParams();
+
+      const cleanStatus = normalizeStatusFilter(nextStatus);
+      const cleanSearch = nextSearch.trim();
+
+      if (cleanStatus !== "all") {
+        params.set("status", cleanStatus);
+      }
+
+      if (cleanSearch) {
+        params.set("search", cleanSearch);
+      }
+
+      setSearchParams(params, { replace });
+    },
+    [setSearchParams, statusFilter, submittedSearch]
+  );
+
+  useEffect(() => {
+    const urlStatus = normalizeStatusFilter(searchParams.get("status"));
+    const urlSearch = String(searchParams.get("search") ?? "").trim();
+
+    setStatusFilter(urlStatus);
+    setSearch(urlSearch);
+    setSubmittedSearch(urlSearch);
+  }, [searchParams]);
 
   const loadOrders = useCallback(async () => {
     if (!token) {
@@ -216,7 +274,33 @@ export default function OrdersPage() {
 
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
-    setSubmittedSearch(search.trim());
+
+    const cleanSearch = search.trim();
+
+    setSubmittedSearch(cleanSearch);
+
+    updateUrlFilters({
+      nextSearch: cleanSearch,
+    });
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    setSubmittedSearch("");
+
+    updateUrlFilters({
+      nextSearch: "",
+    });
+  };
+
+  const handleStatusFilterChange = (nextStatus: string) => {
+    const cleanStatus = normalizeStatusFilter(nextStatus);
+
+    setStatusFilter(cleanStatus);
+
+    updateUrlFilters({
+      nextStatus: cleanStatus,
+    });
   };
 
   const replaceOrder = (updatedOrder: AdminOrder) => {
@@ -416,12 +500,18 @@ export default function OrdersPage() {
       {error ? <div className="inline-error">{error}</div> : null}
       {success ? <div className="inline-success">{success}</div> : null}
 
+      {submittedSearch ? (
+        <div className="inline-success">
+          Showing results for “{submittedSearch}”.
+        </div>
+      ) : null}
+
       <div className="order-metric-grid">
         <OrderMetric
           label="All orders"
           value={totalOrders}
           active={statusFilter === "all"}
-          onClick={() => setStatusFilter("all")}
+          onClick={() => handleStatusFilterChange("all")}
         />
 
         {(Object.keys(STATUS_LABELS) as AdminOrderStatus[]).map((status) => (
@@ -430,7 +520,7 @@ export default function OrdersPage() {
             label={STATUS_LABELS[status]}
             value={statusCounts[status] ?? 0}
             active={statusFilter === status}
-            onClick={() => setStatusFilter(status)}
+            onClick={() => handleStatusFilterChange(status)}
           />
         ))}
       </div>
@@ -451,10 +541,7 @@ export default function OrdersPage() {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                setSearch("");
-                setSubmittedSearch("");
-              }}
+              onClick={handleClearSearch}
             >
               Clear
             </button>
