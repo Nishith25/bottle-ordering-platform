@@ -104,10 +104,6 @@ export function AuthProvider({
             AUTH_TOKEN_KEY
           );
         } finally {
-          /*
-           * Clear in-memory authentication even
-           * if device storage removal fails.
-           */
           setToken(null);
           setUser(null);
         }
@@ -135,13 +131,8 @@ export function AuthProvider({
               savedToken
             );
 
-          setToken(
-            savedToken
-          );
-
-          setUser(
-            currentUser
-          );
+          setToken(savedToken);
+          setUser(currentUser);
         } catch {
           await clearSession();
         } finally {
@@ -166,13 +157,8 @@ export function AuthProvider({
           sessionToken
         );
 
-        setToken(
-          sessionToken
-        );
-
-        setUser(
-          sessionUser
-        );
+        setToken(sessionToken);
+        setUser(sessionUser);
       },
       []
     );
@@ -182,17 +168,12 @@ export function AuthProvider({
       async (
         input: LoginInput
       ): Promise<boolean> => {
-        setAuthenticating(
-          true
-        );
-
+        setAuthenticating(true);
         setError(null);
 
         try {
           const session =
-            await loginCustomer(
-              input
-            );
+            await loginCustomer(input);
 
           await saveSession(
             session.token,
@@ -200,24 +181,17 @@ export function AuthProvider({
           );
 
           return true;
-        } catch (
-          requestError
-        ) {
+        } catch (requestError) {
           const message =
-            requestError instanceof
-              Error
+            requestError instanceof Error
               ? requestError.message
               : "Unable to log in.";
 
-          setError(
-            message
-          );
+          setError(message);
 
           return false;
         } finally {
-          setAuthenticating(
-            false
-          );
+          setAuthenticating(false);
         }
       },
       [saveSession]
@@ -228,17 +202,12 @@ export function AuthProvider({
       async (
         input: RegisterInput
       ): Promise<boolean> => {
-        setAuthenticating(
-          true
-        );
-
+        setAuthenticating(true);
         setError(null);
 
         try {
           const session =
-            await registerCustomer(
-              input
-            );
+            await registerCustomer(input);
 
           await saveSession(
             session.token,
@@ -246,24 +215,17 @@ export function AuthProvider({
           );
 
           return true;
-        } catch (
-          requestError
-        ) {
+        } catch (requestError) {
           const message =
-            requestError instanceof
-              Error
+            requestError instanceof Error
               ? requestError.message
               : "Unable to create your account.";
 
-          setError(
-            message
-          );
+          setError(message);
 
           return false;
         } finally {
-          setAuthenticating(
-            false
-          );
+          setAuthenticating(false);
         }
       },
       [saveSession]
@@ -273,7 +235,6 @@ export function AuthProvider({
     useCallback(
       async () => {
         setError(null);
-
         await clearSession();
       },
       [clearSession]
@@ -292,9 +253,7 @@ export function AuthProvider({
               token
             );
 
-          setUser(
-            currentUser
-          );
+          setUser(currentUser);
         } catch {
           await clearSession();
         }

@@ -19,15 +19,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useOrders } from "../context/OrderContext";
 import { useServiceablePincode } from "../hooks/useServiceablePincode";
 import {
   fetchDeliverySlotAvailability,
+  saveCustomerAddress,
   validateCoupon,
   type CouponQuote,
   type DeliverySlotAvailability,
   type DeliverySlotUnavailableReason,
+  type SavedDeliveryAddress,
 } from "../services/api";
 
 type DeliveryDay = {
@@ -184,6 +187,15 @@ export default function CheckoutScreen() {
   const router = useRouter();
 
   const {
+    user,
+    token,
+    refreshUser,
+  } = useAuth();
+
+  const savedAddresses =
+    user?.savedAddresses ?? [];
+
+  const {
     items,
     itemCount,
     subtotal,
@@ -237,6 +249,23 @@ export default function CheckoutScreen() {
     landmark,
     setLandmark,
   ] = useState("");
+
+  const [
+    selectedSavedAddressId,
+    setSelectedSavedAddressId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    saveAddressForLater,
+    setSaveAddressForLater,
+  ] = useState(false);
+
+  const [
+    savingAddress,
+    setSavingAddress,
+  ] = useState(false);
 
   const [
     selectedDate,
@@ -343,71 +372,72 @@ export default function CheckoutScreen() {
   ]);
 
   useEffect(() => {
-  setSelectedSlot(null);
-  setDeliverySlots([]);
-  setSlotsError(null);
-
-  const locationPincode =
-    serviceableLocation?.pincode ?? "";
-
-  const deliveryDateId =
-    selectedDate?.id ?? "";
-
-  if (
-    !locationPincode ||
-    !deliveryDateId
-  ) {
-    setSlotsLoading(false);
-    return;
-  }
-
-  let active = true;
-
-  async function loadDeliverySlots() {
-    setSlotsLoading(true);
+    setSelectedSlot(null);
+    setDeliverySlots([]);
     setSlotsError(null);
 
-    try {
-      const result =
-        await fetchDeliverySlotAvailability(
-          locationPincode,
-          deliveryDateId
+    const locationPincode =
+      serviceableLocation?.pincode ?? "";
+
+    const deliveryDateId =
+      selectedDate?.id ?? "";
+
+    if (
+      !locationPincode ||
+      !deliveryDateId
+    ) {
+      setSlotsLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function loadDeliverySlots() {
+      setSlotsLoading(true);
+      setSlotsError(null);
+
+      try {
+        const result =
+          await fetchDeliverySlotAvailability(
+            locationPincode,
+            deliveryDateId
+          );
+
+        if (!active) {
+          return;
+        }
+
+        setDeliverySlots(
+          result.slots
         );
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
 
-      if (!active) {
-        return;
-      }
-
-      setDeliverySlots(
-        result.slots
-      );
-    } catch (requestError) {
-      if (!active) {
-        return;
-      }
-
-      setSlotsError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load delivery slots."
-      );
-    } finally {
-      if (active) {
-        setSlotsLoading(false);
+        setSlotsError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load delivery slots."
+        );
+      } finally {
+        if (active) {
+          setSlotsLoading(false);
+        }
       }
     }
-  }
 
-  void loadDeliverySlots();
+    void loadDeliverySlots();
 
-  return () => {
-    active = false;
-  };
-}, [
-  serviceableLocation?.pincode,
-  selectedDate?.id,
-  slotsRefreshKey,
-]);
+    return () => {
+      active = false;
+    };
+  }, [
+    serviceableLocation?.pincode,
+    selectedDate?.id,
+    slotsRefreshKey,
+  ]);
+
   const cleanPhone =
     phone.replace(
       /\D/g,
@@ -437,7 +467,8 @@ export default function CheckoutScreen() {
     meetsMinimumOrder &&
     !checkingPincode &&
     !slotsLoading &&
-    !applyingCoupon;
+    !applyingCoupon &&
+    !savingAddress;
 
   const availableSlotCount =
     deliverySlots.filter(
@@ -455,9 +486,54 @@ export default function CheckoutScreen() {
     router.replace("/cart");
   };
 
+  const applySavedAddress =
+    async (
+      address: SavedDeliveryAddress
+    ) => {
+      setSelectedSavedAddressId(
+        address.id
+      );
+
+      setFullName(
+        address.fullName
+      );
+
+      setPhone(
+        address.phone
+      );
+
+      setPincode(
+        address.pincode
+      );
+
+      setHouseDetails(
+        address.houseDetails
+      );
+
+      setAreaDetails(
+        address.areaDetails
+      );
+
+      setLandmark(
+        address.landmark || ""
+      );
+
+      setSaveAddressForLater(false);
+      setSelectedSlot(null);
+      setDeliverySlots([]);
+      setSlotsError(null);
+      resetPincodeCheck();
+
+      await checkPincode(
+        address.pincode
+      );
+    };
+
   const handlePincodeChange = (
     value: string
   ) => {
+    setSelectedSavedAddressId(null);
+
     setPincode(
       value
         .replace(/\D/g, "")
@@ -561,7 +637,7 @@ export default function CheckoutScreen() {
     setCouponError(null);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (
       !canContinue ||
       !serviceableLocation ||
@@ -574,6 +650,66 @@ export default function CheckoutScreen() {
       );
 
       return;
+    }
+
+    if (
+      saveAddressForLater &&
+      token &&
+      serviceableLocation
+    ) {
+      setSavingAddress(true);
+
+      try {
+        await saveCustomerAddress(
+          token,
+          {
+            label:
+              savedAddresses.length === 0
+                ? "Home"
+                : `Address ${savedAddresses.length + 1}`,
+
+            fullName:
+              fullName.trim(),
+
+            phone:
+              cleanPhone,
+
+            pincode,
+
+            houseDetails:
+              houseDetails.trim(),
+
+            areaDetails:
+              areaDetails.trim(),
+
+            landmark:
+              landmark.trim(),
+
+            area:
+              serviceableLocation.area,
+
+            city:
+              serviceableLocation.city,
+
+            isDefault:
+              savedAddresses.length === 0,
+          }
+        );
+
+        await refreshUser();
+      } catch (requestError) {
+        Alert.alert(
+          "Unable to save address",
+          requestError instanceof Error
+            ? requestError.message
+            : "Please try again or continue without saving the address."
+        );
+
+        setSavingAddress(false);
+        return;
+      }
+
+      setSavingAddress(false);
     }
 
     setPendingCheckout({
@@ -1010,6 +1146,158 @@ export default function CheckoutScreen() {
             ) : null}
           </View>
 
+          {savedAddresses.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Saved addresses
+              </Text>
+
+              <Text style={styles.sectionDescription}>
+                Select a saved delivery address to fill the form quickly.
+              </Text>
+
+              <View style={styles.savedAddressList}>
+                {savedAddresses.map(
+                  (address) => {
+                    const selected =
+                      selectedSavedAddressId ===
+                      address.id;
+
+                    return (
+                      <Pressable
+                        key={address.id}
+                        onPress={() => {
+                          void applySavedAddress(
+                            address
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.savedAddressCard,
+
+                          selected &&
+                            styles.savedAddressCardSelected,
+
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.savedAddressIcon,
+
+                            selected &&
+                              styles.savedAddressIconSelected,
+                          ]}
+                        >
+                          <Ionicons
+                            name={
+                              address.isDefault
+                                ? "home"
+                                : "location-outline"
+                            }
+                            size={18}
+                            color={
+                              selected
+                                ? "#FFFFFF"
+                                : "#245C42"
+                            }
+                          />
+                        </View>
+
+                        <View
+                          style={
+                            styles.savedAddressContent
+                          }
+                        >
+                          <View
+                            style={
+                              styles.savedAddressTitleRow
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.savedAddressTitle,
+
+                                selected &&
+                                  styles.savedAddressTitleSelected,
+                              ]}
+                            >
+                              {
+                                address.label
+                              }
+                            </Text>
+
+                            {address.isDefault ? (
+                              <View
+                                style={
+                                  styles.defaultAddressBadge
+                                }
+                              >
+                                <Text
+                                  style={
+                                    styles.defaultAddressBadgeText
+                                  }
+                                >
+                                  Default
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+
+                          <Text
+                            style={[
+                              styles.savedAddressText,
+
+                              selected &&
+                                styles.savedAddressTextSelected,
+                            ]}
+                          >
+                            {
+                              address.houseDetails
+                            }
+                            ,{" "}
+                            {
+                              address.areaDetails
+                            }
+                          </Text>
+
+                          <Text
+                            style={[
+                              styles.savedAddressMeta,
+
+                              selected &&
+                                styles.savedAddressTextSelected,
+                            ]}
+                          >
+                            {address.area},{" "}
+                            {address.city} -{" "}
+                            {address.pincode}
+                          </Text>
+                        </View>
+
+                        {selected ? (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color="#FFFFFF"
+                          />
+                        ) : (
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color="#7A877F"
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  }
+                )}
+              </View>
+            </View>
+          ) : null}
+
           <View
             style={styles.section}
           >
@@ -1034,7 +1322,10 @@ export default function CheckoutScreen() {
               placeholder="Enter customer name"
               value={fullName}
               onChangeText={
-                setFullName
+                (value) => {
+                  setSelectedSavedAddressId(null);
+                  setFullName(value);
+                }
               }
             />
 
@@ -1044,7 +1335,9 @@ export default function CheckoutScreen() {
               value={phone}
               onChangeText={(
                 value
-              ) =>
+              ) => {
+                setSelectedSavedAddressId(null);
+
                 setPhone(
                   value
                     .replace(
@@ -1055,8 +1348,8 @@ export default function CheckoutScreen() {
                       0,
                       10
                     )
-                )
-              }
+                );
+              }}
               keyboardType="phone-pad"
               maxLength={10}
             />
@@ -1068,7 +1361,10 @@ export default function CheckoutScreen() {
                 houseDetails
               }
               onChangeText={
-                setHouseDetails
+                (value) => {
+                  setSelectedSavedAddressId(null);
+                  setHouseDetails(value);
+                }
               }
             />
 
@@ -1079,7 +1375,10 @@ export default function CheckoutScreen() {
                 areaDetails
               }
               onChangeText={
-                setAreaDetails
+                (value) => {
+                  setSelectedSavedAddressId(null);
+                  setAreaDetails(value);
+                }
               }
               multiline
             />
@@ -1089,9 +1388,70 @@ export default function CheckoutScreen() {
               placeholder="Nearby landmark"
               value={landmark}
               onChangeText={
-                setLandmark
+                (value) => {
+                  setSelectedSavedAddressId(null);
+                  setLandmark(value);
+                }
               }
             />
+
+            {token ? (
+              <Pressable
+                onPress={() => {
+                  setSaveAddressForLater(
+                    (current) => !current
+                  );
+
+                  setSelectedSavedAddressId(
+                    null
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.saveAddressRow,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+
+                    saveAddressForLater &&
+                      styles.checkboxChecked,
+                  ]}
+                >
+                  {saveAddressForLater ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                  ) : null}
+                </View>
+
+                <View
+                  style={
+                    styles.saveAddressContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.saveAddressTitle
+                    }
+                  >
+                    Save this address
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.saveAddressDescription
+                    }
+                  >
+                    Use this address faster during your next checkout.
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
           </View>
 
           <View
@@ -1424,7 +1784,6 @@ export default function CheckoutScreen() {
                             <Text
                               style={[
                                 styles.slotMetaText,
-
                                 selected &&
                                   styles.slotMetaTextSelected,
                               ]}
@@ -1729,9 +2088,9 @@ export default function CheckoutScreen() {
             disabled={
               !canContinue
             }
-            onPress={
-              handleContinue
-            }
+            onPress={() => {
+              void handleContinue();
+            }}
             style={({
               pressed,
             }) => [
@@ -1750,7 +2109,9 @@ export default function CheckoutScreen() {
                 styles.continueButtonText
               }
             >
-              Continue to payment
+              {savingAddress
+                ? "Saving address..."
+                : "Continue to payment"}
             </Text>
 
             <Ionicons
@@ -2162,6 +2523,92 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  savedAddressList: {
+    gap: 9,
+  },
+
+  savedAddressCard: {
+    minHeight: 78,
+    padding: 13,
+    borderRadius: 17,
+    backgroundColor: "#F2F4EF",
+    borderWidth: 1,
+    borderColor: "#E1E5DF",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+
+  savedAddressCardSelected: {
+    backgroundColor: "#245C42",
+    borderColor: "#245C42",
+  },
+
+  savedAddressIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: "#E2EBE4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  savedAddressIconSelected: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+
+  savedAddressContent: {
+    flex: 1,
+  },
+
+  savedAddressTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+
+  savedAddressTitle: {
+    color: "#27382F",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  savedAddressTitleSelected: {
+    color: "#FFFFFF",
+  },
+
+  savedAddressText: {
+    color: "#647169",
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 5,
+  },
+
+  savedAddressMeta: {
+    color: "#748078",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 3,
+  },
+
+  savedAddressTextSelected: {
+    color: "rgba(255,255,255,0.82)",
+  },
+
+  defaultAddressBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#DDEBDD",
+  },
+
+  defaultAddressBadgeText: {
+    color: "#245C42",
+    fontSize: 7,
+    fontWeight: "900",
+  },
+
   inputGroup: {
     marginBottom: 14,
   },
@@ -2187,6 +2634,50 @@ const styles = StyleSheet.create({
   multilineInput: {
     minHeight: 82,
     paddingTop: 14,
+  },
+
+  saveAddressRow: {
+    padding: 13,
+    borderRadius: 16,
+    backgroundColor: "#F1F6F2",
+    borderWidth: 1,
+    borderColor: "#D8E5DA",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+
+  checkbox: {
+    width: 25,
+    height: 25,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BFCBC3",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  checkboxChecked: {
+    backgroundColor: "#245C42",
+    borderColor: "#245C42",
+  },
+
+  saveAddressContent: {
+    flex: 1,
+  },
+
+  saveAddressTitle: {
+    color: "#26372E",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  saveAddressDescription: {
+    color: "#6F7A73",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 3,
   },
 
   dateRow: {

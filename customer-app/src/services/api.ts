@@ -78,6 +78,14 @@ type CurrentUserResponse =
     };
   };
 
+type SavedAddressMutationResponse =
+  ApiBaseResponse & {
+    data: {
+      user: AuthUser;
+      address?: SavedDeliveryAddress;
+    };
+  };
+
 type CouponValidationResponse =
   ApiBaseResponse & {
     data: {
@@ -260,6 +268,38 @@ export type DeliverySlotAvailabilityResult = {
   slots: DeliverySlotAvailability[];
 };
 
+export type SavedDeliveryAddress = {
+  id: string;
+  label: string;
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedDeliveryAddressInput = {
+  label?: string;
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark?: string;
+  area: string;
+  city: string;
+  isDefault?: boolean;
+};
+
+export type UpdateSavedDeliveryAddressInput =
+  Partial<SavedDeliveryAddressInput>;
+
 export type AuthUser = {
   id: string;
   fullName: string;
@@ -269,6 +309,7 @@ export type AuthUser = {
   active: boolean;
   emailVerified: boolean;
   phoneVerified: boolean;
+  savedAddresses: SavedDeliveryAddress[];
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1075,6 +1116,83 @@ export async function fetchCurrentUser(
     await apiRequest<CurrentUserResponse>(
       "/api/auth/me",
       {
+        token,
+      }
+    );
+
+  return response.data.user;
+}
+
+export async function saveCustomerAddress(
+  token: string,
+  input: SavedDeliveryAddressInput
+): Promise<{
+  user: AuthUser;
+  address?: SavedDeliveryAddress;
+}> {
+  requireToken(token);
+
+  const response =
+    await apiRequest<SavedAddressMutationResponse>(
+      "/api/auth/addresses",
+      {
+        method: "POST",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data;
+}
+
+export async function updateCustomerAddress(
+  token: string,
+  addressId: string,
+  input: UpdateSavedDeliveryAddressInput
+): Promise<{
+  user: AuthUser;
+  address?: SavedDeliveryAddress;
+}> {
+  requireToken(token);
+
+  requireIdentifier(
+    addressId,
+    "Address ID is missing."
+  );
+
+  const response =
+    await apiRequest<SavedAddressMutationResponse>(
+      `/api/auth/addresses/${encodeURIComponent(
+        addressId.trim()
+      )}`,
+      {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(input),
+      }
+    );
+
+  return response.data;
+}
+
+export async function deleteCustomerAddress(
+  token: string,
+  addressId: string
+): Promise<AuthUser> {
+  requireToken(token);
+
+  requireIdentifier(
+    addressId,
+    "Address ID is missing."
+  );
+
+  const response =
+    await apiRequest<SavedAddressMutationResponse>(
+      `/api/auth/addresses/${encodeURIComponent(
+        addressId.trim()
+      )}`,
+      {
+        method: "DELETE",
         token,
       }
     );

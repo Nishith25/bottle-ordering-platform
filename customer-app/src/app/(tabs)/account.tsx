@@ -19,6 +19,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { usePushNotifications } from "../../context/PushNotificationContext";
 
+import {
+  deleteCustomerAddress,
+  updateCustomerAddress,
+  type SavedDeliveryAddress,
+} from "../../services/api";
+
 const DASHBOARD_BASE_URL = (
   process.env
     .EXPO_PUBLIC_ADMIN_DASHBOARD_URL ??
@@ -53,9 +59,11 @@ export default function AccountScreen() {
 
   const {
     user,
+    token,
     loading,
     isAuthenticated,
     logout,
+    refreshUser,
   } = useAuth();
 
   const {
@@ -74,6 +82,20 @@ export default function AccountScreen() {
     loggingOut,
     setLoggingOut,
   ] = useState(false);
+
+  const [
+    updatingAddressId,
+    setUpdatingAddressId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    deletingAddressId,
+    setDeletingAddressId,
+  ] = useState<string | null>(
+    null
+  );
 
   const openDashboard = async (
     dashboardUrl: string,
@@ -239,6 +261,119 @@ export default function AccountScreen() {
           ]
         );
       }
+    };
+
+  const handleSetDefaultAddress =
+    async (
+      address: SavedDeliveryAddress
+    ) => {
+      if (
+        !token ||
+        updatingAddressId ||
+        address.isDefault
+      ) {
+        return;
+      }
+
+      setUpdatingAddressId(
+        address.id
+      );
+
+      try {
+        await updateCustomerAddress(
+          token,
+          address.id,
+          {
+            isDefault: true,
+          }
+        );
+
+        await refreshUser();
+      } catch (requestError) {
+        Alert.alert(
+          "Unable to update address",
+          requestError instanceof Error
+            ? requestError.message
+            : "Please try again."
+        );
+      } finally {
+        setUpdatingAddressId(
+          null
+        );
+      }
+    };
+
+  const handleDeleteAddress =
+    async (
+      address: SavedDeliveryAddress
+    ) => {
+      if (
+        !token ||
+        deletingAddressId
+      ) {
+        return;
+      }
+
+      const deleteNow =
+        async () => {
+          setDeletingAddressId(
+            address.id
+          );
+
+          try {
+            await deleteCustomerAddress(
+              token,
+              address.id
+            );
+
+            await refreshUser();
+          } catch (requestError) {
+            Alert.alert(
+              "Unable to delete address",
+              requestError instanceof Error
+                ? requestError.message
+                : "Please try again."
+            );
+          } finally {
+            setDeletingAddressId(
+              null
+            );
+          }
+        };
+
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined"
+      ) {
+        const confirmed =
+          window.confirm(
+            `Delete saved address "${address.label}"?`
+          );
+
+        if (confirmed) {
+          await deleteNow();
+        }
+
+        return;
+      }
+
+      Alert.alert(
+        "Delete saved address?",
+        `Delete "${address.label}" from your saved delivery addresses?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              void deleteNow();
+            },
+          },
+        ]
+      );
     };
 
   const handleLogout = async () => {
@@ -716,6 +851,183 @@ export default function AccountScreen() {
             )
           }
         />
+
+        <Text style={styles.sectionTitle}>
+          Saved addresses
+        </Text>
+
+        <View style={styles.addressBookCard}>
+          {user.savedAddresses.length === 0 ? (
+            <View style={styles.emptyAddressState}>
+              <View style={styles.emptyAddressIcon}>
+                <Ionicons
+                  name="location-outline"
+                  size={24}
+                  color="#35694E"
+                />
+              </View>
+
+              <Text style={styles.emptyAddressTitle}>
+                No saved addresses
+              </Text>
+
+              <Text style={styles.emptyAddressDescription}>
+                Save an address during checkout to reuse it next time.
+              </Text>
+
+              <Pressable
+                onPress={() =>
+                  router.push("/cart")
+                }
+                style={({ pressed }) => [
+                  styles.addAddressButton,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text style={styles.addAddressButtonText}>
+                  Go to checkout
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            user.savedAddresses.map((address) => {
+              const updating =
+                updatingAddressId ===
+                address.id;
+
+              const deleting =
+                deletingAddressId ===
+                address.id;
+
+              return (
+                <View
+                  key={address.id}
+                  style={styles.savedAddressItem}
+                >
+                  <View style={styles.savedAddressTop}>
+                    <View style={styles.savedAddressIcon}>
+                      <Ionicons
+                        name={
+                          address.isDefault
+                            ? "home"
+                            : "location-outline"
+                        }
+                        size={20}
+                        color="#35694E"
+                      />
+                    </View>
+
+                    <View style={styles.savedAddressContent}>
+                      <View style={styles.savedAddressTitleRow}>
+                        <Text style={styles.savedAddressTitle}>
+                          {address.label}
+                        </Text>
+
+                        {address.isDefault ? (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>
+                              Default
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <Text style={styles.savedAddressName}>
+                        {address.fullName} · +91 {address.phone}
+                      </Text>
+
+                      <Text style={styles.savedAddressText}>
+                        {address.houseDetails}, {address.areaDetails}
+                        {address.landmark
+                          ? `, ${address.landmark}`
+                          : ""}
+                      </Text>
+
+                      <Text style={styles.savedAddressMeta}>
+                        {address.area}, {address.city} - {address.pincode}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.savedAddressActions}>
+                    {!address.isDefault ? (
+                      <Pressable
+                        disabled={
+                          updating ||
+                          deleting
+                        }
+                        onPress={() => {
+                          void handleSetDefaultAddress(
+                            address
+                          );
+                        }}
+                        style={({ pressed }) => [
+                          styles.addressActionButton,
+
+                          (updating ||
+                            deleting) &&
+                            styles.disabledButton,
+
+                          pressed &&
+                            !updating &&
+                            !deleting &&
+                            styles.pressed,
+                        ]}
+                      >
+                        {updating ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#245C42"
+                          />
+                        ) : (
+                          <Text style={styles.addressActionText}>
+                            Set default
+                          </Text>
+                        )}
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      disabled={
+                        updating ||
+                        deleting
+                      }
+                      onPress={() => {
+                        void handleDeleteAddress(
+                          address
+                        );
+                      }}
+                      style={({ pressed }) => [
+                        styles.addressDeleteButton,
+
+                        (updating ||
+                          deleting) &&
+                          styles.disabledButton,
+
+                        pressed &&
+                          !updating &&
+                          !deleting &&
+                          styles.pressed,
+                      ]}
+                    >
+                      {deleting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#A34848"
+                        />
+                      ) : (
+                        <Text style={styles.addressDeleteText}>
+                          Delete
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
 
         <Text style={styles.sectionTitle}>
           Notifications
@@ -1483,6 +1795,175 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14,
     marginTop: 4,
+  },
+
+  addressBookCard: {
+    padding: 15,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E8E2",
+  },
+
+  emptyAddressState: {
+    paddingVertical: 18,
+    alignItems: "center",
+  },
+
+  emptyAddressIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyAddressTitle: {
+    color: "#26372E",
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+
+  emptyAddressDescription: {
+    color: "#747F78",
+    fontSize: 9,
+    lineHeight: 14,
+    textAlign: "center",
+    marginTop: 5,
+  },
+
+  addAddressButton: {
+    minHeight: 42,
+    paddingHorizontal: 17,
+    borderRadius: 14,
+    backgroundColor: "#245C42",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+
+  addAddressButtonText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  savedAddressItem: {
+    padding: 13,
+    borderRadius: 18,
+    backgroundColor: "#F5F8F5",
+    borderWidth: 1,
+    borderColor: "#E1E7E1",
+    marginBottom: 10,
+  },
+
+  savedAddressTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  savedAddressIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  savedAddressContent: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  savedAddressTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+
+  savedAddressTitle: {
+    color: "#26372E",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  defaultBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#DDEBDD",
+  },
+
+  defaultBadgeText: {
+    color: "#245C42",
+    fontSize: 7,
+    fontWeight: "900",
+  },
+
+  savedAddressName: {
+    color: "#506158",
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+
+  savedAddressText: {
+    color: "#6C7770",
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 5,
+  },
+
+  savedAddressMeta: {
+    color: "#7B857F",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 3,
+  },
+
+  savedAddressActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  addressActionButton: {
+    minHeight: 38,
+    paddingHorizontal: 13,
+    borderRadius: 13,
+    backgroundColor: "#E7EFE8",
+    borderWidth: 1,
+    borderColor: "#D7E3D9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  addressActionText: {
+    color: "#245C42",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  addressDeleteButton: {
+    minHeight: 38,
+    paddingHorizontal: 13,
+    borderRadius: 13,
+    backgroundColor: "#FAECEC",
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  addressDeleteText: {
+    color: "#A34848",
+    fontSize: 8,
+    fontWeight: "900",
   },
 
   notificationCard: {
