@@ -43,6 +43,76 @@ const customerFollowUpSchema =
         index: true,
       },
 
+      category: {
+        type: String,
+        enum: [
+          "manual",
+          "cod_payment",
+          "refund",
+          "cancellation",
+          "subscription",
+          "renewal",
+          "overdue_escalation",
+        ],
+        default: "manual",
+        index: true,
+      },
+
+      priority: {
+        type: String,
+        enum: [
+          "low",
+          "normal",
+          "high",
+          "urgent",
+        ],
+        default: "normal",
+        index: true,
+      },
+
+      sourceType: {
+        type: String,
+        enum: [
+          "",
+          "order",
+          "subscription",
+          "follow_up",
+          "system",
+        ],
+        default: "",
+        index: true,
+      },
+
+      sourceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+        index: true,
+      },
+
+      sourceLabel: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+
+      automationKey: {
+        type: String,
+        trim: true,
+        sparse: true,
+        unique: true,
+      },
+
+      autoCreated: {
+        type: Boolean,
+        default: false,
+        index: true,
+      },
+
+      metadata: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+      },
+
       createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -117,6 +187,12 @@ customerFollowUpSchema.index({
   customer: 1,
   status: 1,
   dueAt: 1,
+});
+
+customerFollowUpSchema.index({
+  status: 1,
+  dueAt: 1,
+  priority: 1,
 });
 
 module.exports = mongoose.model(

@@ -18,6 +18,21 @@ export type AdminFollowUpFilter =
   | "done"
   | "cancelled";
 
+export type AdminFollowUpCategory =
+  | "manual"
+  | "cod_payment"
+  | "refund"
+  | "cancellation"
+  | "subscription"
+  | "renewal"
+  | "overdue_escalation";
+
+export type AdminFollowUpPriority =
+  | "low"
+  | "normal"
+  | "high"
+  | "urgent";
+
 export type AdminFollowUpCustomer = {
   _id: string;
   fullName: string;
@@ -39,6 +54,25 @@ export type AdminFollowUp = {
   description: string;
   dueAt: string;
   status: AdminFollowUpStatus;
+
+  category: AdminFollowUpCategory;
+  priority: AdminFollowUpPriority;
+
+  sourceType:
+    | ""
+    | "order"
+    | "subscription"
+    | "follow_up"
+    | "system";
+
+  sourceId:
+    | string
+    | null;
+
+  sourceLabel: string;
+  automationKey: string;
+  autoCreated: boolean;
+  metadata: Record<string, unknown>;
 
   createdBy:
     | string
@@ -80,6 +114,8 @@ export type AdminFollowUpsSummary = {
   today: number;
   done: number;
   cancelled: number;
+  automated?: number;
+  manual?: number;
 };
 
 export type AdminFollowUpsResult = {
@@ -103,6 +139,18 @@ type FollowUpResponse =
   ApiBaseResponse & {
     data: {
       followUp: AdminFollowUp;
+    };
+  };
+
+type AutomationResponse =
+  ApiBaseResponse & {
+    data: {
+      result: {
+        startedAt: string;
+        finishedAt: string;
+        totalCreated: number;
+        results: Record<string, number>;
+      };
     };
   };
 
@@ -180,6 +228,9 @@ export async function fetchAdminFollowUps(
   token: string,
   options: {
     status?: AdminFollowUpFilter;
+    category?:
+      | AdminFollowUpCategory
+      | "all";
     search?: string;
     limit?: number;
   } = {}
@@ -191,6 +242,13 @@ export async function fetchAdminFollowUps(
     params.set(
       "status",
       options.status
+    );
+  }
+
+  if (options.category) {
+    params.set(
+      "category",
+      options.category
     );
   }
 
@@ -249,4 +307,20 @@ export async function updateAdminFollowUpStatus(
     );
 
   return response.data.followUp;
+}
+
+export async function runAdminFollowUpAutomation(
+  token: string
+): Promise<AutomationResponse["data"]["result"]> {
+  const response =
+    await request<AutomationResponse>(
+      "/api/admin/follow-ups/run-automation",
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      }
+    );
+
+  return response.data.result;
 }

@@ -11,8 +11,10 @@ import { useAdminAuth } from "../context/AuthContext";
 
 import {
   fetchAdminFollowUps,
+  runAdminFollowUpAutomation,
   updateAdminFollowUpStatus,
   type AdminFollowUp,
+  type AdminFollowUpCategory,
   type AdminFollowUpFilter,
   type AdminFollowUpsSummary,
   type AdminFollowUpStatus,
@@ -28,6 +30,8 @@ const EMPTY_SUMMARY: AdminFollowUpsSummary =
     today: 0,
     done: 0,
     cancelled: 0,
+    automated: 0,
+    manual: 0,
   };
 
 const FILTER_OPTIONS: Array<{
@@ -57,6 +61,46 @@ const FILTER_OPTIONS: Array<{
   {
     value: "all",
     label: "All",
+  },
+];
+
+const CATEGORY_OPTIONS: Array<{
+  value:
+    | AdminFollowUpCategory
+    | "all";
+  label: string;
+}> = [
+  {
+    value: "all",
+    label: "All categories",
+  },
+  {
+    value: "manual",
+    label: "Manual",
+  },
+  {
+    value: "cod_payment",
+    label: "COD payment",
+  },
+  {
+    value: "refund",
+    label: "Refund",
+  },
+  {
+    value: "cancellation",
+    label: "Cancellation",
+  },
+  {
+    value: "subscription",
+    label: "Subscription",
+  },
+  {
+    value: "renewal",
+    label: "Renewal",
+  },
+  {
+    value: "overdue_escalation",
+    label: "Overdue escalation",
   },
 ];
 
@@ -126,6 +170,12 @@ function statusLabel(
     .join(" ");
 }
 
+function getCategoryLabel(
+  value: string
+) {
+  return statusLabel(value);
+}
+
 export default function FollowUpsPage() {
   const { token } =
     useAdminAuth();
@@ -147,6 +197,14 @@ export default function FollowUpsPage() {
       "pending"
     );
 
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] = useState<
+    | AdminFollowUpCategory
+    | "all"
+  >("all");
+
   const [search, setSearch] =
     useState("");
 
@@ -164,6 +222,11 @@ export default function FollowUpsPage() {
   ] = useState<
     string | null
   >(null);
+
+  const [
+    automationRunning,
+    setAutomationRunning,
+  ] = useState(false);
 
   const [error, setError] =
     useState<
@@ -192,6 +255,9 @@ export default function FollowUpsPage() {
               status:
                 statusFilter,
 
+              category:
+                categoryFilter,
+
               search:
                 submittedSearch,
 
@@ -219,6 +285,7 @@ export default function FollowUpsPage() {
     }, [
       token,
       statusFilter,
+      categoryFilter,
       submittedSearch,
     ]);
 
@@ -235,6 +302,38 @@ export default function FollowUpsPage() {
       search.trim()
     );
   };
+
+  const handleRunAutomation =
+    async () => {
+      if (!token) {
+        return;
+      }
+
+      setAutomationRunning(true);
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const result =
+          await runAdminFollowUpAutomation(
+            token
+          );
+
+        setSuccess(
+          `Automation completed. ${result.totalCreated} new follow-up${result.totalCreated === 1 ? "" : "s"} created.`
+        );
+
+        await loadFollowUps();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to run follow-up automation."
+        );
+      } finally {
+        setAutomationRunning(false);
+      }
+    };
 
   const handleStatusUpdate =
     async (
@@ -326,22 +425,39 @@ export default function FollowUpsPage() {
           <p>
             Track customer callbacks,
             COD follow-ups, complaints,
-            and subscription reminders.
+            refunds, subscriptions, and automated reminders.
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loading}
-          onClick={() => {
-            void loadFollowUps();
-          }}
-        >
-          {loading
-            ? "Refreshing..."
-            : "Refresh"}
-        </button>
+        <div className="followups-heading-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={
+              automationRunning
+            }
+            onClick={() => {
+              void handleRunAutomation();
+            }}
+          >
+            {automationRunning
+              ? "Running..."
+              : "Run automation"}
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading}
+            onClick={() => {
+              void loadFollowUps();
+            }}
+          >
+            {loading
+              ? "Refreshing..."
+              : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -374,13 +490,13 @@ export default function FollowUpsPage() {
         />
 
         <FollowUpSummaryCard
-          label="Done"
-          value={summary.done}
+          label="Auto-created"
+          value={summary.automated ?? 0}
         />
 
         <FollowUpSummaryCard
-          label="Cancelled"
-          value={summary.cancelled}
+          label="Manual"
+          value={summary.manual ?? 0}
         />
 
         <FollowUpSummaryCard
@@ -414,6 +530,39 @@ export default function FollowUpsPage() {
           )}
         </div>
 
+        <div className="followup-filter-row">
+          <label>
+            Category
+
+            <select
+              value={categoryFilter}
+              onChange={(event) =>
+                setCategoryFilter(
+                  event.target
+                    .value as
+                    | AdminFollowUpCategory
+                    | "all"
+                )
+              }
+            >
+              {CATEGORY_OPTIONS.map(
+                (option) => (
+                  <option
+                    key={
+                      option.value
+                    }
+                    value={
+                      option.value
+                    }
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+        </div>
+
         <form
           className="followup-search-form"
           onSubmit={
@@ -427,7 +576,7 @@ export default function FollowUpsPage() {
                 event.target.value
               )
             }
-            placeholder="Search customer name, phone, title or note"
+            placeholder="Search customer name, phone, title, source or note"
           />
 
           <button
@@ -557,7 +706,7 @@ function FollowUpCard({
 
   return (
     <article
-      className={`followup-card followup-card-${followUp.status} ${
+      className={`followup-card followup-card-${followUp.status} followup-priority-${followUp.priority} ${
         overdue
           ? "followup-card-overdue"
           : ""
@@ -565,13 +714,29 @@ function FollowUpCard({
     >
       <div className="followup-card-top">
         <div>
-          <span className="followup-eyebrow">
-            {overdue
-              ? "Overdue"
-              : statusLabel(
-                  followUp.status
-                )}
-          </span>
+          <div className="followup-badge-row">
+            <span className="followup-eyebrow">
+              {overdue
+                ? "Overdue"
+                : statusLabel(
+                    followUp.status
+                  )}
+            </span>
+
+            <span className="followup-auto-badge">
+              {followUp.autoCreated
+                ? "Auto"
+                : "Manual"}
+            </span>
+
+            <span
+              className={`followup-priority-pill priority-${followUp.priority}`}
+            >
+              {statusLabel(
+                followUp.priority
+              )}
+            </span>
+          </div>
 
           <h3>
             {followUp.title}
@@ -591,6 +756,20 @@ function FollowUpCard({
                 followUp.status
               )}
         </span>
+      </div>
+
+      <div className="followup-source-row">
+        <span>
+          {getCategoryLabel(
+            followUp.category
+          )}
+        </span>
+
+        {followUp.sourceLabel ? (
+          <span>
+            Source: {followUp.sourceLabel}
+          </span>
+        ) : null}
       </div>
 
       {followUp.description ? (

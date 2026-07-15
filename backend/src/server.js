@@ -111,6 +111,10 @@ const {
   startPushReceiptWorker,
 } = require("./services/pushNotificationService");
 
+const {
+  startCustomerFollowUpAutomationWorker,
+} = require("./services/customerFollowUpAutomation");
+
 const app = express();
 
 app.set("trust proxy", 1);
@@ -599,6 +603,7 @@ async function startServer() {
         startPaymentExpiryWorker();
         startSubscriptionDeliveryWorker();
         startPushReceiptWorker();
+        startCustomerFollowUpAutomationWorker();
       }
     );
   } catch (error) {

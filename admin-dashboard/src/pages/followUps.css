@@ -1,5 +1,11 @@
 /* admin-dashboard/src/pages/followUps.css */
 
+.followups-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .followup-summary-grid {
   display: grid;
   grid-template-columns:
@@ -74,6 +80,33 @@
   background: #245c42;
 }
 
+.followup-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.followup-filter-row label {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  color: #66746c;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.followup-filter-row select {
+  min-height: 41px;
+  padding: 0 11px;
+  border: 1px solid #dfe5de;
+  border-radius: 13px;
+  outline: none;
+  color: #294534;
+  background: #f7f8f5;
+  font-size: 9px;
+}
+
 .followup-search-form {
   display: flex;
   gap: 10px;
@@ -91,7 +124,8 @@
   font-size: 10px;
 }
 
-.followup-search-form input:focus {
+.followup-search-form input:focus,
+.followup-filter-row select:focus {
   border-color: #6c967c;
   box-shadow: 0 0 0 3px
     rgba(86, 132, 102, 0.11);
@@ -113,9 +147,15 @@
   background: #ffffff;
 }
 
-.followup-card-overdue {
+.followup-card-overdue,
+.followup-priority-urgent {
   border-color: #efc6c6;
   background: #fff7f7;
+}
+
+.followup-priority-high {
+  border-color: #ead9a9;
+  background: #fffaf0;
 }
 
 .followup-card-done,
@@ -130,6 +170,13 @@
   align-items: flex-start;
 }
 
+.followup-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .followup-eyebrow {
   display: block;
   color: #4d765f;
@@ -137,6 +184,39 @@
   font-weight: 900;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+.followup-auto-badge,
+.followup-priority-pill {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 6px;
+  font-weight: 900;
+}
+
+.followup-auto-badge {
+  color: #365d7a;
+  background: #e7f0f6;
+}
+
+.followup-priority-pill.priority-low {
+  color: #66746c;
+  background: #edf2ed;
+}
+
+.followup-priority-pill.priority-normal {
+  color: #42614f;
+  background: #e8f2ea;
+}
+
+.followup-priority-pill.priority-high {
+  color: #8a6815;
+  background: #fff0c7;
+}
+
+.followup-priority-pill.priority-urgent {
+  color: #9b4545;
+  background: #f8dddd;
 }
 
 .followup-card h3 {
@@ -172,6 +252,22 @@
 .followup-status-cancelled {
   color: #8d4a4a;
   background: #fae2e2;
+}
+
+.followup-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.followup-source-row span {
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: #42614f;
+  background: #eaf2ec;
+  font-size: 7px;
+  font-weight: 900;
 }
 
 .followup-description {
@@ -275,12 +371,17 @@
       repeat(2, minmax(0, 1fr));
   }
 
-  .followup-search-form {
+  .followup-search-form,
+  .followups-heading-actions {
     flex-direction: column;
   }
 
   .followup-card-top {
     flex-direction: column;
+  }
+
+  .followups-heading-actions .secondary-button {
+    width: 100%;
   }
 }
 

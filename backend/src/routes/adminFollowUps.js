@@ -10,6 +10,10 @@ const {
 const CustomerFollowUp = require("../models/CustomerFollowUp");
 const User = require("../models/User");
 
+const {
+  runCustomerFollowUpAutomation,
+} = require("../services/customerFollowUpAutomation");
+
 const router = express.Router();
 
 router.use(protect);
@@ -19,6 +23,16 @@ const FOLLOW_UP_STATUSES = [
   "pending",
   "done",
   "cancelled",
+];
+
+const FOLLOW_UP_CATEGORIES = [
+  "manual",
+  "cod_payment",
+  "refund",
+  "cancellation",
+  "subscription",
+  "renewal",
+  "overdue_escalation",
 ];
 
 function cleanText(value) {
@@ -83,7 +97,9 @@ function serializeCustomer(customer) {
 function serializeFollowUp(followUp) {
   return {
     _id: followUp._id,
+
     customer:
+      followUp.customer &&
       typeof followUp.customer === "object"
         ? serializeCustomer(followUp.customer)
         : followUp.customer,
@@ -93,7 +109,33 @@ function serializeFollowUp(followUp) {
     dueAt: followUp.dueAt,
     status: followUp.status,
 
-    createdBy: followUp.createdBy || null,
+    category:
+      followUp.category || "manual",
+
+    priority:
+      followUp.priority || "normal",
+
+    sourceType:
+      followUp.sourceType || "",
+
+    sourceId:
+      followUp.sourceId || null,
+
+    sourceLabel:
+      followUp.sourceLabel || "",
+
+    automationKey:
+      followUp.automationKey || "",
+
+    autoCreated:
+      Boolean(followUp.autoCreated),
+
+    metadata:
+      followUp.metadata || {},
+
+    createdBy:
+      followUp.createdBy || null,
+
     createdBySnapshot:
       followUp.createdBySnapshot || null,
 
@@ -115,6 +157,10 @@ function serializeFollowUp(followUp) {
 async function buildFollowUpFilter(req) {
   const status = cleanText(
     req.query.status
+  ).toLowerCase();
+
+  const category = cleanText(
+    req.query.category
   ).toLowerCase();
 
   const search = cleanText(
@@ -163,6 +209,26 @@ async function buildFollowUpFilter(req) {
     }
   }
 
+  if (
+    category &&
+    category !== "all"
+  ) {
+    if (
+      !FOLLOW_UP_CATEGORIES.includes(
+        category
+      )
+    ) {
+      const error = new Error(
+        "Invalid follow-up category filter."
+      );
+
+      error.statusCode = 400;
+      throw error;
+    }
+
+    filter.category = category;
+  }
+
   if (search) {
     const searchRegex =
       new RegExp(
@@ -203,6 +269,12 @@ async function buildFollowUpFilter(req) {
         description: searchRegex,
       },
       {
+        sourceLabel: searchRegex,
+      },
+      {
+        category: searchRegex,
+      },
+      {
         customer: {
           $in:
             matchingUserIds,
@@ -226,6 +298,8 @@ async function buildSummary() {
     today,
     done,
     cancelled,
+    automated,
+    manual,
   ] = await Promise.all([
     CustomerFollowUp.countDocuments({
       active: true,
@@ -262,6 +336,18 @@ async function buildSummary() {
       active: true,
       status: "cancelled",
     }),
+
+    CustomerFollowUp.countDocuments({
+      active: true,
+      autoCreated: true,
+    }),
+
+    CustomerFollowUp.countDocuments({
+      active: true,
+      autoCreated: {
+        $ne: true,
+      },
+    }),
   ]);
 
   return {
@@ -271,6 +357,8 @@ async function buildSummary() {
     today,
     done,
     cancelled,
+    automated,
+    manual,
   };
 }
 
@@ -300,6 +388,7 @@ router.get(
           )
           .sort({
             status: 1,
+            priority: -1,
             dueAt: 1,
             createdAt: -1,
           })
@@ -321,6 +410,27 @@ router.get(
             ),
 
           summary,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+router.post(
+  "/run-automation",
+  async (req, res, next) => {
+    try {
+      const result =
+        await runCustomerFollowUpAutomation();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Follow-up automation completed.",
+        data: {
+          result,
         },
       });
     } catch (error) {
