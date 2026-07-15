@@ -1,8 +1,10 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -195,6 +197,20 @@ export default function CheckoutScreen() {
   const savedAddresses =
     user?.savedAddresses ?? [];
 
+  const defaultSavedAddress =
+    useMemo(
+      () =>
+        savedAddresses.find(
+          (address) => address.isDefault
+        ) ??
+        savedAddresses[0] ??
+        null,
+      [savedAddresses]
+    );
+
+  const autoAppliedAddressIdRef =
+    useRef<string | null>(null);
+
   const {
     items,
     itemCount,
@@ -330,6 +346,14 @@ export default function CheckoutScreen() {
     null
   );
 
+  const addressFormHasInput =
+    fullName.trim().length > 0 ||
+    phone.trim().length > 0 ||
+    pincode.trim().length > 0 ||
+    houseDetails.trim().length > 0 ||
+    areaDetails.trim().length > 0 ||
+    landmark.trim().length > 0;
+
   const deliveryFee =
     subtotal >= 399
       ? 0
@@ -353,6 +377,127 @@ export default function CheckoutScreen() {
       couponDiscount +
       deliveryFee
   );
+
+  const cleanPhone =
+    phone.replace(
+      /\D/g,
+      ""
+    );
+
+  const phoneIsValid =
+    cleanPhone.length === 10;
+
+  const addressIsComplete =
+    fullName.trim().length >= 2 &&
+    phoneIsValid &&
+    houseDetails.trim().length >= 3 &&
+    areaDetails.trim().length >= 3;
+
+  const meetsMinimumOrder =
+    serviceableLocation !== null &&
+    subtotal >= minimumOrder;
+
+  const canContinue =
+    items.length > 0 &&
+    serviceableLocation !== null &&
+    addressIsComplete &&
+    selectedDate !== null &&
+    selectedSlot !== null &&
+    selectedSlot.available &&
+    meetsMinimumOrder &&
+    !checkingPincode &&
+    !slotsLoading &&
+    !applyingCoupon &&
+    !savingAddress;
+
+  const availableSlotCount =
+    deliverySlots.filter(
+      (slot) => slot.available
+    ).length;
+
+  const handleBack = () => {
+    if (
+      router.canGoBack()
+    ) {
+      router.back();
+      return;
+    }
+
+    router.replace("/cart");
+  };
+
+  const applySavedAddress =
+    useCallback(
+      async (
+        address: SavedDeliveryAddress
+      ) => {
+        setSelectedSavedAddressId(
+          address.id
+        );
+
+        setFullName(
+          address.fullName
+        );
+
+        setPhone(
+          address.phone
+        );
+
+        setPincode(
+          address.pincode
+        );
+
+        setHouseDetails(
+          address.houseDetails
+        );
+
+        setAreaDetails(
+          address.areaDetails
+        );
+
+        setLandmark(
+          address.landmark || ""
+        );
+
+        setSaveAddressForLater(false);
+        setSelectedSlot(null);
+        setDeliverySlots([]);
+        setSlotsError(null);
+        resetPincodeCheck();
+
+        await checkPincode(
+          address.pincode
+        );
+      },
+      [
+        checkPincode,
+        resetPincodeCheck,
+      ]
+    );
+
+  useEffect(() => {
+    if (
+      !defaultSavedAddress ||
+      selectedSavedAddressId ||
+      addressFormHasInput ||
+      autoAppliedAddressIdRef.current ===
+        defaultSavedAddress.id
+    ) {
+      return;
+    }
+
+    autoAppliedAddressIdRef.current =
+      defaultSavedAddress.id;
+
+    void applySavedAddress(
+      defaultSavedAddress
+    );
+  }, [
+    defaultSavedAddress,
+    selectedSavedAddressId,
+    addressFormHasInput,
+    applySavedAddress,
+  ]);
 
   useEffect(() => {
     if (
@@ -438,101 +583,14 @@ export default function CheckoutScreen() {
     slotsRefreshKey,
   ]);
 
-  const cleanPhone =
-    phone.replace(
-      /\D/g,
-      ""
-    );
-
-  const phoneIsValid =
-    cleanPhone.length === 10;
-
-  const addressIsComplete =
-    fullName.trim().length >= 2 &&
-    phoneIsValid &&
-    houseDetails.trim().length >= 3 &&
-    areaDetails.trim().length >= 3;
-
-  const meetsMinimumOrder =
-    serviceableLocation !== null &&
-    subtotal >= minimumOrder;
-
-  const canContinue =
-    items.length > 0 &&
-    serviceableLocation !== null &&
-    addressIsComplete &&
-    selectedDate !== null &&
-    selectedSlot !== null &&
-    selectedSlot.available &&
-    meetsMinimumOrder &&
-    !checkingPincode &&
-    !slotsLoading &&
-    !applyingCoupon &&
-    !savingAddress;
-
-  const availableSlotCount =
-    deliverySlots.filter(
-      (slot) => slot.available
-    ).length;
-
-  const handleBack = () => {
-    if (
-      router.canGoBack()
-    ) {
-      router.back();
-      return;
-    }
-
-    router.replace("/cart");
+  const clearSelectedSavedAddress = () => {
+    setSelectedSavedAddressId(null);
   };
-
-  const applySavedAddress =
-    async (
-      address: SavedDeliveryAddress
-    ) => {
-      setSelectedSavedAddressId(
-        address.id
-      );
-
-      setFullName(
-        address.fullName
-      );
-
-      setPhone(
-        address.phone
-      );
-
-      setPincode(
-        address.pincode
-      );
-
-      setHouseDetails(
-        address.houseDetails
-      );
-
-      setAreaDetails(
-        address.areaDetails
-      );
-
-      setLandmark(
-        address.landmark || ""
-      );
-
-      setSaveAddressForLater(false);
-      setSelectedSlot(null);
-      setDeliverySlots([]);
-      setSlotsError(null);
-      resetPincodeCheck();
-
-      await checkPincode(
-        address.pincode
-      );
-    };
 
   const handlePincodeChange = (
     value: string
   ) => {
-    setSelectedSavedAddressId(null);
+    clearSelectedSavedAddress();
 
     setPincode(
       value
@@ -1153,7 +1211,7 @@ export default function CheckoutScreen() {
               </Text>
 
               <Text style={styles.sectionDescription}>
-                Select a saved delivery address to fill the form quickly.
+                Your default address is selected automatically. You can choose another address below.
               </Text>
 
               <View style={styles.savedAddressList}>
@@ -1323,7 +1381,7 @@ export default function CheckoutScreen() {
               value={fullName}
               onChangeText={
                 (value) => {
-                  setSelectedSavedAddressId(null);
+                  clearSelectedSavedAddress();
                   setFullName(value);
                 }
               }
@@ -1336,7 +1394,7 @@ export default function CheckoutScreen() {
               onChangeText={(
                 value
               ) => {
-                setSelectedSavedAddressId(null);
+                clearSelectedSavedAddress();
 
                 setPhone(
                   value
@@ -1362,7 +1420,7 @@ export default function CheckoutScreen() {
               }
               onChangeText={
                 (value) => {
-                  setSelectedSavedAddressId(null);
+                  clearSelectedSavedAddress();
                   setHouseDetails(value);
                 }
               }
@@ -1376,7 +1434,7 @@ export default function CheckoutScreen() {
               }
               onChangeText={
                 (value) => {
-                  setSelectedSavedAddressId(null);
+                  clearSelectedSavedAddress();
                   setAreaDetails(value);
                 }
               }
@@ -1389,7 +1447,7 @@ export default function CheckoutScreen() {
               value={landmark}
               onChangeText={
                 (value) => {
-                  setSelectedSavedAddressId(null);
+                  clearSelectedSavedAddress();
                   setLandmark(value);
                 }
               }

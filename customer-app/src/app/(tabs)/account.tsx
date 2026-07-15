@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
@@ -26,8 +27,7 @@ import {
 } from "../../services/api";
 
 const DASHBOARD_BASE_URL = (
-  process.env
-    .EXPO_PUBLIC_ADMIN_DASHBOARD_URL ??
+  process.env.EXPO_PUBLIC_ADMIN_DASHBOARD_URL ??
   "http://localhost:5174"
 ).replace(/\/$/, "");
 
@@ -36,6 +36,19 @@ const ADMIN_DASHBOARD_URL =
 
 const DELIVERY_DASHBOARD_URL =
   `${DASHBOARD_BASE_URL}/login?role=delivery`;
+
+type AddressEditForm = {
+  label: string;
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+  isDefault: boolean;
+};
 
 function getPushTokenPreview(
   token: string | null
@@ -48,10 +61,70 @@ function getPushTokenPreview(
     return token;
   }
 
-  return `${token.slice(
-    0,
-    23
-  )}...${token.slice(-8)}`;
+  return `${token.slice(0, 23)}...${token.slice(-8)}`;
+}
+
+function normalisePhone(value: string) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function normalisePincode(value: string) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function createAddressEditForm(
+  address: SavedDeliveryAddress
+): AddressEditForm {
+  return {
+    label: address.label,
+    fullName: address.fullName,
+    phone: address.phone,
+    pincode: address.pincode,
+    houseDetails: address.houseDetails,
+    areaDetails: address.areaDetails,
+    landmark: address.landmark || "",
+    area: address.area,
+    city: address.city,
+    isDefault: address.isDefault,
+  };
+}
+
+function validateAddressEditForm(
+  form: AddressEditForm
+) {
+  if (!form.label.trim()) {
+    return "Address label is required.";
+  }
+
+  if (form.fullName.trim().length < 2) {
+    return "Full name must contain at least 2 characters.";
+  }
+
+  if (!/^[6-9]\d{9}$/.test(form.phone)) {
+    return "Enter a valid 10-digit mobile number.";
+  }
+
+  if (!/^\d{6}$/.test(form.pincode)) {
+    return "Enter a valid 6-digit pincode.";
+  }
+
+  if (form.houseDetails.trim().length < 3) {
+    return "House, flat or building must contain at least 3 characters.";
+  }
+
+  if (form.areaDetails.trim().length < 3) {
+    return "Area and street must contain at least 3 characters.";
+  }
+
+  if (!form.area.trim()) {
+    return "Delivery area is required.";
+  }
+
+  if (!form.city.trim()) {
+    return "Delivery city is required.";
+  }
+
+  return "";
 }
 
 export default function AccountScreen() {
@@ -94,6 +167,20 @@ export default function AccountScreen() {
     deletingAddressId,
     setDeletingAddressId,
   ] = useState<string | null>(
+    null
+  );
+
+  const [
+    editingAddressId,
+    setEditingAddressId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    editForm,
+    setEditForm,
+  ] = useState<AddressEditForm | null>(
     null
   );
 
@@ -264,9 +351,7 @@ export default function AccountScreen() {
     };
 
   const handleSetDefaultAddress =
-    async (
-      address: SavedDeliveryAddress
-    ) => {
+    async (address: SavedDeliveryAddress) => {
       if (
         !token ||
         updatingAddressId ||
@@ -275,9 +360,7 @@ export default function AccountScreen() {
         return;
       }
 
-      setUpdatingAddressId(
-        address.id
-      );
+      setUpdatingAddressId(address.id);
 
       try {
         await updateCustomerAddress(
@@ -297,16 +380,132 @@ export default function AccountScreen() {
             : "Please try again."
         );
       } finally {
-        setUpdatingAddressId(
-          null
+        setUpdatingAddressId(null);
+      }
+    };
+
+  const startEditingAddress = (
+    address: SavedDeliveryAddress
+  ) => {
+    if (
+      updatingAddressId ||
+      deletingAddressId
+    ) {
+      return;
+    }
+
+    setEditingAddressId(address.id);
+    setEditForm(
+      createAddressEditForm(address)
+    );
+  };
+
+  const cancelEditingAddress = () => {
+    setEditingAddressId(null);
+    setEditForm(null);
+  };
+
+  const updateEditField = <
+    Key extends keyof AddressEditForm,
+  >(
+    key: Key,
+    value: AddressEditForm[Key]
+  ) => {
+    setEditForm((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: value,
+      };
+    });
+  };
+
+  const saveEditedAddress =
+    async (
+      address: SavedDeliveryAddress
+    ) => {
+      if (
+        !token ||
+        !editForm ||
+        updatingAddressId
+      ) {
+        return;
+      }
+
+      const validationError =
+        validateAddressEditForm(
+          editForm
         );
+
+      if (validationError) {
+        Alert.alert(
+          "Check address details",
+          validationError
+        );
+
+        return;
+      }
+
+      setUpdatingAddressId(address.id);
+
+      try {
+        await updateCustomerAddress(
+          token,
+          address.id,
+          {
+            label:
+              editForm.label.trim(),
+
+            fullName:
+              editForm.fullName.trim(),
+
+            phone:
+              editForm.phone,
+
+            pincode:
+              editForm.pincode,
+
+            houseDetails:
+              editForm.houseDetails.trim(),
+
+            areaDetails:
+              editForm.areaDetails.trim(),
+
+            landmark:
+              editForm.landmark.trim(),
+
+            area:
+              editForm.area.trim(),
+
+            city:
+              editForm.city.trim(),
+
+            isDefault:
+              editForm.isDefault,
+          }
+        );
+
+        await refreshUser();
+
+        setEditingAddressId(null);
+        setEditForm(null);
+      } catch (requestError) {
+        Alert.alert(
+          "Unable to save address",
+          requestError instanceof Error
+            ? requestError.message
+            : "Please try again."
+        );
+      } finally {
+        setUpdatingAddressId(null);
       }
     };
 
   const handleDeleteAddress =
-    async (
-      address: SavedDeliveryAddress
-    ) => {
+    async (address: SavedDeliveryAddress) => {
       if (
         !token ||
         deletingAddressId
@@ -316,15 +515,21 @@ export default function AccountScreen() {
 
       const deleteNow =
         async () => {
-          setDeletingAddressId(
-            address.id
-          );
+          setDeletingAddressId(address.id);
 
           try {
             await deleteCustomerAddress(
               token,
               address.id
             );
+
+            if (
+              editingAddressId ===
+              address.id
+            ) {
+              setEditingAddressId(null);
+              setEditForm(null);
+            }
 
             await refreshUser();
           } catch (requestError) {
@@ -335,9 +540,7 @@ export default function AccountScreen() {
                 : "Please try again."
             );
           } finally {
-            setDeletingAddressId(
-              null
-            );
+            setDeletingAddressId(null);
           }
         };
 
@@ -461,7 +664,6 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.primaryButton,
-
               pressed &&
                 styles.pressed,
             ]}
@@ -481,7 +683,6 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryButton,
-
               pressed &&
                 styles.pressed,
             ]}
@@ -503,7 +704,6 @@ export default function AccountScreen() {
             }
             style={({ pressed }) => [
               styles.browseButton,
-
               pressed &&
                 styles.pressed,
             ]}
@@ -599,31 +799,24 @@ export default function AccountScreen() {
   const notificationStatus =
     notificationsEnabled
       ? "Enabled"
-      : permissionState ===
-          "requesting"
+      : permissionState === "requesting"
         ? "Enabling"
-        : permissionState ===
-            "denied"
+        : permissionState === "denied"
           ? "Permission blocked"
-          : permissionState ===
-              "unsupported"
+          : permissionState === "unsupported"
             ? "Mobile app only"
-            : permissionState ===
-                "error"
+            : permissionState === "error"
               ? "Needs attention"
               : "Not enabled";
 
   const notificationDescription =
     notificationsEnabled
       ? "This device is registered for order, delivery, payment and subscription updates."
-      : permissionState ===
-          "denied"
+      : permissionState === "denied"
         ? "Notification permission is blocked. Open your phone settings to allow notifications for SipBite."
-        : permissionState ===
-            "unsupported"
+        : permissionState === "unsupported"
           ? "Push notifications can only be enabled in the installed Android or iOS application."
-          : permissionState ===
-              "error"
+          : permissionState === "error"
             ? pushError ||
               "SipBite could not register this device for push notifications."
             : "Enable notifications to receive important updates even when SipBite is closed.";
@@ -632,11 +825,9 @@ export default function AccountScreen() {
     keyof typeof Ionicons.glyphMap =
     notificationsEnabled
       ? "notifications"
-      : permissionState ===
-          "denied"
+      : permissionState === "denied"
         ? "notifications-off-outline"
-        : permissionState ===
-            "error"
+        : permissionState === "error"
           ? "alert-circle-outline"
           : "notifications-outline";
 
@@ -695,7 +886,6 @@ export default function AccountScreen() {
                 <View
                   style={[
                     styles.roleBadge,
-
                     isDeliveryPartner &&
                       styles.deliveryBadge,
                   ]}
@@ -735,7 +925,6 @@ export default function AccountScreen() {
           <View
             style={[
               styles.operationsCard,
-
               isDeliveryPartner &&
                 styles.deliveryOperationsCard,
             ]}
@@ -787,7 +976,6 @@ export default function AccountScreen() {
               }}
               style={({ pressed }) => [
                 styles.dashboardButton,
-
                 pressed &&
                   styles.pressed,
               ]}
@@ -900,6 +1088,28 @@ export default function AccountScreen() {
                 deletingAddressId ===
                 address.id;
 
+              const editing =
+                editingAddressId ===
+                address.id &&
+                editForm !== null;
+
+              if (editing) {
+                return (
+                  <AddressEditCard
+                    key={address.id}
+                    form={editForm}
+                    saving={updating}
+                    onChange={updateEditField}
+                    onCancel={cancelEditingAddress}
+                    onSave={() => {
+                      void saveEditedAddress(
+                        address
+                      );
+                    }}
+                  />
+                );
+              }
+
               return (
                 <View
                   key={address.id}
@@ -951,6 +1161,32 @@ export default function AccountScreen() {
                   </View>
 
                   <View style={styles.savedAddressActions}>
+                    <Pressable
+                      disabled={
+                        updating ||
+                        deleting
+                      }
+                      onPress={() =>
+                        startEditingAddress(
+                          address
+                        )
+                      }
+                      style={({ pressed }) => [
+                        styles.addressActionButton,
+                        (updating ||
+                          deleting) &&
+                          styles.disabledButton,
+                        pressed &&
+                          !updating &&
+                          !deleting &&
+                          styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.addressActionText}>
+                        Edit
+                      </Text>
+                    </Pressable>
+
                     {!address.isDefault ? (
                       <Pressable
                         disabled={
@@ -964,11 +1200,9 @@ export default function AccountScreen() {
                         }}
                         style={({ pressed }) => [
                           styles.addressActionButton,
-
                           (updating ||
                             deleting) &&
                             styles.disabledButton,
-
                           pressed &&
                             !updating &&
                             !deleting &&
@@ -1000,11 +1234,9 @@ export default function AccountScreen() {
                       }}
                       style={({ pressed }) => [
                         styles.addressDeleteButton,
-
                         (updating ||
                           deleting) &&
                           styles.disabledButton,
-
                         pressed &&
                           !updating &&
                           !deleting &&
@@ -1042,12 +1274,9 @@ export default function AccountScreen() {
             <View
               style={[
                 styles.notificationIcon,
-
                 notificationsEnabled &&
                   styles.notificationIconEnabled,
-
-                permissionState ===
-                  "denied" &&
+                permissionState === "denied" &&
                   styles.notificationIconBlocked,
               ]}
             >
@@ -1086,7 +1315,6 @@ export default function AccountScreen() {
                 <View
                   style={[
                     styles.notificationStatusBadge,
-
                     notificationsEnabled
                       ? styles.notificationStatusEnabled
                       : permissionState ===
@@ -1106,7 +1334,6 @@ export default function AccountScreen() {
                     <Text
                       style={[
                         styles.notificationStatusText,
-
                         notificationsEnabled
                           ? styles.notificationStatusTextEnabled
                           : permissionState ===
@@ -1201,10 +1428,8 @@ export default function AccountScreen() {
                 }}
                 style={({ pressed }) => [
                   styles.notificationPrimaryButton,
-
                   notificationBusy &&
                     styles.disabledButton,
-
                   pressed &&
                     !notificationBusy &&
                     styles.pressed,
@@ -1245,10 +1470,8 @@ export default function AccountScreen() {
                 }}
                 style={({ pressed }) => [
                   styles.notificationPrimaryButton,
-
                   notificationBusy &&
                     styles.disabledButton,
-
                   pressed &&
                     !notificationBusy &&
                     styles.pressed,
@@ -1294,10 +1517,8 @@ export default function AccountScreen() {
                 }}
                 style={({ pressed }) => [
                   styles.notificationSecondaryButton,
-
                   notificationBusy &&
                     styles.disabledButton,
-
                   pressed &&
                     !notificationBusy &&
                     styles.pressed,
@@ -1329,10 +1550,8 @@ export default function AccountScreen() {
                 }
                 style={({ pressed }) => [
                   styles.notificationDangerButton,
-
                   notificationBusy &&
                     styles.disabledButton,
-
                   pressed &&
                     !notificationBusy &&
                     styles.pressed,
@@ -1426,10 +1645,8 @@ export default function AccountScreen() {
           }}
           style={({ pressed }) => [
             styles.logoutButton,
-
             loggingOut &&
               styles.logoutButtonDisabled,
-
             pressed &&
               !loggingOut &&
               styles.pressed,
@@ -1472,7 +1689,6 @@ function MenuButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.menuButton,
-
         pressed &&
           styles.pressed,
       ]}
@@ -1508,6 +1724,279 @@ function MenuButton({
   );
 }
 
+function AddressEditCard({
+  form,
+  saving,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  form: AddressEditForm;
+  saving: boolean;
+  onChange: <
+    Key extends keyof AddressEditForm,
+  >(
+    key: Key,
+    value: AddressEditForm[Key]
+  ) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <View style={styles.addressEditCard}>
+      <View style={styles.addressEditHeader}>
+        <View style={styles.savedAddressIcon}>
+          <Ionicons
+            name="create-outline"
+            size={20}
+            color="#35694E"
+          />
+        </View>
+
+        <View style={styles.savedAddressContent}>
+          <Text style={styles.savedAddressTitle}>
+            Edit saved address
+          </Text>
+
+          <Text style={styles.savedAddressMeta}>
+            Update the details shown during checkout.
+          </Text>
+        </View>
+      </View>
+
+      <EditInput
+        label="Label"
+        value={form.label}
+        onChangeText={(value) =>
+          onChange("label", value)
+        }
+        placeholder="Home, Office, Hostel"
+      />
+
+      <EditInput
+        label="Full name"
+        value={form.fullName}
+        onChangeText={(value) =>
+          onChange("fullName", value)
+        }
+        placeholder="Customer name"
+      />
+
+      <EditInput
+        label="Mobile number"
+        value={form.phone}
+        onChangeText={(value) =>
+          onChange(
+            "phone",
+            normalisePhone(value)
+          )
+        }
+        placeholder="10-digit mobile number"
+        keyboardType="phone-pad"
+        maxLength={10}
+      />
+
+      <EditInput
+        label="Pincode"
+        value={form.pincode}
+        onChangeText={(value) =>
+          onChange(
+            "pincode",
+            normalisePincode(value)
+          )
+        }
+        placeholder="6-digit pincode"
+        keyboardType="number-pad"
+        maxLength={6}
+      />
+
+      <EditInput
+        label="House, flat or building"
+        value={form.houseDetails}
+        onChangeText={(value) =>
+          onChange(
+            "houseDetails",
+            value
+          )
+        }
+        placeholder="Flat number, house or building"
+      />
+
+      <EditInput
+        label="Area and street"
+        value={form.areaDetails}
+        onChangeText={(value) =>
+          onChange(
+            "areaDetails",
+            value
+          )
+        }
+        placeholder="Area, street or locality"
+        multiline
+      />
+
+      <EditInput
+        label="Landmark"
+        value={form.landmark}
+        onChangeText={(value) =>
+          onChange("landmark", value)
+        }
+        placeholder="Nearby landmark"
+      />
+
+      <View style={styles.editTwoColumn}>
+        <View style={styles.editColumn}>
+          <EditInput
+            label="Area"
+            value={form.area}
+            onChangeText={(value) =>
+              onChange("area", value)
+            }
+            placeholder="Area"
+          />
+        </View>
+
+        <View style={styles.editColumn}>
+          <EditInput
+            label="City"
+            value={form.city}
+            onChangeText={(value) =>
+              onChange("city", value)
+            }
+            placeholder="City"
+          />
+        </View>
+      </View>
+
+      <Pressable
+        onPress={() =>
+          onChange(
+            "isDefault",
+            !form.isDefault
+          )
+        }
+        style={({ pressed }) => [
+          styles.defaultToggle,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View
+          style={[
+            styles.defaultCheckbox,
+            form.isDefault &&
+              styles.defaultCheckboxChecked,
+          ]}
+        >
+          {form.isDefault ? (
+            <Ionicons
+              name="checkmark"
+              size={15}
+              color="#FFFFFF"
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.defaultToggleTextContent}>
+          <Text style={styles.defaultToggleTitle}>
+            Make this my default address
+          </Text>
+
+          <Text style={styles.defaultToggleDescription}>
+            Checkout will automatically select this address.
+          </Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.editActions}>
+        <Pressable
+          disabled={saving}
+          onPress={onCancel}
+          style={({ pressed }) => [
+            styles.editCancelButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          <Text style={styles.editCancelText}>
+            Cancel
+          </Text>
+        </Pressable>
+
+        <Pressable
+          disabled={saving}
+          onPress={onSave}
+          style={({ pressed }) => [
+            styles.editSaveButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator
+              size="small"
+              color="#FFFFFF"
+            />
+          ) : (
+            <Text style={styles.editSaveText}>
+              Save changes
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function EditInput({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType = "default",
+  maxLength,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  keyboardType?: "default" | "phone-pad" | "number-pad";
+  maxLength?: number;
+  multiline?: boolean;
+}) {
+  return (
+    <View style={styles.editInputGroup}>
+      <Text style={styles.editInputLabel}>
+        {label}
+      </Text>
+
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9EA9A2"
+        keyboardType={keyboardType}
+        maxLength={maxLength}
+        multiline={multiline}
+        textAlignVertical={
+          multiline ? "top" : "center"
+        }
+        style={[
+          styles.editInput,
+          multiline &&
+            styles.editInputMultiline,
+        ]}
+      />
+    </View>
+  );
+}
+
 function InformationRow({
   icon,
   label,
@@ -1525,7 +2014,6 @@ function InformationRow({
     <View
       style={[
         styles.informationRow,
-
         last &&
           styles.lastInformationRow,
       ]}
@@ -1966,6 +2454,139 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  addressEditCard: {
+    padding: 13,
+    borderRadius: 18,
+    backgroundColor: "#F5F8F5",
+    borderWidth: 1,
+    borderColor: "#D9E5DC",
+    marginBottom: 10,
+  },
+
+  addressEditHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 13,
+  },
+
+  editInputGroup: {
+    marginBottom: 10,
+  },
+
+  editInputLabel: {
+    color: "#4E5A53",
+    fontSize: 9,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+
+  editInput: {
+    minHeight: 46,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DDE5DF",
+    color: "#26372E",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+
+  editInputMultiline: {
+    minHeight: 74,
+    paddingTop: 12,
+  },
+
+  editTwoColumn: {
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  editColumn: {
+    flex: 1,
+  },
+
+  defaultToggle: {
+    padding: 12,
+    borderRadius: 15,
+    backgroundColor: "#EEF5EF",
+    borderWidth: 1,
+    borderColor: "#D8E5DA",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 2,
+  },
+
+  defaultCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BFCBC3",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  defaultCheckboxChecked: {
+    backgroundColor: "#245C42",
+    borderColor: "#245C42",
+  },
+
+  defaultToggleTextContent: {
+    flex: 1,
+  },
+
+  defaultToggleTitle: {
+    color: "#26372E",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  defaultToggleDescription: {
+    color: "#6F7A73",
+    fontSize: 8,
+    lineHeight: 13,
+    marginTop: 3,
+  },
+
+  editActions: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 13,
+  },
+
+  editCancelButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "#E8EEE8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  editCancelText: {
+    color: "#245C42",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  editSaveButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "#245C42",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  editSaveText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
   notificationCard: {
     padding: 17,
     borderRadius: 24,
@@ -2341,7 +2962,6 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.84,
-
     transform: [
       {
         scale: 0.98,
