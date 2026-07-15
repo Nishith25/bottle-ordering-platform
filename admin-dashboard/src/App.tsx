@@ -34,6 +34,7 @@ import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
+import ActivityLogPage from "./pages/ActivityLogPage";
 
 export default function App() {
   return (
@@ -221,6 +222,13 @@ export default function App() {
                 <UsersPage />
               }
             />
+
+            <Route
+  path="/activity-log"
+  element={
+    <ActivityLogPage />
+  }
+/>
           </Route>
         </Route>
 

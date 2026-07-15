@@ -90,6 +90,9 @@ const PAGE_TITLES:
 
     "/users":
       "Customer account management",
+
+      "/activity-log":
+  "Activity Log",
   };
 
 function getPageTitle(
@@ -365,6 +368,15 @@ export default function AdminLayout() {
               closeMobileMenu
             }
           />
+
+          <NavigationLink
+  to="/activity-log"
+  icon="☷"
+  label="Activity Log"
+  onClick={
+    closeMobileMenu
+  }
+/>
 
           <NavigationLink
             to="/sales-report"

@@ -48,6 +48,9 @@ const adminSubscriptionRoutes = require(
 const adminUserRoutes = require(
   "./routes/adminUsers"
 );
+const adminActivityLogRoutes = require(
+  "./routes/adminActivityLogs"
+);
 
 const authRoutes = require("./routes/auth");
 const couponRoutes = require("./routes/coupons");
@@ -497,6 +500,11 @@ app.use(
 app.use(
   "/api/admin/operations",
   adminOperationsRoutes
+);
+
+app.use(
+  "/api/admin/activity-logs",
+  adminActivityLogRoutes
 );
 
 app.use(
