@@ -19,6 +19,10 @@ const {
   generateDeliveryOtp,
 } = require("../services/deliveryOtp");
 
+const {
+  logAdminActivity,
+} = require("../services/adminActivityLogger");
+
 const router = express.Router();
 
 router.use(protect);
@@ -171,6 +175,17 @@ function getCustomerPhone(order) {
   }
 
   return order.deliveryAddress?.phone || "";
+}
+
+function getTargetUser(order) {
+  if (
+    order.user &&
+    typeof order.user === "object"
+  ) {
+    return order.user;
+  }
+
+  return null;
 }
 
 function getItemValue(item) {
@@ -638,6 +653,22 @@ router.patch(
       nextStatus === "cancelled"
     ) {
       try {
+        const orderBeforeCancel =
+          await Order.findById(
+            req.params.orderId
+          )
+            .select(
+              "_id orderNumber orderStatus paymentMethod paymentStatus total user"
+            )
+            .populate(
+              "user",
+              "fullName email phone role"
+            )
+            .lean();
+
+        const previousStatus =
+          orderBeforeCancel?.orderStatus || "";
+
         const cancelledOrder =
           await cancelOrderWithRefund({
             orderId:
@@ -660,6 +691,57 @@ router.patch(
           await findPopulatedOrder(
             cancelledOrder._id
           );
+
+        await logAdminActivity({
+          req,
+          actionType:
+            "order_cancelled",
+
+          actionLabel:
+            "Order cancelled",
+
+          severity:
+            populatedOrder.refundStatus === "failed"
+              ? "warning"
+              : "success",
+
+          message:
+            `${populatedOrder.orderNumber} was cancelled by admin.`,
+
+          entityType:
+            "order",
+
+          entityId:
+            populatedOrder._id,
+
+          entityLabel:
+            populatedOrder.orderNumber,
+
+          targetUser:
+            getTargetUser(populatedOrder) ||
+            getTargetUser(orderBeforeCancel),
+
+          metadata: {
+            previousStatus,
+            nextStatus:
+              "cancelled",
+            cancellationReason:
+              populatedOrder.cancellationReason ||
+              cancellationReason ||
+              "Cancelled by administrator",
+            paymentMethod:
+              populatedOrder.paymentMethod,
+            paymentStatus:
+              populatedOrder.paymentStatus,
+            refundStatus:
+              populatedOrder.refundStatus ||
+              "not_required",
+            refundAmount:
+              populatedOrder.refundAmount || 0,
+            total:
+              populatedOrder.total || 0,
+          },
+        });
 
         return res.status(200).json({
           success: true,
@@ -697,6 +779,8 @@ router.patch(
       let updatedOrderId = null;
       let message =
         "Order status updated successfully.";
+      let previousStatus = "";
+      let statusChanged = false;
 
       await session.withTransaction(
         async () => {
@@ -713,6 +797,9 @@ router.patch(
             error.statusCode = 404;
             throw error;
           }
+
+          previousStatus =
+            order.orderStatus;
 
           if (
             order.orderStatus ===
@@ -754,6 +841,7 @@ router.patch(
 
           updatedOrderId =
             order._id;
+          statusChanged = true;
         }
       );
 
@@ -761,6 +849,53 @@ router.patch(
         await findPopulatedOrder(
           updatedOrderId
         );
+
+      await logAdminActivity({
+        req,
+        actionType:
+          statusChanged
+            ? "order_status_changed"
+            : "order_status_checked",
+
+        actionLabel:
+          statusChanged
+            ? "Order status changed"
+            : "Order status already updated",
+
+        severity:
+          statusChanged
+            ? "success"
+            : "info",
+
+        message:
+          statusChanged
+            ? `${updatedOrder.orderNumber} changed from ${previousStatus} to ${nextStatus}.`
+            : `${updatedOrder.orderNumber} was already ${nextStatus}.`,
+
+        entityType:
+          "order",
+
+        entityId:
+          updatedOrder._id,
+
+        entityLabel:
+          updatedOrder.orderNumber,
+
+        targetUser:
+          getTargetUser(updatedOrder),
+
+        metadata: {
+          previousStatus,
+          nextStatus,
+          statusChanged,
+          paymentMethod:
+            updatedOrder.paymentMethod,
+          paymentStatus:
+            updatedOrder.paymentStatus,
+          total:
+            updatedOrder.total || 0,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -808,6 +943,11 @@ router.patch(
       }
 
       let updatedOrderId = null;
+      let previousDeliveryPartnerId = "";
+      let previousDeliveryPartnerName = "";
+      let assignedPartnerName = "";
+      let assignedPartnerId = "";
+      let previousOrderStatus = "";
 
       await session.withTransaction(
         async () => {
@@ -865,6 +1005,26 @@ router.patch(
             throw error;
           }
 
+          previousOrderStatus =
+            order.orderStatus;
+
+          previousDeliveryPartnerId =
+            order.deliveryPartner
+              ? String(order.deliveryPartner)
+              : "";
+
+          previousDeliveryPartnerName =
+            cleanText(
+              order.deliveryPartnerSnapshot
+                ?.fullName
+            );
+
+          assignedPartnerId =
+            String(partner._id);
+
+          assignedPartnerName =
+            partner.fullName;
+
           order.deliveryPartner =
             partner._id;
 
@@ -910,6 +1070,60 @@ router.patch(
         await findPopulatedOrder(
           updatedOrderId
         );
+
+      const reassigned =
+        Boolean(
+          previousDeliveryPartnerId &&
+            previousDeliveryPartnerId !==
+              assignedPartnerId
+        );
+
+      await logAdminActivity({
+        req,
+        actionType:
+          reassigned
+            ? "delivery_partner_reassigned"
+            : "delivery_partner_assigned",
+
+        actionLabel:
+          reassigned
+            ? "Delivery partner reassigned"
+            : "Delivery partner assigned",
+
+        severity:
+          "success",
+
+        message:
+          reassigned
+            ? `${updatedOrder.orderNumber} reassigned from ${previousDeliveryPartnerName || "previous partner"} to ${assignedPartnerName}.`
+            : `${updatedOrder.orderNumber} assigned to ${assignedPartnerName}.`,
+
+        entityType:
+          "order",
+
+        entityId:
+          updatedOrder._id,
+
+        entityLabel:
+          updatedOrder.orderNumber,
+
+        targetUser:
+          getTargetUser(updatedOrder),
+
+        metadata: {
+          previousDeliveryPartnerId,
+          previousDeliveryPartnerName,
+          assignedPartnerId,
+          assignedPartnerName,
+          previousOrderStatus,
+          currentOrderStatus:
+            updatedOrder.orderStatus,
+          deliveryStatus:
+            updatedOrder.deliveryStatus,
+          deliveryOtpRegenerated:
+            true,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -971,6 +1185,60 @@ router.post(
           populatedOrder.refundFailureReason ||
           "Refund retry failed.";
       }
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "order_refund_retried",
+
+        actionLabel:
+          "Order refund retried",
+
+        severity:
+          populatedOrder.refundStatus ===
+          "processed"
+            ? "success"
+            : populatedOrder.refundStatus ===
+                "failed"
+              ? "danger"
+              : "warning",
+
+        message:
+          `${populatedOrder.orderNumber} refund retry result: ${populatedOrder.refundStatus || "pending"}.`,
+
+        entityType:
+          "order",
+
+        entityId:
+          populatedOrder._id,
+
+        entityLabel:
+          populatedOrder.orderNumber,
+
+        targetUser:
+          getTargetUser(populatedOrder),
+
+        metadata: {
+          refundStatus:
+            populatedOrder.refundStatus ||
+            "pending",
+          refundAmount:
+            populatedOrder.refundAmount || 0,
+          refundId:
+            populatedOrder.refundId || "",
+          refundFailureReason:
+            populatedOrder.refundFailureReason ||
+            "",
+          refundAttemptCount:
+            populatedOrder.refundAttemptCount ||
+            0,
+          paymentReference:
+            populatedOrder.paymentReference ||
+            "",
+          total:
+            populatedOrder.total || 0,
+        },
+      });
 
       return res.status(200).json({
         success: true,
