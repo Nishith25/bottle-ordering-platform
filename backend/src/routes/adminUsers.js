@@ -8,9 +8,7 @@ const {
 } = require("../middleware/auth");
 
 const Order = require("../models/Order");
-const Subscription = require(
-  "../models/Subscription"
-);
+const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 
 const router = express.Router();
@@ -21,6 +19,20 @@ router.use(allowRoles("admin"));
 const USER_ROLES = [
   "customer",
   "admin",
+  "delivery",
+];
+
+const MANAGED_ROLES = [
+  "customer",
+  "admin",
+];
+
+const ACTIVE_ORDER_STATUSES = [
+  "placed",
+  "confirmed",
+  "preparing",
+  "out_for_delivery",
+  "delivered",
 ];
 
 function cleanText(value) {
@@ -34,6 +46,28 @@ function escapeRegex(value) {
   );
 }
 
+function serializeSavedAddress(address) {
+  if (!address) {
+    return null;
+  }
+
+  return {
+    id: String(address._id),
+    label: address.label,
+    fullName: address.fullName,
+    phone: address.phone,
+    pincode: address.pincode,
+    houseDetails: address.houseDetails,
+    areaDetails: address.areaDetails,
+    landmark: address.landmark || "",
+    area: address.area,
+    city: address.city,
+    isDefault: Boolean(address.isDefault),
+    createdAt: address.createdAt,
+    updatedAt: address.updatedAt,
+  };
+}
+
 function serializeUser(user) {
   return {
     _id: user._id,
@@ -44,9 +78,41 @@ function serializeUser(user) {
     active: user.active,
     emailVerified: user.emailVerified,
     phoneVerified: user.phoneVerified,
+    savedAddressCount:
+      Array.isArray(user.savedAddresses)
+        ? user.savedAddresses.length
+        : 0,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+  };
+}
+
+function serializeOrderSummary(order) {
+  const bottleCount =
+    Array.isArray(order.items)
+      ? order.items.reduce(
+          (total, item) =>
+            total + Number(item.quantity || 0),
+          0
+        )
+      : 0;
+
+  return {
+    _id: order._id,
+    orderNumber: order.orderNumber,
+    total: Number(order.total || 0),
+    subtotal: Number(order.subtotal || 0),
+    deliveryFee: Number(order.deliveryFee || 0),
+    bottleCount,
+    paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    orderStatus: order.orderStatus,
+    deliveryStatus: order.deliveryStatus || "unassigned",
+    deliveryAddress: order.deliveryAddress,
+    deliverySchedule: order.deliverySchedule,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
   };
 }
 
@@ -54,7 +120,7 @@ function serializeUser(user) {
  * GET /api/admin/users
  *
  * Query parameters:
- * role=customer|admin|all
+ * role=customer|admin|delivery|all
  * status=active|inactive|all
  * search=name, email or phone
  */
@@ -136,6 +202,7 @@ router.get(
         totalUsers,
         totalCustomers,
         totalAdmins,
+        totalDeliveryPartners,
         activeUsers,
         inactiveUsers,
       ] = await Promise.all([
@@ -162,6 +229,85 @@ router.get(
                       $ne: [
                         "$orderStatus",
                         "cancelled",
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+
+              bottleCount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $ne: [
+                        "$orderStatus",
+                        "cancelled",
+                      ],
+                    },
+                    {
+                      $sum: "$items.quantity",
+                    },
+                    0,
+                  ],
+                },
+              },
+
+              codPendingAmount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$paymentMethod",
+                            "cod",
+                          ],
+                        },
+                        {
+                          $eq: [
+                            "$paymentStatus",
+                            "pending",
+                          ],
+                        },
+                        {
+                          $ne: [
+                            "$orderStatus",
+                            "cancelled",
+                          ],
+                        },
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+
+              codPaidAmount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$paymentMethod",
+                            "cod",
+                          ],
+                        },
+                        {
+                          $eq: [
+                            "$paymentStatus",
+                            "paid",
+                          ],
+                        },
+                        {
+                          $ne: [
+                            "$orderStatus",
+                            "cancelled",
+                          ],
+                        },
                       ],
                     },
                     "$total",
@@ -208,6 +354,10 @@ router.get(
 
         User.countDocuments({
           role: "admin",
+        }),
+
+        User.countDocuments({
+          role: "delivery",
         }),
 
         User.countDocuments({
@@ -271,6 +421,19 @@ router.get(
                 orderStats?.orderValue ??
                 0,
 
+              bottleCount:
+                orderStats?.bottleCount ??
+                0,
+
+              codPendingAmount:
+                orderStats
+                  ?.codPendingAmount ??
+                0,
+
+              codPaidAmount:
+                orderStats?.codPaidAmount ??
+                0,
+
               subscriptionCount:
                 subscriptionStats
                   ?.subscriptionCount ??
@@ -297,12 +460,441 @@ router.get(
             totalUsers,
             totalCustomers,
             totalAdmins,
+            totalDeliveryPartners,
             activeUsers,
             inactiveUsers,
           },
         },
       });
     } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/users/:userId
+ *
+ * Customer/admin detail page with saved addresses,
+ * order metrics, COD amounts and latest orders.
+ */
+router.get(
+  "/:userId",
+  async (req, res, next) => {
+    try {
+      const user =
+        await User.findById(
+          req.params.userId
+        ).lean();
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      const [
+        orderSummary,
+        latestOrders,
+        subscriptionSummary,
+        latestSubscriptions,
+      ] = await Promise.all([
+        Order.aggregate([
+          {
+            $match: {
+              user: user._id,
+            },
+          },
+          {
+            $group: {
+              _id: "$user",
+
+              totalOrders: {
+                $sum: 1,
+              },
+
+              activeOrders: {
+                $sum: {
+                  $cond: [
+                    {
+                      $in: [
+                        "$orderStatus",
+                        ACTIVE_ORDER_STATUSES,
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              deliveredOrders: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$orderStatus",
+                        "delivered",
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              cancelledOrders: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$orderStatus",
+                        "cancelled",
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              totalRevenue: {
+                $sum: {
+                  $cond: [
+                    {
+                      $ne: [
+                        "$orderStatus",
+                        "cancelled",
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+
+              totalBottles: {
+                $sum: {
+                  $cond: [
+                    {
+                      $ne: [
+                        "$orderStatus",
+                        "cancelled",
+                      ],
+                    },
+                    {
+                      $sum: "$items.quantity",
+                    },
+                    0,
+                  ],
+                },
+              },
+
+              codPendingAmount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$paymentMethod",
+                            "cod",
+                          ],
+                        },
+                        {
+                          $eq: [
+                            "$paymentStatus",
+                            "pending",
+                          ],
+                        },
+                        {
+                          $ne: [
+                            "$orderStatus",
+                            "cancelled",
+                          ],
+                        },
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+
+              codPaidAmount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$paymentMethod",
+                            "cod",
+                          ],
+                        },
+                        {
+                          $eq: [
+                            "$paymentStatus",
+                            "paid",
+                          ],
+                        },
+                        {
+                          $ne: [
+                            "$orderStatus",
+                            "cancelled",
+                          ],
+                        },
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+
+              onlinePaidAmount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $eq: [
+                            "$paymentMethod",
+                            "online",
+                          ],
+                        },
+                        {
+                          $eq: [
+                            "$paymentStatus",
+                            "paid",
+                          ],
+                        },
+                        {
+                          $ne: [
+                            "$orderStatus",
+                            "cancelled",
+                          ],
+                        },
+                      ],
+                    },
+                    "$total",
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        Order.find({
+          user: user._id,
+        })
+          .sort({
+            createdAt: -1,
+          })
+          .limit(10)
+          .lean(),
+
+        Subscription.aggregate([
+          {
+            $match: {
+              user: user._id,
+            },
+          },
+          {
+            $group: {
+              _id: "$user",
+
+              subscriptionCount: {
+                $sum: 1,
+              },
+
+              activeSubscriptionCount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$status",
+                        "active",
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              pausedSubscriptionCount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$status",
+                        "paused",
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              cancelledSubscriptionCount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$status",
+                        "cancelled",
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              recurringValue: {
+                $sum: {
+                  $cond: [
+                    {
+                      $eq: [
+                        "$status",
+                        "active",
+                      ],
+                    },
+                    "$totalPerCycle",
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        Subscription.find({
+          user: user._id,
+        })
+          .sort({
+            createdAt: -1,
+          })
+          .limit(5)
+          .select(
+            "subscriptionNumber planName status billingCycle totalPerCycle nextBillingAt createdAt"
+          )
+          .lean(),
+      ]);
+
+      const orderStats =
+        orderSummary[0] || {};
+
+      const subscriptionStats =
+        subscriptionSummary[0] || {};
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          customer: {
+            user: {
+              ...serializeUser(user),
+              savedAddresses:
+                Array.isArray(
+                  user.savedAddresses
+                )
+                  ? user.savedAddresses
+                      .map(
+                        serializeSavedAddress
+                      )
+                      .filter(Boolean)
+                  : [],
+            },
+
+            statistics: {
+              totalOrders:
+                orderStats.totalOrders ??
+                0,
+
+              activeOrders:
+                orderStats.activeOrders ??
+                0,
+
+              deliveredOrders:
+                orderStats
+                  .deliveredOrders ?? 0,
+
+              cancelledOrders:
+                orderStats
+                  .cancelledOrders ?? 0,
+
+              totalRevenue:
+                orderStats.totalRevenue ??
+                0,
+
+              totalBottles:
+                orderStats.totalBottles ??
+                0,
+
+              codPendingAmount:
+                orderStats
+                  .codPendingAmount ??
+                0,
+
+              codPaidAmount:
+                orderStats.codPaidAmount ??
+                0,
+
+              onlinePaidAmount:
+                orderStats
+                  .onlinePaidAmount ??
+                0,
+
+              subscriptionCount:
+                subscriptionStats
+                  .subscriptionCount ??
+                0,
+
+              activeSubscriptionCount:
+                subscriptionStats
+                  .activeSubscriptionCount ??
+                0,
+
+              pausedSubscriptionCount:
+                subscriptionStats
+                  .pausedSubscriptionCount ??
+                0,
+
+              cancelledSubscriptionCount:
+                subscriptionStats
+                  .cancelledSubscriptionCount ??
+                0,
+
+              activeRecurringValue:
+                subscriptionStats
+                  .recurringValue ?? 0,
+            },
+
+            latestOrders:
+              latestOrders.map(
+                serializeOrderSummary
+              ),
+
+            latestSubscriptions,
+          },
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
       return next(error);
     }
   }
@@ -442,7 +1034,7 @@ router.patch(
         req.body.role
       ).toLowerCase();
 
-      if (!USER_ROLES.includes(role)) {
+      if (!MANAGED_ROLES.includes(role)) {
         return res.status(400).json({
           success: false,
           message:
@@ -471,6 +1063,14 @@ router.patch(
           success: false,
           message:
             "You cannot change your own administrator role from this page.",
+        });
+      }
+
+      if (user.role === "delivery") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Delivery partner roles must be managed from the delivery partners page.",
         });
       }
 

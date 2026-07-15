@@ -272,6 +272,139 @@ export type AdminDeliverySlotPayload = {
   pincode?: string;
 };
 
+export type ManagedUserRole =
+  | "customer"
+  | "admin";
+
+export type AdminSavedAddress = {
+  id: string;
+  label: string;
+  fullName: string;
+  phone: string;
+  pincode: string;
+  houseDetails: string;
+  areaDetails: string;
+  landmark: string;
+  area: string;
+  city: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminManagedUser = {
+  _id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  active: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  savedAddressCount?: number;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isCurrentAdmin: boolean;
+
+  statistics: {
+    orderCount: number;
+    orderValue: number;
+    bottleCount: number;
+    codPendingAmount: number;
+    codPaidAmount: number;
+    subscriptionCount: number;
+    activeSubscriptionCount: number;
+  };
+};
+
+export type AdminUserSummary = {
+  totalUsers: number;
+  totalCustomers: number;
+  totalAdmins: number;
+  totalDeliveryPartners?: number;
+  activeUsers: number;
+  inactiveUsers: number;
+};
+
+export type AdminUsersResult = {
+  users: AdminManagedUser[];
+  summary: AdminUserSummary;
+};
+
+export type AdminCustomerOrderSummary = {
+  _id: string;
+  orderNumber: string;
+  total: number;
+  subtotal: number;
+  deliveryFee: number;
+  bottleCount: number;
+  paymentMethod: "cod" | "online";
+  paymentStatus: string;
+  orderStatus: string;
+  deliveryStatus: string;
+
+  deliveryAddress: {
+    fullName?: string;
+    phone?: string;
+    pincode?: string;
+    houseDetails?: string;
+    areaDetails?: string;
+    landmark?: string;
+    area?: string;
+    city?: string;
+  };
+
+  deliverySchedule: {
+    deliveryDateId?: string;
+    deliveryDateLabel?: string;
+    deliverySlot?: string;
+    deliverySlotCode?: string;
+  };
+
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminCustomerSubscriptionSummary = {
+  _id: string;
+  subscriptionNumber: string;
+  planName: string;
+  status: string;
+  billingCycle: string;
+  totalPerCycle: number;
+  nextBillingAt: string | null;
+  createdAt: string;
+};
+
+export type AdminCustomerDetails = {
+  user: AdminManagedUser & {
+    savedAddresses: AdminSavedAddress[];
+  };
+
+  statistics: {
+    totalOrders: number;
+    activeOrders: number;
+    deliveredOrders: number;
+    cancelledOrders: number;
+    totalRevenue: number;
+    totalBottles: number;
+    codPendingAmount: number;
+    codPaidAmount: number;
+    onlinePaidAmount: number;
+    subscriptionCount: number;
+    activeSubscriptionCount: number;
+    pausedSubscriptionCount: number;
+    cancelledSubscriptionCount: number;
+    activeRecurringValue: number;
+  };
+
+  latestOrders: AdminCustomerOrderSummary[];
+
+  latestSubscriptions:
+    AdminCustomerSubscriptionSummary[];
+};
+
 type LoginResponse =
   ApiBaseResponse & {
     data: AdminSession;
@@ -334,6 +467,30 @@ type DeliverySlotResponse =
     data: {
       slot:
         AdminDeliverySlotConfiguration;
+    };
+  };
+
+type AdminUsersResponse =
+  ApiBaseResponse & {
+    count: number;
+
+    data: {
+      users: AdminManagedUser[];
+      summary: AdminUserSummary;
+    };
+  };
+
+type AdminUserMutationResponse =
+  ApiBaseResponse & {
+    data: {
+      user: AdminManagedUser;
+    };
+  };
+
+type AdminCustomerDetailsResponse =
+  ApiBaseResponse & {
+    data: {
+      customer: AdminCustomerDetails;
     };
   };
 
@@ -428,6 +585,61 @@ function normaliseMovement(
 
     metadata:
       movement.metadata ?? {},
+  };
+}
+
+function normaliseManagedUser(
+  user: AdminManagedUser
+): AdminManagedUser {
+  return {
+    ...user,
+
+    savedAddressCount:
+      user.savedAddressCount ?? 0,
+
+    statistics: {
+      orderCount:
+        Number(
+          user.statistics
+            ?.orderCount ?? 0
+        ),
+
+      orderValue:
+        Number(
+          user.statistics
+            ?.orderValue ?? 0
+        ),
+
+      bottleCount:
+        Number(
+          user.statistics
+            ?.bottleCount ?? 0
+        ),
+
+      codPendingAmount:
+        Number(
+          user.statistics
+            ?.codPendingAmount ?? 0
+        ),
+
+      codPaidAmount:
+        Number(
+          user.statistics
+            ?.codPaidAmount ?? 0
+        ),
+
+      subscriptionCount:
+        Number(
+          user.statistics
+            ?.subscriptionCount ?? 0
+        ),
+
+      activeSubscriptionCount:
+        Number(
+          user.statistics
+            ?.activeSubscriptionCount ?? 0
+        ),
+    },
   };
 }
 
@@ -1100,6 +1312,165 @@ export async function disableAdminDeliverySlot(
     );
 
   return response.data.slot;
+}
+
+export async function fetchAdminUsers(
+  token: string,
+  options: {
+    role?: string;
+    status?: string;
+    search?: string;
+  } = {}
+): Promise<AdminUsersResult> {
+  requireToken(token);
+
+  const params =
+    new URLSearchParams();
+
+  if (options.role) {
+    params.set(
+      "role",
+      options.role
+    );
+  }
+
+  if (options.status) {
+    params.set(
+      "status",
+      options.status
+    );
+  }
+
+  const search =
+    options.search?.trim();
+
+  if (search) {
+    params.set(
+      "search",
+      search
+    );
+  }
+
+  const query =
+    params.toString();
+
+  const response =
+    await apiRequest<AdminUsersResponse>(
+      `/api/admin/users${
+        query ? `?${query}` : ""
+      }`,
+      {
+        token,
+      }
+    );
+
+  return {
+    users:
+      response.data.users.map(
+        normaliseManagedUser
+      ),
+
+    summary:
+      response.data.summary,
+  };
+}
+
+export async function fetchAdminUserDetails(
+  token: string,
+  userId: string
+): Promise<AdminCustomerDetails> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<AdminCustomerDetailsResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}`,
+      {
+        token,
+      }
+    );
+
+  return {
+    ...response.data.customer,
+
+    user:
+      normaliseManagedUser(
+        response.data.customer.user
+      ) as AdminCustomerDetails["user"],
+  };
+}
+
+export async function updateAdminUserStatus(
+  token: string,
+  userId: string,
+  active: boolean
+): Promise<AdminManagedUser> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<AdminUserMutationResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}/status`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          active,
+        }),
+      }
+    );
+
+  return normaliseManagedUser(
+    response.data.user
+  );
+}
+
+export async function updateAdminUserRole(
+  token: string,
+  userId: string,
+  role: ManagedUserRole
+): Promise<AdminManagedUser> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<AdminUserMutationResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}/role`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          role,
+        }),
+      }
+    );
+
+  return normaliseManagedUser(
+    response.data.user
+  );
 }
 
 export {

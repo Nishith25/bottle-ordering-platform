@@ -10,13 +10,17 @@ import {
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
+  fetchAdminUserDetails,
   fetchAdminUsers,
   updateAdminUserRole,
   updateAdminUserStatus,
+  type AdminCustomerDetails,
+  type AdminCustomerOrderSummary,
   type AdminManagedUser,
+  type AdminSavedAddress,
   type AdminUserSummary,
   type ManagedUserRole,
-} from "../services/adminUsersApi";
+} from "../services/api";
 
 import "./users.css";
 
@@ -25,6 +29,7 @@ const EMPTY_SUMMARY: AdminUserSummary =
     totalUsers: 0,
     totalCustomers: 0,
     totalAdmins: 0,
+    totalDeliveryPartners: 0,
     activeUsers: 0,
     inactiveUsers: 0,
   };
@@ -71,6 +76,33 @@ function formatDate(
   );
 }
 
+function getRoleLabel(
+  role: string
+) {
+  if (role === "admin") {
+    return "Administrator";
+  }
+
+  if (role === "delivery") {
+    return "Delivery";
+  }
+
+  return "Customer";
+}
+
+function getOrderStatusLabel(
+  status: string
+) {
+  return status
+    .split("_")
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() +
+        part.slice(1)
+    )
+    .join(" ");
+}
+
 export default function UsersPage() {
   const { token } =
     useAdminAuth();
@@ -107,6 +139,33 @@ export default function UsersPage() {
   const [
     updatingUserId,
     setUpdatingUserId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    selectedUserId,
+    setSelectedUserId,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    customerDetails,
+    setCustomerDetails,
+  ] =
+    useState<AdminCustomerDetails | null>(
+      null
+    );
+
+  const [
+    detailsLoading,
+    setDetailsLoading,
+  ] = useState(false);
+
+  const [
+    detailsError,
+    setDetailsError,
   ] = useState<
     string | null
   >(null);
@@ -170,6 +229,57 @@ export default function UsersPage() {
       submittedSearch,
     ]);
 
+  const loadCustomerDetails =
+    useCallback(
+      async (
+        userId: string
+      ) => {
+        if (!token) {
+          return;
+        }
+
+        setSelectedUserId(
+          userId
+        );
+
+        setDetailsLoading(
+          true
+        );
+
+        setDetailsError(
+          null
+        );
+
+        try {
+          const result =
+            await fetchAdminUserDetails(
+              token,
+              userId
+            );
+
+          setCustomerDetails(
+            result
+          );
+        } catch (requestError) {
+          setCustomerDetails(
+            null
+          );
+
+          setDetailsError(
+            requestError instanceof
+              Error
+              ? requestError.message
+              : "Unable to load customer details."
+          );
+        } finally {
+          setDetailsLoading(
+            false
+          );
+        }
+      },
+      [token]
+    );
+
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
@@ -230,6 +340,15 @@ export default function UsersPage() {
         );
 
         await loadUsers();
+
+        if (
+          selectedUserId ===
+          user._id
+        ) {
+          await loadCustomerDetails(
+            user._id
+          );
+        }
       } catch (requestError) {
         setError(
           requestError instanceof
@@ -253,7 +372,8 @@ export default function UsersPage() {
       if (
         !token ||
         user.isCurrentAdmin ||
-        nextRole === user.role
+        nextRole === user.role ||
+        user.role === "delivery"
       ) {
         return;
       }
@@ -290,6 +410,15 @@ export default function UsersPage() {
         );
 
         await loadUsers();
+
+        if (
+          selectedUserId ===
+          user._id
+        ) {
+          await loadCustomerDetails(
+            user._id
+          );
+        }
       } catch (requestError) {
         setError(
           requestError instanceof
@@ -364,6 +493,14 @@ export default function UsersPage() {
           label="Administrators"
           value={
             summary.totalAdmins
+          }
+        />
+
+        <UserSummaryCard
+          label="Delivery partners"
+          value={
+            summary.totalDeliveryPartners ??
+            0
           }
         />
 
@@ -445,6 +582,10 @@ export default function UsersPage() {
               <option value="admin">
                 Administrators
               </option>
+
+              <option value="delivery">
+                Delivery partners
+              </option>
             </select>
           </label>
 
@@ -512,6 +653,12 @@ export default function UsersPage() {
                   <th>Status</th>
                   <th>Orders</th>
                   <th>
+                    Bottles
+                  </th>
+                  <th>
+                    COD
+                  </th>
+                  <th>
                     Subscriptions
                   </th>
                   <th>
@@ -531,10 +678,19 @@ export default function UsersPage() {
                       updatingUserId ===
                       user._id;
 
+                    const selected =
+                      selectedUserId ===
+                      user._id;
+
                     return (
                       <tr
                         key={
                           user._id
+                        }
+                        className={
+                          selected
+                            ? "selected-user-row"
+                            : ""
                         }
                       >
                         <td>
@@ -570,7 +726,18 @@ export default function UsersPage() {
                                 +91{" "}
                                 {
                                   user.phone
-                                }
+                                }{" "}
+                                ·{" "}
+                                {
+                                  user.savedAddressCount ??
+                                  0
+                                }{" "}
+                                saved address
+                                {(user.savedAddressCount ??
+                                  0) ===
+                                1
+                                  ? ""
+                                  : "es"}
                               </small>
                             </div>
                           </div>
@@ -580,10 +747,9 @@ export default function UsersPage() {
                           <span
                             className={`user-role-pill user-role-${user.role}`}
                           >
-                            {user.role ===
-                            "admin"
-                              ? "Administrator"
-                              : "Customer"}
+                            {getRoleLabel(
+                              user.role
+                            )}
                           </span>
                         </td>
 
@@ -627,6 +793,44 @@ export default function UsersPage() {
                               {
                                 user
                                   .statistics
+                                  .bottleCount
+                              }
+                            </strong>
+
+                            <span>
+                              bottles bought
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="user-stat-cell">
+                            <strong>
+                              {formatCurrency(
+                                user
+                                  .statistics
+                                  .codPendingAmount
+                              )}
+                            </strong>
+
+                            <span>
+                              pending ·{" "}
+                              {formatCurrency(
+                                user
+                                  .statistics
+                                  .codPaidAmount
+                              )}{" "}
+                              paid
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="user-stat-cell">
+                            <strong>
+                              {
+                                user
+                                  .statistics
                                   .subscriptionCount
                               }
                             </strong>
@@ -659,60 +863,85 @@ export default function UsersPage() {
                         </td>
 
                         <td>
-                          {user.isCurrentAdmin ? (
-                            <span className="self-managed-notice">
-                              Protected current
-                              account
-                            </span>
-                          ) : (
-                            <div className="user-action-group">
-                              <button
-                                type="button"
-                                className="table-action"
-                                disabled={
-                                  isUpdating
-                                }
-                                onClick={() => {
-                                  void handleStatusToggle(
-                                    user
-                                  );
-                                }}
-                              >
-                                {isUpdating
-                                  ? "Updating..."
-                                  : user.active
-                                    ? "Disable"
-                                    : "Activate"}
-                              </button>
+                          <div className="user-action-group">
+                            <button
+                              type="button"
+                              className="table-action"
+                              disabled={
+                                detailsLoading &&
+                                selected
+                              }
+                              onClick={() => {
+                                void loadCustomerDetails(
+                                  user._id
+                                );
+                              }}
+                            >
+                              {detailsLoading &&
+                              selected
+                                ? "Loading..."
+                                : selected
+                                  ? "Viewing"
+                                  : "View"}
+                            </button>
 
-                              <button
-                                type="button"
-                                className={
-                                  user.role ===
-                                  "admin"
-                                    ? "table-action danger"
-                                    : "table-action promote"
-                                }
-                                disabled={
-                                  isUpdating
-                                }
-                                onClick={() => {
-                                  void handleRoleChange(
-                                    user,
-                                    user.role ===
+                            {user.isCurrentAdmin ? (
+                              <span className="self-managed-notice">
+                                Protected
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="table-action"
+                                  disabled={
+                                    isUpdating
+                                  }
+                                  onClick={() => {
+                                    void handleStatusToggle(
+                                      user
+                                    );
+                                  }}
+                                >
+                                  {isUpdating
+                                    ? "Updating..."
+                                    : user.active
+                                      ? "Disable"
+                                      : "Activate"}
+                                </button>
+
+                                {user.role !==
+                                "delivery" ? (
+                                  <button
+                                    type="button"
+                                    className={
+                                      user.role ===
                                       "admin"
-                                      ? "customer"
-                                      : "admin"
-                                  );
-                                }}
-                              >
-                                {user.role ===
-                                "admin"
-                                  ? "Make customer"
-                                  : "Promote to admin"}
-                              </button>
-                            </div>
-                          )}
+                                        ? "table-action danger"
+                                        : "table-action promote"
+                                    }
+                                    disabled={
+                                      isUpdating
+                                    }
+                                    onClick={() => {
+                                      void handleRoleChange(
+                                        user,
+                                        user.role ===
+                                          "admin"
+                                          ? "customer"
+                                          : "admin"
+                                      );
+                                    }}
+                                  >
+                                    {user.role ===
+                                    "admin"
+                                      ? "Make customer"
+                                      : "Promote"}
+                                  </button>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -723,6 +952,23 @@ export default function UsersPage() {
           </div>
         )}
       </section>
+
+      {detailsError ? (
+        <div className="inline-error">
+          {detailsError}
+        </div>
+      ) : null}
+
+      {customerDetails ? (
+        <CustomerDetailsPanel
+          details={customerDetails}
+          onClose={() => {
+            setSelectedUserId(null);
+            setCustomerDetails(null);
+            setDetailsError(null);
+          }}
+        />
+      ) : null}
 
       <div className="user-security-note">
         <strong>
@@ -755,5 +1001,433 @@ function UserSummaryCard({
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function CustomerDetailsPanel({
+  details,
+  onClose,
+}: {
+  details: AdminCustomerDetails;
+  onClose: () => void;
+}) {
+  const user =
+    details.user;
+
+  return (
+    <section className="customer-detail-panel">
+      <div className="customer-detail-header">
+        <div>
+          <span className="detail-eyebrow">
+            Customer profile
+          </span>
+
+          <h3>
+            {user.fullName}
+          </h3>
+
+          <p>
+            {user.email} · +91{" "}
+            {user.phone}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="customer-detail-grid">
+        <DetailMetric
+          label="Total orders"
+          value={
+            details.statistics.totalOrders
+          }
+          hint={`${details.statistics.deliveredOrders} delivered · ${details.statistics.cancelledOrders} cancelled`}
+        />
+
+        <DetailMetric
+          label="Bottles bought"
+          value={
+            details.statistics.totalBottles
+          }
+          hint="Non-cancelled bottles"
+        />
+
+        <DetailMetric
+          label="Total revenue"
+          value={formatCurrency(
+            details.statistics.totalRevenue
+          )}
+          hint="Excluding cancelled orders"
+        />
+
+        <DetailMetric
+          label="COD pending"
+          value={formatCurrency(
+            details.statistics.codPendingAmount
+          )}
+          hint={`${formatCurrency(
+            details.statistics.codPaidAmount
+          )} COD paid`}
+        />
+
+        <DetailMetric
+          label="Online paid"
+          value={formatCurrency(
+            details.statistics.onlinePaidAmount
+          )}
+          hint="Paid online orders"
+        />
+
+        <DetailMetric
+          label="Subscriptions"
+          value={
+            details.statistics
+              .subscriptionCount
+          }
+          hint={`${details.statistics.activeSubscriptionCount} active · ${formatCurrency(
+            details.statistics
+              .activeRecurringValue
+          )}/cycle`}
+        />
+      </div>
+
+      <div className="customer-detail-columns">
+        <div className="detail-card">
+          <div className="detail-card-heading">
+            <h4>
+              Saved addresses
+            </h4>
+
+            <span>
+              {
+                user.savedAddresses.length
+              }{" "}
+              saved
+            </span>
+          </div>
+
+          {user.savedAddresses.length === 0 ? (
+            <p className="empty-detail-text">
+              No saved delivery addresses.
+            </p>
+          ) : (
+            <div className="saved-address-detail-list">
+              {user.savedAddresses.map(
+                (address) => (
+                  <SavedAddressCard
+                    key={address.id}
+                    address={address}
+                  />
+                )
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="detail-card">
+          <div className="detail-card-heading">
+            <h4>
+              Account
+            </h4>
+
+            <span>
+              {user.active
+                ? "Active"
+                : "Disabled"}
+            </span>
+          </div>
+
+          <div className="account-detail-list">
+            <DetailRow
+              label="Role"
+              value={getRoleLabel(
+                user.role
+              )}
+            />
+
+            <DetailRow
+              label="Email verified"
+              value={
+                user.emailVerified
+                  ? "Yes"
+                  : "No"
+              }
+            />
+
+            <DetailRow
+              label="Phone verified"
+              value={
+                user.phoneVerified
+                  ? "Yes"
+                  : "No"
+              }
+            />
+
+            <DetailRow
+              label="Last login"
+              value={formatDate(
+                user.lastLoginAt
+              )}
+            />
+
+            <DetailRow
+              label="Registered"
+              value={formatDate(
+                user.createdAt
+              )}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="detail-card latest-orders-card">
+        <div className="detail-card-heading">
+          <h4>
+            Latest orders
+          </h4>
+
+          <span>
+            Last 10
+          </span>
+        </div>
+
+        {details.latestOrders.length === 0 ? (
+          <p className="empty-detail-text">
+            No orders placed yet.
+          </p>
+        ) : (
+          <div className="latest-order-list">
+            {details.latestOrders.map(
+              (order) => (
+                <LatestOrderRow
+                  key={order._id}
+                  order={order}
+                />
+              )
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="detail-card latest-orders-card">
+        <div className="detail-card-heading">
+          <h4>
+            Latest subscriptions
+          </h4>
+
+          <span>
+            Last 5
+          </span>
+        </div>
+
+        {details.latestSubscriptions.length ===
+        0 ? (
+          <p className="empty-detail-text">
+            No subscriptions created yet.
+          </p>
+        ) : (
+          <div className="latest-order-list">
+            {details.latestSubscriptions.map(
+              (subscription) => (
+                <div
+                  key={subscription._id}
+                  className="latest-order-row"
+                >
+                  <div>
+                    <strong>
+                      {
+                        subscription.subscriptionNumber
+                      }
+                    </strong>
+
+                    <span>
+                      {subscription.planName} ·{" "}
+                      {
+                        subscription.billingCycle
+                      }
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>
+                      {formatCurrency(
+                        subscription.totalPerCycle
+                      )}
+                    </strong>
+
+                    <span>
+                      {getOrderStatusLabel(
+                        subscription.status
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>
+                      Next billing
+                    </strong>
+
+                    <span>
+                      {formatDate(
+                        subscription.nextBillingAt
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DetailMetric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number | string;
+  hint: string;
+}) {
+  return (
+    <article className="detail-metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{hint}</small>
+    </article>
+  );
+}
+
+function SavedAddressCard({
+  address,
+}: {
+  address: AdminSavedAddress;
+}) {
+  return (
+    <article className="saved-address-detail-card">
+      <div className="saved-address-detail-top">
+        <strong>
+          {address.label}
+        </strong>
+
+        {address.isDefault ? (
+          <span>
+            Default
+          </span>
+        ) : null}
+      </div>
+
+      <p>
+        {address.fullName} · +91{" "}
+        {address.phone}
+      </p>
+
+      <p>
+        {address.houseDetails},{" "}
+        {address.areaDetails}
+        {address.landmark
+          ? `, ${address.landmark}`
+          : ""}
+      </p>
+
+      <small>
+        {address.area}, {address.city} -{" "}
+        {address.pincode}
+      </small>
+    </article>
+  );
+}
+
+function LatestOrderRow({
+  order,
+}: {
+  order: AdminCustomerOrderSummary;
+}) {
+  return (
+    <div className="latest-order-row">
+      <div>
+        <strong>
+          {order.orderNumber}
+        </strong>
+
+        <span>
+          {formatDate(
+            order.createdAt
+          )}
+        </span>
+      </div>
+
+      <div>
+        <strong>
+          {formatCurrency(
+            order.total
+          )}
+        </strong>
+
+        <span>
+          {order.bottleCount} bottle
+          {order.bottleCount === 1
+            ? ""
+            : "s"}
+        </span>
+      </div>
+
+      <div>
+        <strong>
+          {getOrderStatusLabel(
+            order.orderStatus
+          )}
+        </strong>
+
+        <span>
+          {order.paymentMethod.toUpperCase()} ·{" "}
+          {getOrderStatusLabel(
+            order.paymentStatus
+          )}
+        </span>
+      </div>
+
+      <div>
+        <strong>
+          Delivery
+        </strong>
+
+        <span>
+          {order.deliverySchedule
+            ?.deliveryDateLabel ||
+            order.deliverySchedule
+              ?.deliveryDateId ||
+            "Not selected"}
+          {order.deliverySchedule
+            ?.deliverySlot
+            ? ` · ${order.deliverySchedule.deliverySlot}`
+            : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="account-detail-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
