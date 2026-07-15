@@ -7,6 +7,7 @@ const {
   allowRoles,
 } = require("../middleware/auth");
 
+const CustomerNote = require("../models/CustomerNote");
 const Order = require("../models/Order");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
@@ -44,6 +45,21 @@ function escapeRegex(value) {
     /[.*+?^${}()|[\]\\]/g,
     "\\$&"
   );
+}
+
+function buildAdminSnapshot(user) {
+  return {
+    fullName:
+      cleanText(user?.fullName) ||
+      "Admin",
+
+    email:
+      cleanText(user?.email).toLowerCase(),
+
+    role:
+      cleanText(user?.role) ||
+      "admin",
+  };
 }
 
 function serializeSavedAddress(address) {
@@ -85,6 +101,20 @@ function serializeUser(user) {
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+  };
+}
+
+function serializeCustomerNote(note) {
+  return {
+    _id: note._id,
+    customer: note.customer,
+    note: note.note,
+    createdBy: note.createdBy,
+    createdBySnapshot:
+      note.createdBySnapshot || null,
+    active: note.active,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
   };
 }
 
@@ -498,6 +528,7 @@ router.get(
         latestOrders,
         subscriptionSummary,
         latestSubscriptions,
+        notes,
       ] = await Promise.all([
         Order.aggregate([
           {
@@ -783,6 +814,16 @@ router.get(
             "subscriptionNumber planName status billingCycle totalPerCycle nextBillingAt createdAt"
           )
           .lean(),
+
+        CustomerNote.find({
+          customer: user._id,
+          active: true,
+        })
+          .sort({
+            createdAt: -1,
+          })
+          .limit(25)
+          .lean(),
       ]);
 
       const orderStats =
@@ -879,7 +920,90 @@ router.get(
               ),
 
             latestSubscriptions,
+
+            notes:
+              notes.map(
+                serializeCustomerNote
+              ),
           },
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      return next(error);
+    }
+  }
+);
+
+router.post(
+  "/:userId/notes",
+  async (req, res, next) => {
+    try {
+      const noteText =
+        cleanText(req.body.note);
+
+      if (
+        !noteText ||
+        noteText.length < 3
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Customer note must contain at least 3 characters.",
+        });
+      }
+
+      if (noteText.length > 1500) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Customer note cannot exceed 1500 characters.",
+        });
+      }
+
+      const customer =
+        await User.findById(
+          req.params.userId
+        ).select(
+          "_id fullName email phone role"
+        );
+
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      const note =
+        await CustomerNote.create({
+          customer: customer._id,
+          note: noteText,
+          createdBy:
+            req.user?._id || null,
+          createdBySnapshot:
+            buildAdminSnapshot(req.user),
+        });
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Customer note added successfully.",
+        data: {
+          note:
+            serializeCustomerNote(
+              note.toObject()
+            ),
         },
       });
     } catch (error) {

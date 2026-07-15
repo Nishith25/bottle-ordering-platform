@@ -13,6 +13,7 @@ import {
   API_BASE_URL,
   cancelAdminCustomerOrder,
   createAdminCustomerInvoicePrintLink,
+  createAdminCustomerNote,
   fetchAdminUserDetails,
   fetchAdminUsers,
   markAdminCustomerOrderCodCollected,
@@ -20,6 +21,7 @@ import {
   updateAdminUserRole,
   updateAdminUserStatus,
   type AdminCustomerDetails,
+  type AdminCustomerNote,
   type AdminCustomerOrderSummary,
   type AdminManagedUser,
   type AdminSavedAddress,
@@ -393,6 +395,16 @@ export default function UsersPage() {
   >(null);
 
   const [
+    noteDraft,
+    setNoteDraft,
+  ] = useState("");
+
+  const [
+    savingNote,
+    setSavingNote,
+  ] = useState(false);
+
+  const [
     detailsError,
     setDetailsError,
   ] = useState<
@@ -677,6 +689,57 @@ export default function UsersPage() {
         setUpdatingUserId(
           null
         );
+      }
+    };
+
+  const handleAddCustomerNote =
+    async () => {
+      if (
+        !token ||
+        !selectedUserId ||
+        savingNote
+      ) {
+        return;
+      }
+
+      const cleanNote =
+        noteDraft.trim();
+
+      if (cleanNote.length < 3) {
+        setError(
+          "Customer note must contain at least 3 characters."
+        );
+        return;
+      }
+
+      setSavingNote(true);
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await createAdminCustomerNote(
+          token,
+          selectedUserId,
+          cleanNote
+        );
+
+        setNoteDraft("");
+
+        setSuccess(
+          "Customer note added successfully."
+        );
+
+        await loadCustomerDetails(
+          selectedUserId
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to add customer note."
+        );
+      } finally {
+        setSavingNote(false);
       }
     };
 
@@ -1484,10 +1547,17 @@ export default function UsersPage() {
         <CustomerDetailsPanel
           details={customerDetails}
           actionLoadingKey={actionLoadingKey}
+          noteDraft={noteDraft}
+          savingNote={savingNote}
+          onNoteDraftChange={setNoteDraft}
+          onAddNote={() => {
+            void handleAddCustomerNote();
+          }}
           onClose={() => {
             setSelectedUserId(null);
             setCustomerDetails(null);
             setDetailsError(null);
+            setNoteDraft("");
           }}
           onOpenOrderPage={handleOpenOrderPage}
           onPrintInvoice={(order) => {
@@ -1553,6 +1623,10 @@ function UserSummaryCard({
 function CustomerDetailsPanel({
   details,
   actionLoadingKey,
+  noteDraft,
+  savingNote,
+  onNoteDraftChange,
+  onAddNote,
   onClose,
   onOpenOrderPage,
   onPrintInvoice,
@@ -1563,6 +1637,10 @@ function CustomerDetailsPanel({
 }: {
   details: AdminCustomerDetails;
   actionLoadingKey: string | null;
+  noteDraft: string;
+  savingNote: boolean;
+  onNoteDraftChange: (value: string) => void;
+  onAddNote: () => void;
   onClose: () => void;
   onOpenOrderPage: (
     order: AdminCustomerOrderSummary
@@ -1586,6 +1664,9 @@ function CustomerDetailsPanel({
 }) {
   const user =
     details.user;
+
+  const notes =
+    details.notes ?? [];
 
   return (
     <section className="customer-detail-panel">
@@ -1757,6 +1838,69 @@ function CustomerDetailsPanel({
             />
           </div>
         </div>
+      </div>
+
+      <div className="detail-card customer-notes-card">
+        <div className="detail-card-heading">
+          <h4>
+            Internal notes
+          </h4>
+
+          <span>
+            {notes.length} note
+            {notes.length === 1
+              ? ""
+              : "s"}
+          </span>
+        </div>
+
+        <div className="customer-note-form">
+          <textarea
+            value={noteDraft}
+            onChange={(event) =>
+              onNoteDraftChange(
+                event.target.value
+              )
+            }
+            placeholder="Add an internal support note. Example: Customer prefers morning delivery, COD follow-up needed, address landmark confirmed."
+            maxLength={1500}
+          />
+
+          <div className="customer-note-form-footer">
+            <small>
+              {noteDraft.trim().length}/1500
+            </small>
+
+            <button
+              type="button"
+              className="primary-button"
+              disabled={
+                savingNote ||
+                noteDraft.trim().length < 3
+              }
+              onClick={onAddNote}
+            >
+              {savingNote
+                ? "Saving..."
+                : "Add note"}
+            </button>
+          </div>
+        </div>
+
+        {notes.length === 0 ? (
+          <p className="empty-detail-text">
+            No internal notes yet.
+          </p>
+        ) : (
+          <div className="customer-note-list">
+            {notes.map((note) => (
+              <CustomerNoteCard
+                key={note._id}
+                note={note}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="detail-card latest-orders-card">
@@ -1940,6 +2084,30 @@ function SavedAddressCard({
         {address.area}, {address.city} -{" "}
         {address.pincode}
       </small>
+    </article>
+  );
+}
+
+function CustomerNoteCard({
+  note,
+}: {
+  note: AdminCustomerNote;
+}) {
+  const author =
+    note.createdBySnapshot?.fullName ||
+    "Admin";
+
+  return (
+    <article className="customer-note-card">
+      <p>{note.note}</p>
+
+      <div className="customer-note-meta">
+        <span>{author}</span>
+
+        <span>
+          {formatDate(note.createdAt)}
+        </span>
+      </div>
     </article>
   );
 }

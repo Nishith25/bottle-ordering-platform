@@ -116,6 +116,7 @@ export type AdminInventoryMovement = {
   quantityChange: number;
   stockBefore: number;
   stockAfter: number;
+
   lowStockThresholdBefore:
     | number
     | null;
@@ -294,6 +295,28 @@ export type AdminSavedAddress = {
   updatedAt: string;
 };
 
+export type AdminCustomerNote = {
+  _id: string;
+  customer: string;
+  note: string;
+
+  createdBy:
+    | string
+    | null;
+
+  createdBySnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AdminManagedUser = {
   _id: string;
   fullName: string;
@@ -427,6 +450,8 @@ export type AdminCustomerDetails = {
 
   latestSubscriptions:
     AdminCustomerSubscriptionSummary[];
+
+  notes: AdminCustomerNote[];
 };
 
 export type AdminCashCollection = {
@@ -553,6 +578,13 @@ type AdminCustomerDetailsResponse =
   ApiBaseResponse & {
     data: {
       customer: AdminCustomerDetails;
+    };
+  };
+
+type CustomerNoteResponse =
+  ApiBaseResponse & {
+    data: {
+      note: AdminCustomerNote;
     };
   };
 
@@ -1488,7 +1520,50 @@ export async function fetchAdminUserDetails(
       normaliseManagedUser(
         response.data.customer.user
       ) as AdminCustomerDetails["user"],
+
+    notes:
+      response.data.customer.notes ?? [],
   };
+}
+
+export async function createAdminCustomerNote(
+  token: string,
+  userId: string,
+  note: string
+): Promise<AdminCustomerNote> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  const cleanNote =
+    note.trim();
+
+  if (cleanNote.length < 3) {
+    throw new Error(
+      "Customer note must contain at least 3 characters."
+    );
+  }
+
+  const response =
+    await apiRequest<CustomerNoteResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}/notes`,
+      {
+        method: "POST",
+        token,
+
+        body: JSON.stringify({
+          note: cleanNote,
+        }),
+      }
+    );
+
+  return response.data.note;
 }
 
 export async function updateAdminUserStatus(

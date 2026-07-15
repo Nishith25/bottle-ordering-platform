@@ -648,3 +648,95 @@
   background: #dcebdd;
   font-size: 7px;
 }
+.customer-notes-card {
+  margin-bottom: 14px;
+}
+
+.customer-note-form {
+  padding: 12px;
+  border: 1px solid #e2e9e2;
+  border-radius: 16px;
+  background: #f8faf7;
+  margin-bottom: 12px;
+}
+
+.customer-note-form textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #dfe7df;
+  border-radius: 13px;
+  outline: none;
+  color: #25372e;
+  background: #ffffff;
+  font-size: 9px;
+  line-height: 15px;
+  font-family: inherit;
+}
+
+.customer-note-form textarea:focus {
+  border-color: #6c967c;
+  box-shadow: 0 0 0 3px
+    rgba(86, 132, 102, 0.11);
+}
+
+.customer-note-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.customer-note-form-footer small {
+  color: #7a867e;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.customer-note-form-footer .primary-button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 8px;
+}
+
+.customer-note-form-footer .primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.customer-note-list {
+  display: grid;
+  gap: 9px;
+}
+
+.customer-note-card {
+  padding: 12px;
+  border: 1px solid #e2e9e2;
+  border-radius: 15px;
+  background: #ffffff;
+}
+
+.customer-note-card p {
+  margin: 0;
+  color: #2d3d34;
+  font-size: 9px;
+  line-height: 15px;
+  white-space: pre-wrap;
+}
+
+.customer-note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #eef2ed;
+}
+
+.customer-note-meta span {
+  color: #7a867e;
+  font-size: 7px;
+  font-weight: 800;
+}
