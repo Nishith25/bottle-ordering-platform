@@ -146,7 +146,9 @@ adminNotificationSchema.index({
   createdAt: -1,
 });
 
-module.exports = mongoose.model(
-  "AdminNotification",
-  adminNotificationSchema
-);
+module.exports =
+  mongoose.models.AdminNotification ||
+  mongoose.model(
+    "AdminNotification",
+    adminNotificationSchema
+  );

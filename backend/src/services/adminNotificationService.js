@@ -15,9 +15,28 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
-function addHours(hours) {
-  return new Date(
-    Date.now() + hours * 60 * 60 * 1000
+function toNumber(value) {
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : 0;
+}
+
+function getOrderNumber(order) {
+  return (
+    cleanText(order?.orderNumber) ||
+    cleanText(order?.orderId) ||
+    String(order?._id || "")
+  );
+}
+
+function getProductName(product) {
+  return (
+    cleanText(product?.name) ||
+    cleanText(product?.title) ||
+    cleanText(product?.productName) ||
+    "Bottle"
   );
 }
 
@@ -40,89 +59,103 @@ async function createNotificationOnce({
     };
   }
 
-  const now = new Date();
-
-  const result =
-    await AdminNotification.findOneAndUpdate(
-      {
+  try {
+    const existing =
+      await AdminNotification.findOne({
         automationKey,
-      },
-      {
-        $setOnInsert: {
-          type,
-          severity,
-          title,
-          message,
-          actionUrl:
-            cleanText(actionUrl),
-          sourceType:
-            sourceType || "",
-          sourceId:
-            sourceId || null,
-          sourceLabel:
-            cleanText(sourceLabel),
-          automationKey,
-          metadata,
-          readAt: null,
-          readBy: null,
-          readBySnapshot: {
-            fullName: "",
-            email: "",
-            role: "",
-          },
-          active: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      },
-      {
-        upsert: true,
-        new: false,
-        rawResult: true,
-      }
-    );
+      }).select("_id");
 
-  return {
-    created:
-      Boolean(
-        result?.lastErrorObject
-          ?.upserted
-      ),
-    skipped:
-      !result?.lastErrorObject
-        ?.upserted,
-  };
+    if (existing) {
+      return {
+        created: false,
+        skipped: true,
+      };
+    }
+
+    await AdminNotification.create({
+      type,
+      severity,
+      title,
+      message,
+      actionUrl:
+        cleanText(actionUrl),
+      sourceType:
+        sourceType || "",
+      sourceId:
+        sourceId || null,
+      sourceLabel:
+        cleanText(sourceLabel),
+      automationKey,
+      metadata,
+      readAt: null,
+      readBy: null,
+      readBySnapshot: {
+        fullName: "",
+        email: "",
+        role: "",
+      },
+      active: true,
+    });
+
+    return {
+      created: true,
+      skipped: false,
+    };
+  } catch (error) {
+    if (
+      error &&
+      error.code === 11000
+    ) {
+      return {
+        created: false,
+        skipped: true,
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function generateStockNotifications() {
   const products =
     await Product.find({
       available: true,
-      $expr: {
-        $lte: [
-          "$stockQuantity",
-          "$lowStockThreshold",
-        ],
-      },
     })
       .select(
-        "_id productId name stockQuantity lowStockThreshold available"
+        "_id productId name title productName stockQuantity lowStockThreshold available"
       )
       .sort({
-        stockQuantity: 1,
+        updatedAt: -1,
       })
-      .limit(100)
+      .limit(300)
       .lean();
 
   let created = 0;
 
   for (const product of products) {
+    const stockQuantity =
+      toNumber(product.stockQuantity);
+
+    const lowStockThreshold =
+      toNumber(product.lowStockThreshold);
+
+    if (
+      stockQuantity >
+      lowStockThreshold
+    ) {
+      continue;
+    }
+
+    const productName =
+      getProductName(product);
+
     const outOfStock =
-      Number(product.stockQuantity || 0) <= 0;
+      stockQuantity <= 0;
 
     const result =
       await createNotificationOnce({
         type: "stock",
+
         severity:
           outOfStock
             ? "danger"
@@ -130,13 +163,13 @@ async function generateStockNotifications() {
 
         title:
           outOfStock
-            ? `${product.name} is out of stock`
-            : `${product.name} is low on stock`,
+            ? `${productName} is out of stock`
+            : `${productName} is low on stock`,
 
         message:
           outOfStock
-            ? `${product.name} has 0 bottles available. Update stock before customers place orders.`
-            : `${product.name} has ${product.stockQuantity} bottles left. Low-stock threshold is ${product.lowStockThreshold}.`,
+            ? `${productName} has 0 bottles available. Update stock before customers place orders.`
+            : `${productName} has ${stockQuantity} bottles left. Low-stock threshold is ${lowStockThreshold}.`,
 
         actionUrl:
           "/products",
@@ -148,24 +181,17 @@ async function generateStockNotifications() {
           product._id,
 
         sourceLabel:
-          product.productId || product.name,
+          product.productId || productName,
 
         automationKey:
-          `product:${product._id}:stock:${outOfStock ? "out" : "low"}:${product.stockQuantity}`,
+          `product:${product._id}:stock:${outOfStock ? "out" : "low"}:${stockQuantity}`,
 
         metadata: {
           productId:
             product.productId,
-          productName:
-            product.name,
-          stockQuantity:
-            Number(
-              product.stockQuantity || 0
-            ),
-          lowStockThreshold:
-            Number(
-              product.lowStockThreshold || 0
-            ),
+          productName,
+          stockQuantity,
+          lowStockThreshold,
           rule:
             outOfStock
               ? "product_out_of_stock"
@@ -269,7 +295,7 @@ async function generateRefundFailedNotifications() {
       refundStatus: "failed",
     })
       .select(
-        "_id orderNumber user refundFailureReason refundAmount total refundStatus updatedAt"
+        "_id orderNumber orderId user refundFailureReason refundAmount total refundStatus updatedAt"
       )
       .sort({
         updatedAt: -1,
@@ -280,24 +306,27 @@ async function generateRefundFailedNotifications() {
   let created = 0;
 
   for (const order of orders) {
+    const orderNumber =
+      getOrderNumber(order);
+
     const result =
       await createNotificationOnce({
         type: "refund",
         severity: "danger",
 
         title:
-          `Refund failed: ${order.orderNumber}`,
+          `Refund failed: ${orderNumber}`,
 
         message:
           cleanText(
             order.refundFailureReason
           )
-            ? `Refund failed for ${order.orderNumber}. Reason: ${order.refundFailureReason}`
-            : `Refund failed for ${order.orderNumber}. Retry the refund from Orders or Follow-up Center.`,
+            ? `Refund failed for ${orderNumber}. Reason: ${order.refundFailureReason}`
+            : `Refund failed for ${orderNumber}. Retry the refund from Orders or Follow-up Center.`,
 
         actionUrl:
           `/orders?search=${encodeURIComponent(
-            order.orderNumber
+            orderNumber
           )}`,
 
         sourceType:
@@ -307,16 +336,15 @@ async function generateRefundFailedNotifications() {
           order._id,
 
         sourceLabel:
-          order.orderNumber,
+          orderNumber,
 
         automationKey:
           `order:${order._id}:refund_failed_notification`,
 
         metadata: {
-          orderNumber:
-            order.orderNumber,
+          orderNumber,
           refundAmount:
-            Number(order.refundAmount || 0),
+            toNumber(order.refundAmount),
           refundFailureReason:
             cleanText(
               order.refundFailureReason
@@ -344,10 +372,9 @@ async function generateCodUnpaidNotifications() {
       },
     })
       .select(
-        "_id orderNumber total paymentMethod paymentStatus orderStatus deliveredAt updatedAt"
+        "_id orderNumber orderId total paymentMethod paymentStatus orderStatus deliveredAt updatedAt"
       )
       .sort({
-        deliveredAt: -1,
         updatedAt: -1,
       })
       .limit(150)
@@ -356,20 +383,23 @@ async function generateCodUnpaidNotifications() {
   let created = 0;
 
   for (const order of orders) {
+    const orderNumber =
+      getOrderNumber(order);
+
     const result =
       await createNotificationOnce({
         type: "cod_payment",
         severity: "danger",
 
         title:
-          `COD unpaid: ${order.orderNumber}`,
+          `COD unpaid: ${orderNumber}`,
 
         message:
-          `Order ${order.orderNumber} is delivered but COD payment is still ${order.paymentStatus}. Amount: ${Number(order.total || 0)}.`,
+          `Order ${orderNumber} is delivered but COD payment is still ${order.paymentStatus}. Amount: ₹${toNumber(order.total)}.`,
 
         actionUrl:
           `/orders?search=${encodeURIComponent(
-            order.orderNumber
+            orderNumber
           )}`,
 
         sourceType:
@@ -379,16 +409,15 @@ async function generateCodUnpaidNotifications() {
           order._id,
 
         sourceLabel:
-          order.orderNumber,
+          orderNumber,
 
         automationKey:
           `order:${order._id}:cod_unpaid_notification`,
 
         metadata: {
-          orderNumber:
-            order.orderNumber,
+          orderNumber,
           total:
-            Number(order.total || 0),
+            toNumber(order.total),
           paymentStatus:
             order.paymentStatus,
           rule:
@@ -424,7 +453,7 @@ async function generateNewOrderNotifications() {
       },
     })
       .select(
-        "_id orderNumber total paymentMethod paymentStatus orderStatus createdAt"
+        "_id orderNumber orderId total paymentMethod paymentStatus orderStatus createdAt"
       )
       .sort({
         createdAt: -1,
@@ -435,20 +464,23 @@ async function generateNewOrderNotifications() {
   let created = 0;
 
   for (const order of orders) {
+    const orderNumber =
+      getOrderNumber(order);
+
     const result =
       await createNotificationOnce({
         type: "order",
         severity: "info",
 
         title:
-          `New order: ${order.orderNumber}`,
+          `New order: ${orderNumber}`,
 
         message:
-          `New ${order.paymentMethod} order placed for ${Number(order.total || 0)}. Current status: ${order.orderStatus}.`,
+          `New ${order.paymentMethod || "customer"} order placed for ₹${toNumber(order.total)}. Current status: ${order.orderStatus}.`,
 
         actionUrl:
           `/orders?search=${encodeURIComponent(
-            order.orderNumber
+            orderNumber
           )}`,
 
         sourceType:
@@ -458,16 +490,15 @@ async function generateNewOrderNotifications() {
           order._id,
 
         sourceLabel:
-          order.orderNumber,
+          orderNumber,
 
         automationKey:
           `order:${order._id}:new_order_notification`,
 
         metadata: {
-          orderNumber:
-            order.orderNumber,
+          orderNumber,
           total:
-            Number(order.total || 0),
+            toNumber(order.total),
           paymentMethod:
             order.paymentMethod,
           paymentStatus:
@@ -493,7 +524,7 @@ async function generatePaymentFailedNotifications() {
       paymentStatus: "failed",
     })
       .select(
-        "_id orderNumber total paymentMethod paymentStatus orderStatus updatedAt"
+        "_id orderNumber orderId total paymentMethod paymentStatus orderStatus updatedAt"
       )
       .sort({
         updatedAt: -1,
@@ -504,20 +535,23 @@ async function generatePaymentFailedNotifications() {
   let created = 0;
 
   for (const order of orders) {
+    const orderNumber =
+      getOrderNumber(order);
+
     const result =
       await createNotificationOnce({
         type: "payment",
         severity: "warning",
 
         title:
-          `Payment failed: ${order.orderNumber}`,
+          `Payment failed: ${orderNumber}`,
 
         message:
-          `Payment failed for ${order.orderNumber}. Check whether the customer needs help placing the order again.`,
+          `Payment failed for ${orderNumber}. Check whether the customer needs help placing the order again.`,
 
         actionUrl:
           `/orders?search=${encodeURIComponent(
-            order.orderNumber
+            orderNumber
           )}`,
 
         sourceType:
@@ -527,16 +561,15 @@ async function generatePaymentFailedNotifications() {
           order._id,
 
         sourceLabel:
-          order.orderNumber,
+          orderNumber,
 
         automationKey:
           `order:${order._id}:payment_failed_notification`,
 
         metadata: {
-          orderNumber:
-            order.orderNumber,
+          orderNumber,
           total:
-            Number(order.total || 0),
+            toNumber(order.total),
           paymentMethod:
             order.paymentMethod,
           paymentStatus:
@@ -554,22 +587,108 @@ async function generatePaymentFailedNotifications() {
   return created;
 }
 
+async function runRule(name, fn) {
+  try {
+    const created =
+      await fn();
+
+    return {
+      created,
+      error: null,
+    };
+  } catch (error) {
+    console.error(
+      `Admin notification rule failed: ${name}`,
+      error
+    );
+
+    return {
+      created: 0,
+      error:
+        error?.message ||
+        "Rule failed.",
+    };
+  }
+}
+
 async function generateAdminNotifications() {
   const startedAt = new Date();
 
-  const results = {
-    stock: await generateStockNotifications(),
+  const ruleResults = {
+    stock:
+      await runRule(
+        "stock",
+        generateStockNotifications
+      ),
+
     followUps:
-      await generateOverdueFollowUpNotifications(),
+      await runRule(
+        "followUps",
+        generateOverdueFollowUpNotifications
+      ),
+
     refunds:
-      await generateRefundFailedNotifications(),
+      await runRule(
+        "refunds",
+        generateRefundFailedNotifications
+      ),
+
     codPayments:
-      await generateCodUnpaidNotifications(),
+      await runRule(
+        "codPayments",
+        generateCodUnpaidNotifications
+      ),
+
     newOrders:
-      await generateNewOrderNotifications(),
+      await runRule(
+        "newOrders",
+        generateNewOrderNotifications
+      ),
+
     failedPayments:
-      await generatePaymentFailedNotifications(),
+      await runRule(
+        "failedPayments",
+        generatePaymentFailedNotifications
+      ),
   };
+
+  const results =
+    Object.fromEntries(
+      Object.entries(
+        ruleResults
+      ).map(
+        ([
+          key,
+          value,
+        ]) => [
+          key,
+          value.created,
+        ]
+      )
+    );
+
+  const errors =
+    Object.fromEntries(
+      Object.entries(
+        ruleResults
+      )
+        .filter(
+          ([
+            ,
+            value,
+          ]) =>
+            Boolean(value.error)
+        )
+        .map(
+          ([
+            key,
+            value,
+          ]) => [
+            key,
+            value.error,
+          ]
+        )
+    );
 
   const totalCreated =
     Object.values(results).reduce(
@@ -583,6 +702,7 @@ async function generateAdminNotifications() {
     finishedAt: new Date(),
     totalCreated,
     results,
+    errors,
   };
 }
 
@@ -620,9 +740,12 @@ function startAdminNotificationWorker() {
       const result =
         await generateAdminNotifications();
 
-      if (result.totalCreated > 0) {
+      if (
+        result.totalCreated > 0 ||
+        Object.keys(result.errors || {}).length > 0
+      ) {
         console.log(
-          "Admin notification worker created alerts:",
+          "Admin notification worker result:",
           result
         );
       }
