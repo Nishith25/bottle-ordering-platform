@@ -4,6 +4,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -12,15 +13,18 @@ import { useAdminAuth } from "../context/AuthContext";
 import {
   API_BASE_URL,
   cancelAdminCustomerOrder,
+  createAdminCustomerFollowUp,
   createAdminCustomerInvoicePrintLink,
   createAdminCustomerNote,
   fetchAdminUserDetails,
   fetchAdminUsers,
   markAdminCustomerOrderCodCollected,
   retryAdminCustomerOrderRefund,
+  updateAdminCustomerFollowUpStatus,
   updateAdminUserRole,
   updateAdminUserStatus,
   type AdminCustomerDetails,
+  type AdminCustomerFollowUp,
   type AdminCustomerNote,
   type AdminCustomerOrderSummary,
   type AdminManagedUser,
@@ -46,6 +50,12 @@ const CANCELLABLE_STATUSES = [
   "confirmed",
   "preparing",
 ];
+
+type FollowUpDraft = {
+  title: string;
+  description: string;
+  dueAt: string;
+};
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -98,6 +108,27 @@ function formatDate(
   );
 }
 
+function getDateTimeInputDefault() {
+  const date = new Date();
+
+  date.setHours(
+    date.getHours() + 24
+  );
+
+  date.setMinutes(0, 0, 0);
+
+  const offsetMs =
+    date.getTimezoneOffset() *
+    60 *
+    1000;
+
+  return new Date(
+    date.getTime() - offsetMs
+  )
+    .toISOString()
+    .slice(0, 16);
+}
+
 function getRoleLabel(
   role: string
 ) {
@@ -143,6 +174,16 @@ function formatAddress(
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+function isFollowUpOverdue(
+  followUp: AdminCustomerFollowUp
+) {
+  return (
+    followUp.status === "pending" &&
+    new Date(followUp.dueAt).getTime() <
+      Date.now()
+  );
 }
 
 function buildPackingSlipHtml(
@@ -405,6 +446,28 @@ export default function UsersPage() {
   ] = useState(false);
 
   const [
+    followUpDraft,
+    setFollowUpDraft,
+  ] = useState<FollowUpDraft>({
+    title: "",
+    description: "",
+    dueAt:
+      getDateTimeInputDefault(),
+  });
+
+  const [
+    savingFollowUp,
+    setSavingFollowUp,
+  ] = useState(false);
+
+  const [
+    followUpActionKey,
+    setFollowUpActionKey,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
     detailsError,
     setDetailsError,
   ] = useState<
@@ -542,6 +605,16 @@ export default function UsersPage() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const pendingFollowUpCount =
+    useMemo(() => {
+      return (
+        customerDetails?.followUps.filter(
+          (followUp) =>
+            followUp.status === "pending"
+        ).length ?? 0
+      );
+    }, [customerDetails]);
 
   const handleSearch = (
     event: FormEvent<HTMLFormElement>
@@ -740,6 +813,142 @@ export default function UsersPage() {
         );
       } finally {
         setSavingNote(false);
+      }
+    };
+
+  const handleAddCustomerFollowUp =
+    async () => {
+      if (
+        !token ||
+        !selectedUserId ||
+        savingFollowUp
+      ) {
+        return;
+      }
+
+      const cleanTitle =
+        followUpDraft.title.trim();
+
+      if (cleanTitle.length < 3) {
+        setError(
+          "Follow-up title must contain at least 3 characters."
+        );
+        return;
+      }
+
+      if (!followUpDraft.dueAt.trim()) {
+        setError(
+          "Please select a follow-up date and time."
+        );
+        return;
+      }
+
+      setSavingFollowUp(true);
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await createAdminCustomerFollowUp(
+          token,
+          selectedUserId,
+          {
+            title:
+              cleanTitle,
+
+            description:
+              followUpDraft.description,
+
+            dueAt:
+              new Date(
+                followUpDraft.dueAt
+              ).toISOString(),
+          }
+        );
+
+        setFollowUpDraft({
+          title: "",
+          description: "",
+          dueAt:
+            getDateTimeInputDefault(),
+        });
+
+        setSuccess(
+          "Customer follow-up added successfully."
+        );
+
+        await loadCustomerDetails(
+          selectedUserId
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to add customer follow-up."
+        );
+      } finally {
+        setSavingFollowUp(false);
+      }
+    };
+
+  const handleUpdateFollowUpStatus =
+    async (
+      followUp: AdminCustomerFollowUp,
+      status:
+        | "pending"
+        | "done"
+        | "cancelled"
+    ) => {
+      if (
+        !token ||
+        !selectedUserId
+      ) {
+        return;
+      }
+
+      const confirmed =
+        status === "cancelled"
+          ? window.confirm(
+              `Cancel follow-up "${followUp.title}"?`
+            )
+          : true;
+
+      if (!confirmed) {
+        return;
+      }
+
+      const actionKey =
+        `${status}-${followUp._id}`;
+
+      setFollowUpActionKey(
+        actionKey
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await updateAdminCustomerFollowUpStatus(
+          token,
+          selectedUserId,
+          followUp._id,
+          status
+        );
+
+        setSuccess(
+          "Customer follow-up updated successfully."
+        );
+
+        await loadCustomerDetails(
+          selectedUserId
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to update follow-up."
+        );
+      } finally {
+        setFollowUpActionKey(null);
       }
     };
 
@@ -1465,7 +1674,12 @@ export default function UsersPage() {
                               selected
                                 ? "Loading..."
                                 : selected
-                                  ? "Viewing"
+                                  ? `Viewing${
+                                      pendingFollowUpCount &&
+                                      selected
+                                        ? ` · ${pendingFollowUpCount} pending`
+                                        : ""
+                                    }`
                                   : "View"}
                             </button>
 
@@ -1549,15 +1763,39 @@ export default function UsersPage() {
           actionLoadingKey={actionLoadingKey}
           noteDraft={noteDraft}
           savingNote={savingNote}
+          followUpDraft={followUpDraft}
+          savingFollowUp={savingFollowUp}
+          followUpActionKey={followUpActionKey}
           onNoteDraftChange={setNoteDraft}
           onAddNote={() => {
             void handleAddCustomerNote();
+          }}
+          onFollowUpDraftChange={(patch) => {
+            setFollowUpDraft((current) => ({
+              ...current,
+              ...patch,
+            }));
+          }}
+          onAddFollowUp={() => {
+            void handleAddCustomerFollowUp();
+          }}
+          onUpdateFollowUpStatus={(followUp, status) => {
+            void handleUpdateFollowUpStatus(
+              followUp,
+              status
+            );
           }}
           onClose={() => {
             setSelectedUserId(null);
             setCustomerDetails(null);
             setDetailsError(null);
             setNoteDraft("");
+            setFollowUpDraft({
+              title: "",
+              description: "",
+              dueAt:
+                getDateTimeInputDefault(),
+            });
           }}
           onOpenOrderPage={handleOpenOrderPage}
           onPrintInvoice={(order) => {
@@ -1625,8 +1863,14 @@ function CustomerDetailsPanel({
   actionLoadingKey,
   noteDraft,
   savingNote,
+  followUpDraft,
+  savingFollowUp,
+  followUpActionKey,
   onNoteDraftChange,
   onAddNote,
+  onFollowUpDraftChange,
+  onAddFollowUp,
+  onUpdateFollowUpStatus,
   onClose,
   onOpenOrderPage,
   onPrintInvoice,
@@ -1639,8 +1883,22 @@ function CustomerDetailsPanel({
   actionLoadingKey: string | null;
   noteDraft: string;
   savingNote: boolean;
+  followUpDraft: FollowUpDraft;
+  savingFollowUp: boolean;
+  followUpActionKey: string | null;
   onNoteDraftChange: (value: string) => void;
   onAddNote: () => void;
+  onFollowUpDraftChange: (
+    patch: Partial<FollowUpDraft>
+  ) => void;
+  onAddFollowUp: () => void;
+  onUpdateFollowUpStatus: (
+    followUp: AdminCustomerFollowUp,
+    status:
+      | "pending"
+      | "done"
+      | "cancelled"
+  ) => void;
   onClose: () => void;
   onOpenOrderPage: (
     order: AdminCustomerOrderSummary
@@ -1667,6 +1925,21 @@ function CustomerDetailsPanel({
 
   const notes =
     details.notes ?? [];
+
+  const followUps =
+    details.followUps ?? [];
+
+  const pendingFollowUps =
+    followUps.filter(
+      (followUp) =>
+        followUp.status === "pending"
+    );
+
+  const completedFollowUps =
+    followUps.filter(
+      (followUp) =>
+        followUp.status !== "pending"
+    );
 
   return (
     <section className="customer-detail-panel">
@@ -1838,6 +2111,129 @@ function CustomerDetailsPanel({
             />
           </div>
         </div>
+      </div>
+
+      <div className="detail-card customer-followups-card">
+        <div className="detail-card-heading">
+          <h4>
+            Follow-ups
+          </h4>
+
+          <span>
+            {pendingFollowUps.length} pending
+          </span>
+        </div>
+
+        <div className="customer-followup-form">
+          <div className="followup-form-grid">
+            <input
+              value={followUpDraft.title}
+              onChange={(event) =>
+                onFollowUpDraftChange({
+                  title:
+                    event.target.value,
+                })
+              }
+              placeholder="Follow-up title"
+              maxLength={120}
+            />
+
+            <input
+              type="datetime-local"
+              value={followUpDraft.dueAt}
+              onChange={(event) =>
+                onFollowUpDraftChange({
+                  dueAt:
+                    event.target.value,
+                })
+              }
+            />
+          </div>
+
+          <textarea
+            value={
+              followUpDraft.description
+            }
+            onChange={(event) =>
+              onFollowUpDraftChange({
+                description:
+                  event.target.value,
+              })
+            }
+            placeholder="Optional details. Example: Call about COD pending, confirm address landmark, ask about subscription renewal."
+            maxLength={1000}
+          />
+
+          <div className="customer-note-form-footer">
+            <small>
+              {
+                followUpDraft.description.trim()
+                  .length
+              }
+              /1000
+            </small>
+
+            <button
+              type="button"
+              className="primary-button"
+              disabled={
+                savingFollowUp ||
+                followUpDraft.title.trim()
+                  .length < 3 ||
+                !followUpDraft.dueAt.trim()
+              }
+              onClick={onAddFollowUp}
+            >
+              {savingFollowUp
+                ? "Saving..."
+                : "Add follow-up"}
+            </button>
+          </div>
+        </div>
+
+        {followUps.length === 0 ? (
+          <p className="empty-detail-text">
+            No follow-up reminders yet.
+          </p>
+        ) : (
+          <div className="customer-followup-list">
+            {pendingFollowUps.map(
+              (followUp) => (
+                <CustomerFollowUpCard
+                  key={followUp._id}
+                  followUp={followUp}
+                  actionKey={
+                    followUpActionKey
+                  }
+                  onUpdateStatus={
+                    onUpdateFollowUpStatus
+                  }
+                />
+              )
+            )}
+
+            {completedFollowUps.length > 0 ? (
+              <div className="followup-completed-heading">
+                Completed / cancelled
+              </div>
+            ) : null}
+
+            {completedFollowUps.map(
+              (followUp) => (
+                <CustomerFollowUpCard
+                  key={followUp._id}
+                  followUp={followUp}
+                  actionKey={
+                    followUpActionKey
+                  }
+                  onUpdateStatus={
+                    onUpdateFollowUpStatus
+                  }
+                />
+              )
+            )}
+          </div>
+        )}
       </div>
 
       <div className="detail-card customer-notes-card">
@@ -2084,6 +2480,186 @@ function SavedAddressCard({
         {address.area}, {address.city} -{" "}
         {address.pincode}
       </small>
+    </article>
+  );
+}
+
+function CustomerFollowUpCard({
+  followUp,
+  actionKey,
+  onUpdateStatus,
+}: {
+  followUp: AdminCustomerFollowUp;
+  actionKey: string | null;
+  onUpdateStatus: (
+    followUp: AdminCustomerFollowUp,
+    status:
+      | "pending"
+      | "done"
+      | "cancelled"
+  ) => void;
+}) {
+  const overdue =
+    isFollowUpOverdue(followUp);
+
+  const doneLoading =
+    actionKey ===
+    `done-${followUp._id}`;
+
+  const pendingLoading =
+    actionKey ===
+    `pending-${followUp._id}`;
+
+  const cancelledLoading =
+    actionKey ===
+    `cancelled-${followUp._id}`;
+
+  return (
+    <article
+      className={`customer-followup-card customer-followup-${followUp.status} ${
+        overdue
+          ? "customer-followup-overdue"
+          : ""
+      }`}
+    >
+      <div className="customer-followup-top">
+        <div>
+          <strong>
+            {followUp.title}
+          </strong>
+
+          <span>
+            Due {formatDate(followUp.dueAt)}
+          </span>
+        </div>
+
+        <span
+          className={`followup-status-pill followup-status-${followUp.status}`}
+        >
+          {overdue
+            ? "Overdue"
+            : getOrderStatusLabel(
+                followUp.status
+              )}
+        </span>
+      </div>
+
+      {followUp.description ? (
+        <p>
+          {followUp.description}
+        </p>
+      ) : null}
+
+      <div className="customer-followup-meta">
+        <span>
+          Added by{" "}
+          {followUp.createdBySnapshot
+            ?.fullName || "Admin"}
+        </span>
+
+        <span>
+          {formatDate(followUp.createdAt)}
+        </span>
+      </div>
+
+      {followUp.completedAt ? (
+        <div className="customer-followup-meta">
+          <span>
+            Completed by{" "}
+            {followUp.completedBySnapshot
+              ?.fullName || "Admin"}
+          </span>
+
+          <span>
+            {formatDate(
+              followUp.completedAt
+            )}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="customer-followup-actions">
+        {followUp.status !== "done" ? (
+          <button
+            type="button"
+            className="followup-action-button success"
+            disabled={
+              doneLoading ||
+              Boolean(actionKey)
+            }
+            onClick={() =>
+              onUpdateStatus(
+                followUp,
+                "done"
+              )
+            }
+          >
+            {doneLoading
+              ? "Saving..."
+              : "Mark done"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="followup-action-button"
+            disabled={
+              pendingLoading ||
+              Boolean(actionKey)
+            }
+            onClick={() =>
+              onUpdateStatus(
+                followUp,
+                "pending"
+              )
+            }
+          >
+            {pendingLoading
+              ? "Saving..."
+              : "Reopen"}
+          </button>
+        )}
+
+        {followUp.status !==
+        "cancelled" ? (
+          <button
+            type="button"
+            className="followup-action-button danger"
+            disabled={
+              cancelledLoading ||
+              Boolean(actionKey)
+            }
+            onClick={() =>
+              onUpdateStatus(
+                followUp,
+                "cancelled"
+              )
+            }
+          >
+            {cancelledLoading
+              ? "Saving..."
+              : "Cancel"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="followup-action-button"
+            disabled={
+              pendingLoading ||
+              Boolean(actionKey)
+            }
+            onClick={() =>
+              onUpdateStatus(
+                followUp,
+                "pending"
+              )
+            }
+          >
+            {pendingLoading
+              ? "Saving..."
+              : "Restore"}
+          </button>
+        )}
+      </div>
     </article>
   );
 }

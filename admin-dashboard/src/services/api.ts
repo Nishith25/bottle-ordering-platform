@@ -317,6 +317,51 @@ export type AdminCustomerNote = {
   updatedAt: string;
 };
 
+export type AdminCustomerFollowUp = {
+  _id: string;
+  customer: string;
+  title: string;
+  description: string;
+  dueAt: string;
+
+  status:
+    | "pending"
+    | "done"
+    | "cancelled";
+
+  createdBy:
+    | string
+    | null;
+
+  createdBySnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  completedAt:
+    | string
+    | null;
+
+  completedBy:
+    | string
+    | null;
+
+  completedBySnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AdminManagedUser = {
   _id: string;
   fullName: string;
@@ -452,6 +497,8 @@ export type AdminCustomerDetails = {
     AdminCustomerSubscriptionSummary[];
 
   notes: AdminCustomerNote[];
+
+  followUps: AdminCustomerFollowUp[];
 };
 
 export type AdminCashCollection = {
@@ -585,6 +632,13 @@ type CustomerNoteResponse =
   ApiBaseResponse & {
     data: {
       note: AdminCustomerNote;
+    };
+  };
+
+type CustomerFollowUpResponse =
+  ApiBaseResponse & {
+    data: {
+      followUp: AdminCustomerFollowUp;
     };
   };
 
@@ -1523,6 +1577,9 @@ export async function fetchAdminUserDetails(
 
     notes:
       response.data.customer.notes ?? [],
+
+    followUps:
+      response.data.customer.followUps ?? [],
   };
 }
 
@@ -1564,6 +1621,103 @@ export async function createAdminCustomerNote(
     );
 
   return response.data.note;
+}
+
+export async function createAdminCustomerFollowUp(
+  token: string,
+  userId: string,
+  payload: {
+    title: string;
+    description?: string;
+    dueAt: string;
+  }
+): Promise<AdminCustomerFollowUp> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  const title =
+    payload.title.trim();
+
+  if (title.length < 3) {
+    throw new Error(
+      "Follow-up title must contain at least 3 characters."
+    );
+  }
+
+  if (!payload.dueAt.trim()) {
+    throw new Error(
+      "Please select a follow-up date and time."
+    );
+  }
+
+  const response =
+    await apiRequest<CustomerFollowUpResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}/follow-ups`,
+      {
+        method: "POST",
+        token,
+
+        body: JSON.stringify({
+          title,
+          description:
+            payload.description?.trim() ?? "",
+          dueAt:
+            payload.dueAt,
+        }),
+      }
+    );
+
+  return response.data.followUp;
+}
+
+export async function updateAdminCustomerFollowUpStatus(
+  token: string,
+  userId: string,
+  followUpId: string,
+  status:
+    | "pending"
+    | "done"
+    | "cancelled"
+): Promise<AdminCustomerFollowUp> {
+  requireToken(token);
+
+  if (!userId.trim()) {
+    throw new Error(
+      "User ID is missing."
+    );
+  }
+
+  if (!followUpId.trim()) {
+    throw new Error(
+      "Follow-up ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<CustomerFollowUpResponse>(
+      `/api/admin/users/${encodeURIComponent(
+        userId.trim()
+      )}/follow-ups/${encodeURIComponent(
+        followUpId.trim()
+      )}/status`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          status,
+        }),
+      }
+    );
+
+  return response.data.followUp;
 }
 
 export async function updateAdminUserStatus(

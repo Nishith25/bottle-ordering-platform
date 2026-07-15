@@ -7,6 +7,7 @@ const {
   allowRoles,
 } = require("../middleware/auth");
 
+const CustomerFollowUp = require("../models/CustomerFollowUp");
 const CustomerNote = require("../models/CustomerNote");
 const Order = require("../models/Order");
 const Subscription = require("../models/Subscription");
@@ -26,6 +27,12 @@ const USER_ROLES = [
 const MANAGED_ROLES = [
   "customer",
   "admin",
+];
+
+const FOLLOW_UP_STATUSES = [
+  "pending",
+  "done",
+  "cancelled",
 ];
 
 const ACTIVE_ORDER_STATUSES = [
@@ -60,6 +67,24 @@ function buildAdminSnapshot(user) {
       cleanText(user?.role) ||
       "admin",
   };
+}
+
+function parseDueAt(value) {
+  const date = new Date(value);
+
+  if (
+    !value ||
+    Number.isNaN(date.getTime())
+  ) {
+    const error = new Error(
+      "Please select a valid follow-up date and time."
+    );
+
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return date;
 }
 
 function serializeSavedAddress(address) {
@@ -115,6 +140,27 @@ function serializeCustomerNote(note) {
     active: note.active,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+  };
+}
+
+function serializeCustomerFollowUp(followUp) {
+  return {
+    _id: followUp._id,
+    customer: followUp.customer,
+    title: followUp.title,
+    description: followUp.description || "",
+    dueAt: followUp.dueAt,
+    status: followUp.status,
+    createdBy: followUp.createdBy,
+    createdBySnapshot:
+      followUp.createdBySnapshot || null,
+    completedAt: followUp.completedAt || null,
+    completedBy: followUp.completedBy || null,
+    completedBySnapshot:
+      followUp.completedBySnapshot || null,
+    active: followUp.active,
+    createdAt: followUp.createdAt,
+    updatedAt: followUp.updatedAt,
   };
 }
 
@@ -529,6 +575,7 @@ router.get(
         subscriptionSummary,
         latestSubscriptions,
         notes,
+        followUps,
       ] = await Promise.all([
         Order.aggregate([
           {
@@ -824,6 +871,18 @@ router.get(
           })
           .limit(25)
           .lean(),
+
+        CustomerFollowUp.find({
+          customer: user._id,
+          active: true,
+        })
+          .sort({
+            status: 1,
+            dueAt: 1,
+            createdAt: -1,
+          })
+          .limit(50)
+          .lean(),
       ]);
 
       const orderStats =
@@ -925,6 +984,11 @@ router.get(
               notes.map(
                 serializeCustomerNote
               ),
+
+            followUps:
+              followUps.map(
+                serializeCustomerFollowUp
+              ),
           },
         },
       });
@@ -1014,6 +1078,197 @@ router.post(
           success: false,
           message:
             "User account not found.",
+        });
+      }
+
+      return next(error);
+    }
+  }
+);
+
+router.post(
+  "/:userId/follow-ups",
+  async (req, res, next) => {
+    try {
+      const title =
+        cleanText(req.body.title);
+
+      const description =
+        cleanText(req.body.description);
+
+      const dueAt =
+        parseDueAt(req.body.dueAt);
+
+      if (
+        !title ||
+        title.length < 3
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Follow-up title must contain at least 3 characters.",
+        });
+      }
+
+      if (title.length > 120) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Follow-up title cannot exceed 120 characters.",
+        });
+      }
+
+      if (description.length > 1000) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Follow-up description cannot exceed 1000 characters.",
+        });
+      }
+
+      const customer =
+        await User.findById(
+          req.params.userId
+        ).select(
+          "_id fullName email phone role"
+        );
+
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      const followUp =
+        await CustomerFollowUp.create({
+          customer: customer._id,
+          title,
+          description,
+          dueAt,
+          createdBy:
+            req.user?._id || null,
+          createdBySnapshot:
+            buildAdminSnapshot(req.user),
+        });
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Customer follow-up added successfully.",
+        data: {
+          followUp:
+            serializeCustomerFollowUp(
+              followUp.toObject()
+            ),
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      return next(error);
+    }
+  }
+);
+
+router.patch(
+  "/:userId/follow-ups/:followUpId/status",
+  async (req, res, next) => {
+    try {
+      const status =
+        cleanText(req.body.status).toLowerCase();
+
+      if (
+        !FOLLOW_UP_STATUSES.includes(
+          status
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please select a valid follow-up status.",
+        });
+      }
+
+      const customer =
+        await User.findById(
+          req.params.userId
+        ).select("_id");
+
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User account not found.",
+        });
+      }
+
+      const followUp =
+        await CustomerFollowUp.findOne({
+          _id: req.params.followUpId,
+          customer: customer._id,
+          active: true,
+        });
+
+      if (!followUp) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Customer follow-up not found.",
+        });
+      }
+
+      followUp.status = status;
+
+      if (status === "done") {
+        followUp.completedAt =
+          new Date();
+
+        followUp.completedBy =
+          req.user?._id || null;
+
+        followUp.completedBySnapshot =
+          buildAdminSnapshot(req.user);
+      } else {
+        followUp.completedAt = null;
+        followUp.completedBy = null;
+        followUp.completedBySnapshot = {
+          fullName: "",
+          email: "",
+          role: "",
+        };
+      }
+
+      await followUp.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Customer follow-up updated successfully.",
+        data: {
+          followUp:
+            serializeCustomerFollowUp(
+              followUp.toObject()
+            ),
+        },
+      });
+    } catch (error) {
+      if (
+        error.name === "CastError"
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Customer follow-up not found.",
         });
       }
 
