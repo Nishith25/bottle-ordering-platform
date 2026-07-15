@@ -24,7 +24,9 @@ function createAccessToken(user) {
     },
     jwtSecret,
     {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      expiresIn:
+        process.env.JWT_EXPIRES_IN ||
+        "7d",
     }
   );
 }
@@ -40,7 +42,10 @@ function normaliseEmail(email) {
 }
 
 function normalisePhone(phone) {
-  return String(phone || "").replace(/\D/g, "");
+  return String(phone || "").replace(
+    /\D/g,
+    ""
+  );
 }
 
 function normalisePincode(pincode) {
@@ -57,13 +62,20 @@ function validateRegistration({
 }) {
   const errors = [];
 
-  if (!fullName || fullName.trim().length < 2) {
+  if (
+    !fullName ||
+    fullName.trim().length < 2
+  ) {
     errors.push(
       "Full name must contain at least 2 characters."
     );
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      email
+    )
+  ) {
     errors.push(
       "Please provide a valid email address."
     );
@@ -87,7 +99,45 @@ function validateRegistration({
   return errors;
 }
 
-function buildSavedAddressPayload(body, existing = {}) {
+function validateProfileUpdate({
+  fullName,
+  email,
+  phone,
+}) {
+  const errors = [];
+
+  if (
+    !fullName ||
+    fullName.trim().length < 2
+  ) {
+    errors.push(
+      "Full name must contain at least 2 characters."
+    );
+  }
+
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      email
+    )
+  ) {
+    errors.push(
+      "Please provide a valid email address."
+    );
+  }
+
+  if (!/^[6-9]\d{9}$/.test(phone)) {
+    errors.push(
+      "Please provide a valid 10-digit Indian mobile number."
+    );
+  }
+
+  return errors;
+}
+
+function buildSavedAddressPayload(
+  body,
+  existing = {}
+) {
   const has = (field) =>
     Object.prototype.hasOwnProperty.call(
       body,
@@ -140,13 +190,19 @@ function buildSavedAddressPayload(body, existing = {}) {
 function validateSavedAddress(address) {
   const errors = [];
 
-  if (!address.label || address.label.length > 40) {
+  if (
+    !address.label ||
+    address.label.length > 40
+  ) {
     errors.push(
       "Address label must be 1 to 40 characters."
     );
   }
 
-  if (!address.fullName || address.fullName.length < 2) {
+  if (
+    !address.fullName ||
+    address.fullName.length < 2
+  ) {
     errors.push(
       "Full name must contain at least 2 characters."
     );
@@ -197,7 +253,10 @@ function validateSavedAddress(address) {
   return errors;
 }
 
-function normalizeDefaultAddress(user, defaultAddressId = "") {
+function normalizeDefaultAddress(
+  user,
+  defaultAddressId = ""
+) {
   if (!Array.isArray(user.savedAddresses)) {
     user.savedAddresses = [];
     return;
@@ -212,23 +271,32 @@ function normalizeDefaultAddress(user, defaultAddressId = "") {
 
   let defaultFound = false;
 
-  user.savedAddresses.forEach((address, index) => {
-    const shouldBeDefault =
-      requestedDefaultId
-        ? String(address._id) === requestedDefaultId
-        : Boolean(address.isDefault) && !defaultFound;
+  user.savedAddresses.forEach(
+    (address, index) => {
+      const shouldBeDefault =
+        requestedDefaultId
+          ? String(address._id) ===
+            requestedDefaultId
+          : Boolean(address.isDefault) &&
+            !defaultFound;
 
-    address.isDefault = shouldBeDefault;
+      address.isDefault =
+        shouldBeDefault;
 
-    if (shouldBeDefault) {
-      defaultFound = true;
+      if (shouldBeDefault) {
+        defaultFound = true;
+      }
+
+      if (
+        !requestedDefaultId &&
+        !defaultFound &&
+        index === 0
+      ) {
+        address.isDefault = true;
+        defaultFound = true;
+      }
     }
-
-    if (!requestedDefaultId && !defaultFound && index === 0) {
-      address.isDefault = true;
-      defaultFound = true;
-    }
-  });
+  );
 
   if (!defaultFound) {
     user.savedAddresses[0].isDefault = true;
@@ -247,9 +315,9 @@ router.post(
   "/register",
   async (req, res, next) => {
     try {
-      const fullName = String(
-        req.body.fullName || ""
-      ).trim();
+      const fullName = cleanText(
+        req.body.fullName
+      );
 
       const email = normaliseEmail(
         req.body.email
@@ -259,7 +327,8 @@ router.post(
         req.body.phone
       );
 
-      const password = req.body.password;
+      const password =
+        req.body.password;
 
       const validationErrors =
         validateRegistration({
@@ -343,11 +412,12 @@ router.post(
   "/login",
   async (req, res, next) => {
     try {
-      const identifier = String(
-        req.body.identifier || ""
-      ).trim();
+      const identifier = cleanText(
+        req.body.identifier
+      );
 
-      const password = req.body.password;
+      const password =
+        req.body.password;
 
       if (
         !identifier ||
@@ -443,6 +513,185 @@ router.get(
   }
 );
 
+router.patch(
+  "/profile",
+  protect,
+  async (req, res, next) => {
+    try {
+      const fullName = cleanText(
+        req.body.fullName
+      );
+
+      const email = normaliseEmail(
+        req.body.email
+      );
+
+      const phone = normalisePhone(
+        req.body.phone
+      );
+
+      const validationErrors =
+        validateProfileUpdate({
+          fullName,
+          email,
+          phone,
+        });
+
+      if (validationErrors.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: validationErrors[0],
+          errors: validationErrors,
+        });
+      }
+
+      const duplicateUser =
+        await User.findOne({
+          _id: {
+            $ne: req.user._id,
+          },
+
+          $or: [
+            {
+              email,
+            },
+            {
+              phone,
+            },
+          ],
+        }).lean();
+
+      if (duplicateUser) {
+        const duplicateField =
+          duplicateUser.email === email
+            ? "email address"
+            : "mobile number";
+
+        return res.status(409).json({
+          success: false,
+          message: `Another account already exists with this ${duplicateField}.`,
+        });
+      }
+
+      req.user.fullName = fullName;
+      req.user.email = email;
+      req.user.phone = phone;
+
+      await req.user.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Profile updated successfully.",
+        data: {
+          user: req.user.toPublicJSON(),
+        },
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        const field =
+          Object.keys(
+            error.keyPattern || {}
+          )[0] || "account detail";
+
+        return res.status(409).json({
+          success: false,
+          message: `Another account already exists with this ${field}.`,
+        });
+      }
+
+      return next(error);
+    }
+  }
+);
+
+router.patch(
+  "/password",
+  protect,
+  async (req, res, next) => {
+    try {
+      const currentPassword =
+        req.body.currentPassword;
+
+      const newPassword =
+        req.body.newPassword;
+
+      if (
+        typeof currentPassword !==
+          "string" ||
+        !currentPassword
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Current password is required.",
+        });
+      }
+
+      if (
+        typeof newPassword !==
+          "string" ||
+        newPassword.length < 8
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "New password must contain at least 8 characters.",
+        });
+      }
+
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "New password must be different from the current password.",
+        });
+      }
+
+      const user =
+        await User.findById(
+          req.user._id
+        ).select("+password");
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Account not found.",
+        });
+      }
+
+      const passwordMatches =
+        await user.comparePassword(
+          currentPassword
+        );
+
+      if (!passwordMatches) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Current password is incorrect.",
+        });
+      }
+
+      user.password = newPassword;
+
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Password changed successfully.",
+        data: {
+          user: user.toPublicJSON(),
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 router.post(
   "/addresses",
   protect,
@@ -452,7 +701,8 @@ router.post(
 
       if (
         Array.isArray(user.savedAddresses) &&
-        user.savedAddresses.length >= MAX_SAVED_ADDRESSES
+        user.savedAddresses.length >=
+          MAX_SAVED_ADDRESSES
       ) {
         return res.status(400).json({
           success: false,
@@ -471,7 +721,9 @@ router.post(
       }
 
       const validationErrors =
-        validateSavedAddress(addressPayload);
+        validateSavedAddress(
+          addressPayload
+        );
 
       if (validationErrors.length > 0) {
         return res.status(400).json({
@@ -482,12 +734,16 @@ router.post(
       }
 
       if (addressPayload.isDefault) {
-        user.savedAddresses.forEach((address) => {
-          address.isDefault = false;
-        });
+        user.savedAddresses.forEach(
+          (address) => {
+            address.isDefault = false;
+          }
+        );
       }
 
-      user.savedAddresses.push(addressPayload);
+      user.savedAddresses.push(
+        addressPayload
+      );
 
       const addedAddress =
         user.savedAddresses[
@@ -509,7 +765,8 @@ router.post(
       const publicAddress =
         publicUser.savedAddresses.find(
           (address) =>
-            address.id === String(addedAddress._id)
+            address.id ===
+            String(addedAddress._id)
         );
 
       return res.status(201).json({
@@ -567,23 +824,37 @@ router.patch(
         });
       }
 
-      address.label = mergedAddress.label;
+      address.label =
+        mergedAddress.label;
+
       address.fullName =
         mergedAddress.fullName;
+
       address.phone =
         mergedAddress.phone;
+
       address.pincode =
         mergedAddress.pincode;
+
       address.houseDetails =
         mergedAddress.houseDetails;
+
       address.areaDetails =
         mergedAddress.areaDetails;
+
       address.landmark =
         mergedAddress.landmark;
-      address.area = mergedAddress.area;
-      address.city = mergedAddress.city;
+
+      address.area =
+        mergedAddress.area;
+
+      address.city =
+        mergedAddress.city;
+
       address.isDefault =
-        Boolean(mergedAddress.isDefault);
+        Boolean(
+          mergedAddress.isDefault
+        );
 
       if (address.isDefault) {
         normalizeDefaultAddress(

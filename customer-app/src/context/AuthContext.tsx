@@ -47,6 +47,10 @@ type AuthContextValue = {
 
   refreshUser: () => Promise<void>;
 
+  updateUser: (
+    updatedUser: AuthUser
+  ) => void;
+
   clearError: () => void;
 };
 
@@ -207,7 +211,9 @@ export function AuthProvider({
 
         try {
           const session =
-            await registerCustomer(input);
+            await registerCustomer(
+              input
+            );
 
           await saveSession(
             session.token,
@@ -264,6 +270,14 @@ export function AuthProvider({
       ]
     );
 
+  const updateUser =
+    useCallback(
+      (updatedUser: AuthUser) => {
+        setUser(updatedUser);
+      },
+      []
+    );
+
   const clearError =
     useCallback(
       () => {
@@ -291,6 +305,7 @@ export function AuthProvider({
         register,
         logout,
         refreshUser,
+        updateUser,
         clearError,
       }),
       [
@@ -303,6 +318,7 @@ export function AuthProvider({
         register,
         logout,
         refreshUser,
+        updateUser,
         clearError,
       ]
     );
@@ -318,9 +334,7 @@ export function AuthProvider({
 
 export function useAuth() {
   const context =
-    useContext(
-      AuthContext
-    );
+    useContext(AuthContext);
 
   if (!context) {
     throw new Error(

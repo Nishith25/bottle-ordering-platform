@@ -21,8 +21,10 @@ import { useAuth } from "../../context/AuthContext";
 import { usePushNotifications } from "../../context/PushNotificationContext";
 
 import {
+  changeCustomerPassword,
   deleteCustomerAddress,
   updateCustomerAddress,
+  updateCustomerProfile,
   type SavedDeliveryAddress,
 } from "../../services/api";
 
@@ -48,6 +50,18 @@ type AddressEditForm = {
   area: string;
   city: string;
   isDefault: boolean;
+};
+
+type ProfileEditForm = {
+  fullName: string;
+  email: string;
+  phone: string;
+};
+
+type PasswordForm = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 };
 
 function getPushTokenPreview(
@@ -127,6 +141,50 @@ function validateAddressEditForm(
   return "";
 }
 
+function validateProfileForm(
+  form: ProfileEditForm
+) {
+  if (form.fullName.trim().length < 2) {
+    return "Full name must contain at least 2 characters.";
+  }
+
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      form.email.trim().toLowerCase()
+    )
+  ) {
+    return "Enter a valid email address.";
+  }
+
+  if (!/^[6-9]\d{9}$/.test(form.phone)) {
+    return "Enter a valid 10-digit mobile number.";
+  }
+
+  return "";
+}
+
+function validatePasswordForm(
+  form: PasswordForm
+) {
+  if (!form.currentPassword) {
+    return "Current password is required.";
+  }
+
+  if (form.newPassword.length < 8) {
+    return "New password must contain at least 8 characters.";
+  }
+
+  if (form.newPassword !== form.confirmPassword) {
+    return "New password and confirm password do not match.";
+  }
+
+  if (form.currentPassword === form.newPassword) {
+    return "New password must be different from the current password.";
+  }
+
+  return "";
+}
+
 export default function AccountScreen() {
   const router = useRouter();
 
@@ -137,6 +195,7 @@ export default function AccountScreen() {
     isAuthenticated,
     logout,
     refreshUser,
+    updateUser,
   } = useAuth();
 
   const {
@@ -183,6 +242,44 @@ export default function AccountScreen() {
   ] = useState<AddressEditForm | null>(
     null
   );
+
+  const [
+    editingProfile,
+    setEditingProfile,
+  ] = useState(false);
+
+  const [
+    savingProfile,
+    setSavingProfile,
+  ] = useState(false);
+
+  const [
+    profileForm,
+    setProfileForm,
+  ] = useState<ProfileEditForm>({
+    fullName: "",
+    email: "",
+    phone: "",
+  });
+
+  const [
+    changingPassword,
+    setChangingPassword,
+  ] = useState(false);
+
+  const [
+    savingPassword,
+    setSavingPassword,
+  ] = useState(false);
+
+  const [
+    passwordForm,
+    setPasswordForm,
+  ] = useState<PasswordForm>({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
 
   const openDashboard = async (
     dashboardUrl: string,
@@ -350,6 +447,177 @@ export default function AccountScreen() {
       }
     };
 
+  const startEditingProfile = () => {
+    if (!user) {
+      return;
+    }
+
+    setEditingProfile(true);
+
+    setProfileForm({
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+    });
+  };
+
+  const cancelEditingProfile = () => {
+    setEditingProfile(false);
+
+    if (user) {
+      setProfileForm({
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone,
+      });
+    }
+  };
+
+  const saveProfile = async () => {
+    if (
+      !token ||
+      !user ||
+      savingProfile
+    ) {
+      return;
+    }
+
+    const validationError =
+      validateProfileForm(
+        profileForm
+      );
+
+    if (validationError) {
+      Alert.alert(
+        "Check profile details",
+        validationError
+      );
+
+      return;
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const updatedUser =
+        await updateCustomerProfile(
+          token,
+          {
+            fullName:
+              profileForm.fullName.trim(),
+
+            email:
+              profileForm.email
+                .trim()
+                .toLowerCase(),
+
+            phone:
+              profileForm.phone,
+          }
+        );
+
+      updateUser(updatedUser);
+      setEditingProfile(false);
+
+      Alert.alert(
+        "Profile updated",
+        "Your account details were updated successfully."
+      );
+    } catch (requestError) {
+      Alert.alert(
+        "Unable to update profile",
+        requestError instanceof Error
+          ? requestError.message
+          : "Please try again."
+      );
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const openPasswordForm = () => {
+    setChangingPassword(true);
+
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+  };
+
+  const cancelPasswordForm = () => {
+    setChangingPassword(false);
+
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+  };
+
+  const savePassword = async () => {
+    if (
+      !token ||
+      savingPassword
+    ) {
+      return;
+    }
+
+    const validationError =
+      validatePasswordForm(
+        passwordForm
+      );
+
+    if (validationError) {
+      Alert.alert(
+        "Check password details",
+        validationError
+      );
+
+      return;
+    }
+
+    setSavingPassword(true);
+
+    try {
+      const updatedUser =
+        await changeCustomerPassword(
+          token,
+          {
+            currentPassword:
+              passwordForm.currentPassword,
+
+            newPassword:
+              passwordForm.newPassword,
+          }
+        );
+
+      updateUser(updatedUser);
+
+      setChangingPassword(false);
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+
+      Alert.alert(
+        "Password changed",
+        "Your password was changed successfully."
+      );
+    } catch (requestError) {
+      Alert.alert(
+        "Unable to change password",
+        requestError instanceof Error
+          ? requestError.message
+          : "Please try again."
+      );
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const handleSetDefaultAddress =
     async (address: SavedDeliveryAddress) => {
       if (
@@ -363,15 +631,16 @@ export default function AccountScreen() {
       setUpdatingAddressId(address.id);
 
       try {
-        await updateCustomerAddress(
-          token,
-          address.id,
-          {
-            isDefault: true,
-          }
-        );
+        const result =
+          await updateCustomerAddress(
+            token,
+            address.id,
+            {
+              isDefault: true,
+            }
+          );
 
-        await refreshUser();
+        updateUser(result.user);
       } catch (requestError) {
         Alert.alert(
           "Unable to update address",
@@ -405,11 +674,9 @@ export default function AccountScreen() {
     setEditForm(null);
   };
 
-  const updateEditField = <
-    Key extends keyof AddressEditForm,
-  >(
-    key: Key,
-    value: AddressEditForm[Key]
+  const updateEditField = (
+    key: keyof AddressEditForm,
+    value: string | boolean
   ) => {
     setEditForm((current) => {
       if (!current) {
@@ -452,43 +719,44 @@ export default function AccountScreen() {
       setUpdatingAddressId(address.id);
 
       try {
-        await updateCustomerAddress(
-          token,
-          address.id,
-          {
-            label:
-              editForm.label.trim(),
+        const result =
+          await updateCustomerAddress(
+            token,
+            address.id,
+            {
+              label:
+                editForm.label.trim(),
 
-            fullName:
-              editForm.fullName.trim(),
+              fullName:
+                editForm.fullName.trim(),
 
-            phone:
-              editForm.phone,
+              phone:
+                editForm.phone,
 
-            pincode:
-              editForm.pincode,
+              pincode:
+                editForm.pincode,
 
-            houseDetails:
-              editForm.houseDetails.trim(),
+              houseDetails:
+                editForm.houseDetails.trim(),
 
-            areaDetails:
-              editForm.areaDetails.trim(),
+              areaDetails:
+                editForm.areaDetails.trim(),
 
-            landmark:
-              editForm.landmark.trim(),
+              landmark:
+                editForm.landmark.trim(),
 
-            area:
-              editForm.area.trim(),
+              area:
+                editForm.area.trim(),
 
-            city:
-              editForm.city.trim(),
+              city:
+                editForm.city.trim(),
 
-            isDefault:
-              editForm.isDefault,
-          }
-        );
+              isDefault:
+                editForm.isDefault,
+            }
+          );
 
-        await refreshUser();
+        updateUser(result.user);
 
         setEditingAddressId(null);
         setEditForm(null);
@@ -518,10 +786,11 @@ export default function AccountScreen() {
           setDeletingAddressId(address.id);
 
           try {
-            await deleteCustomerAddress(
-              token,
-              address.id
-            );
+            const updatedUser =
+              await deleteCustomerAddress(
+                token,
+                address.id
+              );
 
             if (
               editingAddressId ===
@@ -531,7 +800,7 @@ export default function AccountScreen() {
               setEditForm(null);
             }
 
-            await refreshUser();
+            updateUser(updatedUser);
           } catch (requestError) {
             Alert.alert(
               "Unable to delete address",
@@ -1039,6 +1308,112 @@ export default function AccountScreen() {
             )
           }
         />
+
+        <Text style={styles.sectionTitle}>
+          Profile security
+        </Text>
+
+        <View style={styles.profileManageCard}>
+          {editingProfile ? (
+            <ProfileEditCard
+              form={profileForm}
+              saving={savingProfile}
+              onChange={(key, value) => {
+                setProfileForm((current) => ({
+                  ...current,
+                  [key]: value,
+                }));
+              }}
+              onCancel={cancelEditingProfile}
+              onSave={() => {
+                void saveProfile();
+              }}
+            />
+          ) : (
+            <View style={styles.profileManageRow}>
+              <View style={styles.profileManageIcon}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={22}
+                  color="#35694E"
+                />
+              </View>
+
+              <View style={styles.profileManageContent}>
+                <Text style={styles.profileManageTitle}>
+                  Profile details
+                </Text>
+
+                <Text style={styles.profileManageDescription}>
+                  Update your name, email address and mobile number.
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={startEditingProfile}
+                style={({ pressed }) => [
+                  styles.smallActionButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.smallActionText}>
+                  Edit
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.profileDivider} />
+
+          {changingPassword ? (
+            <PasswordEditCard
+              form={passwordForm}
+              saving={savingPassword}
+              onChange={(key, value) => {
+                setPasswordForm((current) => ({
+                  ...current,
+                  [key]: value,
+                }));
+              }}
+              onCancel={cancelPasswordForm}
+              onSave={() => {
+                void savePassword();
+              }}
+            />
+          ) : (
+            <View style={styles.profileManageRow}>
+              <View style={styles.profileManageIcon}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={22}
+                  color="#35694E"
+                />
+              </View>
+
+              <View style={styles.profileManageContent}>
+                <Text style={styles.profileManageTitle}>
+                  Password
+                </Text>
+
+                <Text style={styles.profileManageDescription}>
+                  Change your account password securely.
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={openPasswordForm}
+                style={({ pressed }) => [
+                  styles.smallActionButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.smallActionText}>
+                  Change
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
 
         <Text style={styles.sectionTitle}>
           Saved addresses
@@ -1724,6 +2099,197 @@ function MenuButton({
   );
 }
 
+function ProfileEditCard({
+  form,
+  saving,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  form: ProfileEditForm;
+  saving: boolean;
+  onChange: (
+    key: keyof ProfileEditForm,
+    value: string
+  ) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <View>
+      <EditInput
+        label="Full name"
+        value={form.fullName}
+        onChangeText={(value) =>
+          onChange("fullName", value)
+        }
+        placeholder="Your full name"
+      />
+
+      <EditInput
+        label="Email address"
+        value={form.email}
+        onChangeText={(value) =>
+          onChange("email", value)
+        }
+        placeholder="your@email.com"
+        keyboardType="default"
+      />
+
+      <EditInput
+        label="Mobile number"
+        value={form.phone}
+        onChangeText={(value) =>
+          onChange(
+            "phone",
+            normalisePhone(value)
+          )
+        }
+        placeholder="10-digit mobile number"
+        keyboardType="phone-pad"
+        maxLength={10}
+      />
+
+      <View style={styles.editActions}>
+        <Pressable
+          disabled={saving}
+          onPress={onCancel}
+          style={({ pressed }) => [
+            styles.editCancelButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          <Text style={styles.editCancelText}>
+            Cancel
+          </Text>
+        </Pressable>
+
+        <Pressable
+          disabled={saving}
+          onPress={onSave}
+          style={({ pressed }) => [
+            styles.editSaveButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator
+              size="small"
+              color="#FFFFFF"
+            />
+          ) : (
+            <Text style={styles.editSaveText}>
+              Save profile
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function PasswordEditCard({
+  form,
+  saving,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  form: PasswordForm;
+  saving: boolean;
+  onChange: (
+    key: keyof PasswordForm,
+    value: string
+  ) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <View>
+      <EditInput
+        label="Current password"
+        value={form.currentPassword}
+        onChangeText={(value) =>
+          onChange("currentPassword", value)
+        }
+        placeholder="Enter current password"
+        secureTextEntry
+      />
+
+      <EditInput
+        label="New password"
+        value={form.newPassword}
+        onChangeText={(value) =>
+          onChange("newPassword", value)
+        }
+        placeholder="At least 8 characters"
+        secureTextEntry
+      />
+
+      <EditInput
+        label="Confirm new password"
+        value={form.confirmPassword}
+        onChangeText={(value) =>
+          onChange("confirmPassword", value)
+        }
+        placeholder="Re-enter new password"
+        secureTextEntry
+      />
+
+      <View style={styles.editActions}>
+        <Pressable
+          disabled={saving}
+          onPress={onCancel}
+          style={({ pressed }) => [
+            styles.editCancelButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          <Text style={styles.editCancelText}>
+            Cancel
+          </Text>
+        </Pressable>
+
+        <Pressable
+          disabled={saving}
+          onPress={onSave}
+          style={({ pressed }) => [
+            styles.editSaveButton,
+            saving &&
+              styles.disabledButton,
+            pressed &&
+              !saving &&
+              styles.pressed,
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator
+              size="small"
+              color="#FFFFFF"
+            />
+          ) : (
+            <Text style={styles.editSaveText}>
+              Change password
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function AddressEditCard({
   form,
   saving,
@@ -1733,11 +2299,9 @@ function AddressEditCard({
 }: {
   form: AddressEditForm;
   saving: boolean;
-  onChange: <
-    Key extends keyof AddressEditForm,
-  >(
-    key: Key,
-    value: AddressEditForm[Key]
+  onChange: (
+    key: keyof AddressEditForm,
+    value: string | boolean
   ) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -1961,6 +2525,7 @@ function EditInput({
   keyboardType = "default",
   maxLength,
   multiline = false,
+  secureTextEntry = false,
 }: {
   label: string;
   value: string;
@@ -1969,6 +2534,7 @@ function EditInput({
   keyboardType?: "default" | "phone-pad" | "number-pad";
   maxLength?: number;
   multiline?: boolean;
+  secureTextEntry?: boolean;
 }) {
   return (
     <View style={styles.editInputGroup}>
@@ -1984,6 +2550,7 @@ function EditInput({
         keyboardType={keyboardType}
         maxLength={maxLength}
         multiline={multiline}
+        secureTextEntry={secureTextEntry}
         textAlignVertical={
           multiline ? "top" : "center"
         }
@@ -2283,6 +2850,69 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14,
     marginTop: 4,
+  },
+
+  profileManageCard: {
+    padding: 15,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E8E2",
+  },
+
+  profileManageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+
+  profileManageIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: "#E5EFE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  profileManageContent: {
+    flex: 1,
+  },
+
+  profileManageTitle: {
+    color: "#26372E",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  profileManageDescription: {
+    color: "#747F78",
+    fontSize: 9,
+    lineHeight: 14,
+    marginTop: 4,
+  },
+
+  smallActionButton: {
+    minHeight: 36,
+    paddingHorizontal: 13,
+    borderRadius: 12,
+    backgroundColor: "#E7EFE8",
+    borderWidth: 1,
+    borderColor: "#D7E3D9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  smallActionText: {
+    color: "#245C42",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
+  profileDivider: {
+    height: 1,
+    backgroundColor: "#E8EBE7",
+    marginVertical: 15,
   },
 
   addressBookCard: {

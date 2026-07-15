@@ -78,6 +78,13 @@ type CurrentUserResponse =
     };
   };
 
+type UserMutationResponse =
+  ApiBaseResponse & {
+    data: {
+      user: AuthUser;
+    };
+  };
+
 type SavedAddressMutationResponse =
   ApiBaseResponse & {
     data: {
@@ -330,6 +337,17 @@ export type RegisterInput = {
 export type LoginInput = {
   identifier: string;
   password: string;
+};
+
+export type UpdateCustomerProfileInput = {
+  fullName: string;
+  email: string;
+  phone: string;
+};
+
+export type ChangeCustomerPasswordInput = {
+  currentPassword: string;
+  newPassword: string;
 };
 
 export type OrderPaymentMethod =
@@ -1117,6 +1135,66 @@ export async function fetchCurrentUser(
       "/api/auth/me",
       {
         token,
+      }
+    );
+
+  return response.data.user;
+}
+
+export async function updateCustomerProfile(
+  token: string,
+  input: UpdateCustomerProfileInput
+): Promise<AuthUser> {
+  requireToken(token);
+
+  const response =
+    await apiRequest<UserMutationResponse>(
+      "/api/auth/profile",
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          fullName:
+            input.fullName.trim(),
+
+          email:
+            input.email
+              .trim()
+              .toLowerCase(),
+
+          phone:
+            input.phone.replace(
+              /\D/g,
+              ""
+            ),
+        }),
+      }
+    );
+
+  return response.data.user;
+}
+
+export async function changeCustomerPassword(
+  token: string,
+  input: ChangeCustomerPasswordInput
+): Promise<AuthUser> {
+  requireToken(token);
+
+  const response =
+    await apiRequest<UserMutationResponse>(
+      "/api/auth/password",
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          currentPassword:
+            input.currentPassword,
+
+          newPassword:
+            input.newPassword,
+        }),
       }
     );
 
