@@ -104,26 +104,30 @@ function serializeOrderSummary(order) {
     total: Number(order.total || 0),
     subtotal: Number(order.subtotal || 0),
     deliveryFee: Number(order.deliveryFee || 0),
+    couponDiscount: Number(order.couponDiscount || 0),
     bottleCount,
     paymentMethod: order.paymentMethod,
+    paymentGateway: order.paymentGateway || "",
     paymentStatus: order.paymentStatus,
     orderStatus: order.orderStatus,
     deliveryStatus: order.deliveryStatus || "unassigned",
     deliveryAddress: order.deliveryAddress,
     deliverySchedule: order.deliverySchedule,
+    refundStatus: order.refundStatus || "not_required",
+    refundFailureReason: order.refundFailureReason || "",
+    refundAttemptCount: Number(order.refundAttemptCount || 0),
+    refundAmount: Number(order.refundAmount || 0),
+    refundRequestedAt: order.refundRequestedAt || null,
+    refundProcessedAt: order.refundProcessedAt || null,
+    refundFailedAt: order.refundFailedAt || null,
+    cancellationReason: order.cancellationReason || "",
+    cancelledAt: order.cancelledAt || null,
+    deliveredAt: order.deliveredAt || null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
 }
 
-/**
- * GET /api/admin/users
- *
- * Query parameters:
- * role=customer|admin|delivery|all
- * status=active|inactive|all
- * search=name, email or phone
- */
 router.get(
   "/",
   async (req, res, next) => {
@@ -472,12 +476,6 @@ router.get(
   }
 );
 
-/**
- * GET /api/admin/users/:userId
- *
- * Customer/admin detail page with saved addresses,
- * order metrics, COD amounts and latest orders.
- */
 router.get(
   "/:userId",
   async (req, res, next) => {
@@ -900,14 +898,6 @@ router.get(
   }
 );
 
-/**
- * PATCH /api/admin/users/:userId/status
- *
- * Body:
- * {
- *   active: true | false
- * }
- */
 router.patch(
   "/:userId/status",
   async (req, res, next) => {
@@ -1018,14 +1008,6 @@ router.patch(
   }
 );
 
-/**
- * PATCH /api/admin/users/:userId/role
- *
- * Body:
- * {
- *   role: "customer" | "admin"
- * }
- */
 router.patch(
   "/:userId/role",
   async (req, res, next) => {

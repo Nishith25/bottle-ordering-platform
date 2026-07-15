@@ -10,8 +10,13 @@ import {
 import { useAdminAuth } from "../context/AuthContext";
 
 import {
+  API_BASE_URL,
+  cancelAdminCustomerOrder,
+  createAdminCustomerInvoicePrintLink,
   fetchAdminUserDetails,
   fetchAdminUsers,
+  markAdminCustomerOrderCodCollected,
+  retryAdminCustomerOrderRefund,
   updateAdminUserRole,
   updateAdminUserStatus,
   type AdminCustomerDetails,
@@ -33,6 +38,21 @@ const EMPTY_SUMMARY: AdminUserSummary =
     activeUsers: 0,
     inactiveUsers: 0,
   };
+
+const CANCELLABLE_STATUSES = [
+  "placed",
+  "confirmed",
+  "preparing",
+];
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 function formatCurrency(
   value: number
@@ -103,6 +123,208 @@ function getOrderStatusLabel(
     .join(" ");
 }
 
+function formatAddress(
+  order: AdminCustomerOrderSummary
+) {
+  const address =
+    order.deliveryAddress || {};
+
+  return [
+    address.houseDetails,
+    address.areaDetails,
+    address.landmark
+      ? `Landmark: ${address.landmark}`
+      : "",
+    address.area,
+    address.city,
+    address.pincode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function buildPackingSlipHtml(
+  order: AdminCustomerOrderSummary,
+  customerName: string
+) {
+  const itemsHtml =
+    order.bottleCount === 0
+      ? "<tr><td colspan='3'>No items available</td></tr>"
+      : `
+        <tr>
+          <td>Mixed bottles</td>
+          <td>${escapeHtml(order.bottleCount)}</td>
+          <td>${escapeHtml(formatCurrency(order.total))}</td>
+        </tr>
+      `;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Packing Slip ${escapeHtml(order.orderNumber)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #f4f7f3;
+      color: #17251d;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .actions {
+      max-width: 720px;
+      margin: 0 auto 12px;
+      text-align: right;
+    }
+    button {
+      min-height: 40px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 10px;
+      background: #155d3e;
+      color: #fff;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .slip {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 26px;
+      border: 1px solid #dfe8e2;
+      border-radius: 18px;
+      background: #fff;
+    }
+    h1 {
+      margin: 0;
+      color: #0f3b26;
+      font-size: 28px;
+    }
+    h2 {
+      margin: 6px 0 0;
+      font-size: 18px;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .box {
+      padding: 14px;
+      border: 1px solid #e3ebe5;
+      border-radius: 14px;
+      background: #f8faf7;
+    }
+    .label {
+      color: #65736b;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    p {
+      margin: 6px 0 0;
+      color: #26372e;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    table {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+    th,
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #edf2ef;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: #f5faf6;
+      color: #65736b;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .footer {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #edf2ef;
+      color: #65736b;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    @media print {
+      body {
+        padding: 0;
+        background: #fff;
+      }
+      .actions {
+        display: none;
+      }
+      .slip {
+        max-width: none;
+        border: 0;
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button onclick="window.print()">Print packing slip</button>
+  </div>
+
+  <main class="slip">
+    <h1>SolidSip</h1>
+    <h2>Packing Slip · ${escapeHtml(order.orderNumber)}</h2>
+
+    <div class="meta">
+      <div class="box">
+        <div class="label">Customer</div>
+        <p>${escapeHtml(customerName)}</p>
+        <p>${escapeHtml(order.deliveryAddress?.phone || "")}</p>
+      </div>
+
+      <div class="box">
+        <div class="label">Delivery</div>
+        <p>${escapeHtml(order.deliverySchedule?.deliveryDateLabel || order.deliverySchedule?.deliveryDateId || "Not selected")}</p>
+        <p>${escapeHtml(order.deliverySchedule?.deliverySlot || "Slot not selected")}</p>
+      </div>
+
+      <div class="box">
+        <div class="label">Address</div>
+        <p>${escapeHtml(formatAddress(order) || "No address")}</p>
+      </div>
+
+      <div class="box">
+        <div class="label">Payment</div>
+        <p>${escapeHtml(order.paymentMethod.toUpperCase())} · ${escapeHtml(getOrderStatusLabel(order.paymentStatus))}</p>
+        <p>${escapeHtml(formatCurrency(order.total))}</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+    </table>
+
+    <div class="footer">
+      Check bottle count, cap seal, label, and delivery slot before dispatch.
+    </div>
+  </main>
+</body>
+</html>`;
+}
+
 export default function UsersPage() {
   const { token } =
     useAdminAuth();
@@ -162,6 +384,13 @@ export default function UsersPage() {
     detailsLoading,
     setDetailsLoading,
   ] = useState(false);
+
+  const [
+    actionLoadingKey,
+    setActionLoadingKey,
+  ] = useState<
+    string | null
+  >(null);
 
   const [
     detailsError,
@@ -278,6 +507,24 @@ export default function UsersPage() {
         }
       },
       [token]
+    );
+
+  const refreshSelectedCustomer =
+    useCallback(
+      async () => {
+        if (selectedUserId) {
+          await loadCustomerDetails(
+            selectedUserId
+          );
+        }
+
+        await loadUsers();
+      },
+      [
+        selectedUserId,
+        loadCustomerDetails,
+        loadUsers,
+      ]
     );
 
   useEffect(() => {
@@ -428,6 +675,280 @@ export default function UsersPage() {
         );
       } finally {
         setUpdatingUserId(
+          null
+        );
+      }
+    };
+
+  const handleOpenOrderPage = (
+    order: AdminCustomerOrderSummary
+  ) => {
+    const url =
+      `${window.location.origin}/orders?search=${encodeURIComponent(
+        order.orderNumber
+      )}`;
+
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const handlePrintInvoice =
+    async (
+      order: AdminCustomerOrderSummary
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      const actionKey =
+        `invoice-${order._id}`;
+
+      setActionLoadingKey(
+        actionKey
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const printUrl =
+          await createAdminCustomerInvoicePrintLink(
+            token,
+            order.orderNumber ||
+              order._id
+          );
+
+        window.open(
+          printUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to create invoice print link."
+        );
+      } finally {
+        setActionLoadingKey(
+          null
+        );
+      }
+    };
+
+  const handlePrintPackingSlip = (
+    order: AdminCustomerOrderSummary,
+    customerName: string
+  ) => {
+    const html =
+      buildPackingSlipHtml(
+        order,
+        customerName
+      );
+
+    const slipWindow =
+      window.open(
+        "",
+        "_blank",
+        "noopener,noreferrer"
+      );
+
+    if (!slipWindow) {
+      setError(
+        "Unable to open packing slip. Please allow pop-ups for the dashboard."
+      );
+      return;
+    }
+
+    slipWindow.document.open();
+    slipWindow.document.write(html);
+    slipWindow.document.close();
+  };
+
+  const handleMarkCodCollected =
+    async (
+      order: AdminCustomerOrderSummary
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      const amountText =
+        window.prompt(
+          `Enter COD amount collected for ${order.orderNumber}`,
+          String(order.total)
+        );
+
+      if (amountText === null) {
+        return;
+      }
+
+      const amountCollected =
+        Number(amountText);
+
+      if (
+        !Number.isFinite(
+          amountCollected
+        ) ||
+        amountCollected < 0
+      ) {
+        setError(
+          "Enter a valid collected amount."
+        );
+        return;
+      }
+
+      const notes =
+        window.prompt(
+          "Collection notes optional",
+          ""
+        ) ?? "";
+
+      const actionKey =
+        `cod-${order._id}`;
+
+      setActionLoadingKey(
+        actionKey
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await markAdminCustomerOrderCodCollected(
+          token,
+          order._id,
+          {
+            amountCollected,
+            notes,
+          }
+        );
+
+        setSuccess(
+          `COD marked collected for ${order.orderNumber}.`
+        );
+
+        await refreshSelectedCustomer();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to mark COD collected."
+        );
+      } finally {
+        setActionLoadingKey(
+          null
+        );
+      }
+    };
+
+  const handleCancelOrder =
+    async (
+      order: AdminCustomerOrderSummary
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Cancel ${order.orderNumber}? Stock/slot will be restored if applicable, and online refund will be handled by backend.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      const reason =
+        window.prompt(
+          "Cancellation reason",
+          "Cancelled by administrator"
+        ) || "Cancelled by administrator";
+
+      const actionKey =
+        `cancel-${order._id}`;
+
+      setActionLoadingKey(
+        actionKey
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await cancelAdminCustomerOrder(
+          token,
+          order._id,
+          reason
+        );
+
+        setSuccess(
+          `${order.orderNumber} cancelled successfully.`
+        );
+
+        await refreshSelectedCustomer();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to cancel order."
+        );
+      } finally {
+        setActionLoadingKey(
+          null
+        );
+      }
+    };
+
+  const handleRetryRefund =
+    async (
+      order: AdminCustomerOrderSummary
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Retry refund for ${order.orderNumber}?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      const actionKey =
+        `refund-${order._id}`;
+
+      setActionLoadingKey(
+        actionKey
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        await retryAdminCustomerOrderRefund(
+          token,
+          order._id
+        );
+
+        setSuccess(
+          `Refund retry submitted for ${order.orderNumber}.`
+        );
+
+        await refreshSelectedCustomer();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to retry refund."
+        );
+      } finally {
+        setActionLoadingKey(
           null
         );
       }
@@ -962,10 +1483,33 @@ export default function UsersPage() {
       {customerDetails ? (
         <CustomerDetailsPanel
           details={customerDetails}
+          actionLoadingKey={actionLoadingKey}
           onClose={() => {
             setSelectedUserId(null);
             setCustomerDetails(null);
             setDetailsError(null);
+          }}
+          onOpenOrderPage={handleOpenOrderPage}
+          onPrintInvoice={(order) => {
+            void handlePrintInvoice(
+              order
+            );
+          }}
+          onPrintPackingSlip={handlePrintPackingSlip}
+          onMarkCodCollected={(order) => {
+            void handleMarkCodCollected(
+              order
+            );
+          }}
+          onCancelOrder={(order) => {
+            void handleCancelOrder(
+              order
+            );
+          }}
+          onRetryRefund={(order) => {
+            void handleRetryRefund(
+              order
+            );
           }}
         />
       ) : null}
@@ -982,7 +1526,9 @@ export default function UsersPage() {
           subscriptions. Disabling an
           account blocks authenticated
           access on its next backend
-          request.
+          request. Invoice links are
+          generated from{" "}
+          <code>{API_BASE_URL}</code>.
         </p>
       </div>
     </div>
@@ -1006,10 +1552,37 @@ function UserSummaryCard({
 
 function CustomerDetailsPanel({
   details,
+  actionLoadingKey,
   onClose,
+  onOpenOrderPage,
+  onPrintInvoice,
+  onPrintPackingSlip,
+  onMarkCodCollected,
+  onCancelOrder,
+  onRetryRefund,
 }: {
   details: AdminCustomerDetails;
+  actionLoadingKey: string | null;
   onClose: () => void;
+  onOpenOrderPage: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onPrintInvoice: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onPrintPackingSlip: (
+    order: AdminCustomerOrderSummary,
+    customerName: string
+  ) => void;
+  onMarkCodCollected: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onCancelOrder: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onRetryRefund: (
+    order: AdminCustomerOrderSummary
+  ) => void;
 }) {
   const user =
     details.user;
@@ -1208,6 +1781,30 @@ function CustomerDetailsPanel({
                 <LatestOrderRow
                   key={order._id}
                   order={order}
+                  customerName={
+                    user.fullName
+                  }
+                  actionLoadingKey={
+                    actionLoadingKey
+                  }
+                  onOpenOrderPage={
+                    onOpenOrderPage
+                  }
+                  onPrintInvoice={
+                    onPrintInvoice
+                  }
+                  onPrintPackingSlip={
+                    onPrintPackingSlip
+                  }
+                  onMarkCodCollected={
+                    onMarkCodCollected
+                  }
+                  onCancelOrder={
+                    onCancelOrder
+                  }
+                  onRetryRefund={
+                    onRetryRefund
+                  }
                 />
               )
             )}
@@ -1349,11 +1946,69 @@ function SavedAddressCard({
 
 function LatestOrderRow({
   order,
+  customerName,
+  actionLoadingKey,
+  onOpenOrderPage,
+  onPrintInvoice,
+  onPrintPackingSlip,
+  onMarkCodCollected,
+  onCancelOrder,
+  onRetryRefund,
 }: {
   order: AdminCustomerOrderSummary;
+  customerName: string;
+  actionLoadingKey: string | null;
+  onOpenOrderPage: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onPrintInvoice: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onPrintPackingSlip: (
+    order: AdminCustomerOrderSummary,
+    customerName: string
+  ) => void;
+  onMarkCodCollected: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onCancelOrder: (
+    order: AdminCustomerOrderSummary
+  ) => void;
+  onRetryRefund: (
+    order: AdminCustomerOrderSummary
+  ) => void;
 }) {
+  const canMarkCod =
+    order.paymentMethod === "cod" &&
+    order.paymentStatus !== "paid" &&
+    order.orderStatus !== "cancelled";
+
+  const canCancel =
+    CANCELLABLE_STATUSES.includes(
+      order.orderStatus
+    );
+
+  const canRetryRefund =
+    order.refundStatus === "failed";
+
+  const invoiceLoading =
+    actionLoadingKey ===
+    `invoice-${order._id}`;
+
+  const codLoading =
+    actionLoadingKey ===
+    `cod-${order._id}`;
+
+  const cancelLoading =
+    actionLoadingKey ===
+    `cancel-${order._id}`;
+
+  const refundLoading =
+    actionLoadingKey ===
+    `refund-${order._id}`;
+
   return (
-    <div className="latest-order-row">
+    <div className="latest-order-row support-order-row">
       <div>
         <strong>
           {order.orderNumber}
@@ -1394,6 +2049,17 @@ function LatestOrderRow({
             order.paymentStatus
           )}
         </span>
+
+        {order.refundStatus &&
+        order.refundStatus !==
+          "not_required" ? (
+          <span className="refund-mini-status">
+            Refund:{" "}
+            {getOrderStatusLabel(
+              order.refundStatus
+            )}
+          </span>
+        ) : null}
       </div>
 
       <div>
@@ -1413,6 +2079,96 @@ function LatestOrderRow({
             : ""}
         </span>
       </div>
+
+      <div className="latest-order-actions">
+        <button
+          type="button"
+          className="support-action-button"
+          onClick={() =>
+            onOpenOrderPage(order)
+          }
+        >
+          Orders page
+        </button>
+
+        <button
+          type="button"
+          className="support-action-button print"
+          disabled={invoiceLoading}
+          onClick={() =>
+            onPrintInvoice(order)
+          }
+        >
+          {invoiceLoading
+            ? "Opening..."
+            : "Invoice"}
+        </button>
+
+        <button
+          type="button"
+          className="support-action-button print"
+          onClick={() =>
+            onPrintPackingSlip(
+              order,
+              customerName
+            )
+          }
+        >
+          Packing slip
+        </button>
+
+        {canMarkCod ? (
+          <button
+            type="button"
+            className="support-action-button success"
+            disabled={codLoading}
+            onClick={() =>
+              onMarkCodCollected(order)
+            }
+          >
+            {codLoading
+              ? "Saving..."
+              : "COD collected"}
+          </button>
+        ) : null}
+
+        {canCancel ? (
+          <button
+            type="button"
+            className="support-action-button danger"
+            disabled={cancelLoading}
+            onClick={() =>
+              onCancelOrder(order)
+            }
+          >
+            {cancelLoading
+              ? "Cancelling..."
+              : "Cancel"}
+          </button>
+        ) : null}
+
+        {canRetryRefund ? (
+          <button
+            type="button"
+            className="support-action-button warning"
+            disabled={refundLoading}
+            onClick={() =>
+              onRetryRefund(order)
+            }
+          >
+            {refundLoading
+              ? "Retrying..."
+              : "Retry refund"}
+          </button>
+        ) : null}
+      </div>
+
+      {order.refundFailureReason ? (
+        <div className="latest-order-warning">
+          Refund issue:{" "}
+          {order.refundFailureReason}
+        </div>
+      ) : null}
     </div>
   );
 }

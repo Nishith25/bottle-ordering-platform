@@ -1,3 +1,5 @@
+// admin-dashboard/src/services/api.ts
+
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL ??
   "http://localhost:5001"
@@ -338,8 +340,10 @@ export type AdminCustomerOrderSummary = {
   total: number;
   subtotal: number;
   deliveryFee: number;
+  couponDiscount?: number;
   bottleCount: number;
   paymentMethod: "cod" | "online";
+  paymentGateway?: "" | "razorpay";
   paymentStatus: string;
   orderStatus: string;
   deliveryStatus: string;
@@ -360,7 +364,27 @@ export type AdminCustomerOrderSummary = {
     deliveryDateLabel?: string;
     deliverySlot?: string;
     deliverySlotCode?: string;
+    deliverySlotStartMinutes?: number;
+    deliverySlotEndMinutes?: number;
   };
+
+  refundStatus?:
+    | "not_required"
+    | "pending"
+    | "processed"
+    | "failed"
+    | string;
+
+  refundFailureReason?: string;
+  refundAttemptCount?: number;
+  refundAmount?: number;
+  refundRequestedAt?: string | null;
+  refundProcessedAt?: string | null;
+  refundFailedAt?: string | null;
+
+  cancellationReason?: string;
+  cancelledAt?: string | null;
+  deliveredAt?: string | null;
 
   createdAt: string;
   updatedAt: string;
@@ -403,6 +427,44 @@ export type AdminCustomerDetails = {
 
   latestSubscriptions:
     AdminCustomerSubscriptionSummary[];
+};
+
+export type AdminCashCollection = {
+  _id: string;
+  order: string;
+  orderNumber: string;
+  amountDue: number;
+  amountCollected: number;
+
+  status:
+    | "pending"
+    | "short_collected"
+    | "collected"
+    | "handed_over";
+
+  collectedAt: string | null;
+
+  collectedBySnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  handedOverAt: string | null;
+
+  handedOverBySnapshot:
+    | {
+        fullName: string;
+        email: string;
+        role: string;
+      }
+    | null;
+
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type LoginResponse =
@@ -491,6 +553,28 @@ type AdminCustomerDetailsResponse =
   ApiBaseResponse & {
     data: {
       customer: AdminCustomerDetails;
+    };
+  };
+
+type PrintLinkResponse =
+  ApiBaseResponse & {
+    data: {
+      printUrl: string;
+      expiresIn: string;
+    };
+  };
+
+type AdminOrderActionResponse =
+  ApiBaseResponse & {
+    data: {
+      order: unknown;
+    };
+  };
+
+type CollectionResponse =
+  ApiBaseResponse & {
+    data: {
+      collection: AdminCashCollection;
     };
   };
 
@@ -1470,6 +1554,136 @@ export async function updateAdminUserRole(
 
   return normaliseManagedUser(
     response.data.user
+  );
+}
+
+export async function createAdminCustomerInvoicePrintLink(
+  token: string,
+  orderRef: string
+): Promise<string> {
+  requireToken(token);
+
+  if (!orderRef.trim()) {
+    throw new Error(
+      "Order reference is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<PrintLinkResponse>(
+      `/api/invoices/orders/${encodeURIComponent(
+        orderRef.trim()
+      )}/print-link`,
+      {
+        method: "POST",
+        token,
+      }
+    );
+
+  const printUrl =
+    response.data.printUrl;
+
+  if (
+    printUrl.startsWith("http://") ||
+    printUrl.startsWith("https://")
+  ) {
+    return printUrl;
+  }
+
+  return `${API_BASE_URL}${printUrl}`;
+}
+
+export async function markAdminCustomerOrderCodCollected(
+  token: string,
+  orderId: string,
+  payload: {
+    amountCollected: number;
+    notes?: string;
+  }
+): Promise<AdminCashCollection> {
+  requireToken(token);
+
+  if (!orderId.trim()) {
+    throw new Error(
+      "Order ID is missing."
+    );
+  }
+
+  const response =
+    await apiRequest<CollectionResponse>(
+      `/api/admin/operations/orders/${encodeURIComponent(
+        orderId.trim()
+      )}/cod-collected`,
+      {
+        method: "PATCH",
+        token,
+
+        body: JSON.stringify({
+          amountCollected:
+            payload.amountCollected,
+
+          notes:
+            payload.notes ?? "",
+        }),
+      }
+    );
+
+  return response.data.collection;
+}
+
+export async function cancelAdminCustomerOrder(
+  token: string,
+  orderId: string,
+  reason =
+    "Cancelled by administrator"
+): Promise<void> {
+  requireToken(token);
+
+  if (!orderId.trim()) {
+    throw new Error(
+      "Order ID is missing."
+    );
+  }
+
+  await apiRequest<AdminOrderActionResponse>(
+    `/api/admin/orders/${encodeURIComponent(
+      orderId.trim()
+    )}/status`,
+    {
+      method: "PATCH",
+      token,
+
+      body: JSON.stringify({
+        orderStatus: "cancelled",
+        cancellationReason:
+          reason.trim() ||
+          "Cancelled by administrator",
+      }),
+    }
+  );
+}
+
+export async function retryAdminCustomerOrderRefund(
+  token: string,
+  orderId: string
+): Promise<void> {
+  requireToken(token);
+
+  if (!orderId.trim()) {
+    throw new Error(
+      "Order ID is missing."
+    );
+  }
+
+  await apiRequest<AdminOrderActionResponse>(
+    `/api/admin/orders/${encodeURIComponent(
+      orderId.trim()
+    )}/refund/retry`,
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify({}),
+    }
   );
 }
 

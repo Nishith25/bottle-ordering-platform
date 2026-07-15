@@ -564,3 +564,87 @@
     grid-template-columns: 1fr;
   }
 }
+
+.support-order-row {
+  grid-template-columns:
+    1.1fr 0.75fr 0.9fr 1.2fr;
+}
+
+.latest-order-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid #e8eee7;
+}
+
+.support-action-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d7e3d9;
+  border-radius: 11px;
+  color: #245c42;
+  background: #eef7f0;
+  font-size: 7px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.support-action-button:hover:not(:disabled) {
+  border-color: #9fbea9;
+  background: #e3f1e6;
+}
+
+.support-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.support-action-button.print {
+  color: #355f7a;
+  border-color: #cfe0e8;
+  background: #eef6fa;
+}
+
+.support-action-button.success {
+  color: #226947;
+  border-color: #cbe6d2;
+  background: #ecf8ef;
+}
+
+.support-action-button.warning {
+  color: #8a6815;
+  border-color: #f1dea7;
+  background: #fff7de;
+}
+
+.support-action-button.danger {
+  color: #a34848;
+  border-color: #f0d0d0;
+  background: #fff0f0;
+}
+
+.refund-mini-status {
+  color: #8a6815 !important;
+  font-weight: 800;
+}
+
+.latest-order-warning {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border: 1px solid #f0d7d7;
+  border-radius: 11px;
+  color: #8c4747;
+  background: #fff2f2;
+  font-size: 7px;
+  line-height: 12px;
+}
+
+.user-security-note code {
+  padding: 2px 5px;
+  border-radius: 6px;
+  color: #245c42;
+  background: #dcebdd;
+  font-size: 7px;
+}
