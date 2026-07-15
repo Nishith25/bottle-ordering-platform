@@ -18,6 +18,9 @@ const adminDeliveryPartnerRoutes = require(
 const adminDeliverySlotRoutes = require(
   "./routes/adminDeliverySlots"
 );
+const adminFollowUpsRoutes = require(
+  "./routes/adminFollowUps"
+);
 const adminInventoryRoutes = require(
   "./routes/adminInventory"
 );
@@ -418,6 +421,11 @@ app.use(
 app.use(
   "/api/admin/delivery-slots",
   adminDeliverySlotRoutes
+);
+
+app.use(
+  "/api/admin/follow-ups",
+  adminFollowUpsRoutes
 );
 
 app.use(

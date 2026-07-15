@@ -19,6 +19,7 @@ import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
 import DeliveryPartnersPage from "./pages/DeliveryPartnersPage";
 import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
 import DeliverySlotsPage from "./pages/DeliverySlotsPage";
+import FollowUpsPage from "./pages/FollowUpsPage";
 import InvoicePrintPage from "./pages/InvoicePrintPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -98,6 +99,13 @@ export default function App() {
               path="/operations"
               element={
                 <OperationsPage />
+              }
+            />
+
+            <Route
+              path="/follow-ups"
+              element={
+                <FollowUpsPage />
               }
             />
 

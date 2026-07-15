@@ -33,6 +33,9 @@ const PAGE_TITLES:
     "/operations":
       "Daily operations",
 
+    "/follow-ups":
+      "Follow-up Center",
+
     "/sales-report":
       "Sales & profit report",
 
@@ -214,6 +217,15 @@ export default function AdminLayout() {
             to="/operations"
             icon="▣"
             label="Operations"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/follow-ups"
+            icon="⏰"
+            label="Follow-ups"
             onClick={
               closeMobileMenu
             }
