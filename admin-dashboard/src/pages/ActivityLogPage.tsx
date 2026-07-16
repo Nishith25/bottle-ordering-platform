@@ -402,10 +402,13 @@ function getActivityActions(
   }
 
   const uniqueActions =
-    new Map<string, {
-      label: string;
-      url: string;
-    }>();
+    new Map<
+      string,
+      {
+        label: string;
+        url: string;
+      }
+    >();
 
   for (const action of actions) {
     uniqueActions.set(
@@ -417,6 +420,97 @@ function getActivityActions(
   return [
     ...uniqueActions.values(),
   ];
+}
+
+function escapeCsv(value: unknown) {
+  const text = String(value ?? "");
+
+  if (
+    text.includes(",") ||
+    text.includes('"') ||
+    text.includes("\n")
+  ) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+function downloadTextFile(
+  filename: string,
+  content: string
+) {
+  const blob = new Blob([content], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+function exportActivityLogsCsv(
+  logs: AdminActivityLog[]
+) {
+  const headers = [
+    "Date",
+    "Action Type",
+    "Action Label",
+    "Severity",
+    "Message",
+    "Admin Name",
+    "Admin Email",
+    "Entity Type",
+    "Entity Label",
+    "Target User",
+    "Target User Phone",
+    "Request Method",
+    "Request Path",
+  ];
+
+  const rows = logs.map((log) => [
+    formatDate(log.createdAt),
+    log.actionType,
+    log.actionLabel,
+    log.severity,
+    log.message,
+    log.actorSnapshot?.fullName || "",
+    log.actorSnapshot?.email || "",
+    log.entityType,
+    log.entityLabel,
+    log.targetUserSnapshot?.fullName || "",
+    log.targetUserSnapshot?.phone || "",
+    log.requestSnapshot?.method || "",
+    log.requestSnapshot?.path || "",
+  ]);
+
+  const csv = [
+    headers.map(escapeCsv).join(","),
+    ...rows.map((row) =>
+      row.map(escapeCsv).join(",")
+    ),
+  ].join("\n");
+
+  const dateId =
+    new Date()
+      .toISOString()
+      .slice(0, 10);
+
+  downloadTextFile(
+    `solidsip-activity-log-${dateId}.csv`,
+    csv
+  );
 }
 
 export default function ActivityLogPage() {
@@ -578,18 +672,35 @@ export default function ActivityLogPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loading}
-          onClick={() => {
-            void loadLogs();
-          }}
-        >
-          {loading
-            ? "Refreshing..."
-            : "Refresh logs"}
-        </button>
+        <div className="activity-heading-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={
+              logs.length === 0
+            }
+            onClick={() =>
+              exportActivityLogsCsv(
+                logs
+              )
+            }
+          >
+            Export CSV
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading}
+            onClick={() => {
+              void loadLogs();
+            }}
+          >
+            {loading
+              ? "Refreshing..."
+              : "Refresh logs"}
+          </button>
+        </div>
       </div>
 
       {error ? (

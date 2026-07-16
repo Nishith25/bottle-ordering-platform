@@ -1,5 +1,12 @@
 /* admin-dashboard/src/pages/activityLog.css */
 
+.activity-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  justify-content: flex-end;
+}
+
 .activity-summary-grid {
   display: grid;
   grid-template-columns:
@@ -248,6 +255,37 @@
   overflow-wrap: anywhere;
 }
 
+.activity-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid #eef2ef;
+}
+
+.activity-open-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #dce8df;
+  border-radius: 999px;
+  background: #f7fbf8;
+  color: #245b3c;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.activity-open-button:hover {
+  transform: translateY(-1px);
+  border-color: #9dc3a9;
+  background: #edf7ef;
+}
+
 @media (max-width: 1150px) {
   .activity-summary-grid,
   .activity-filter-grid {
@@ -278,41 +316,21 @@
   }
 }
 
+@media (max-width: 640px) {
+  .activity-heading-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .activity-heading-actions .secondary-button {
+    flex: 1;
+  }
+}
+
 @media (max-width: 480px) {
   .activity-summary-grid,
   .activity-filter-grid,
   .activity-detail-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.activity-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 13px;
-  padding-top: 12px;
-  border-top: 1px solid #eef2ef;
-}
-
-.activity-open-button {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid #dce8df;
-  border-radius: 999px;
-  background: #f7fbf8;
-  color: #245b3c;
-  font-size: 8px;
-  font-weight: 900;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-
-.activity-open-button:hover {
-  transform: translateY(-1px);
-  border-color: #9dc3a9;
-  background: #edf7ef;
 }
