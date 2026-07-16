@@ -40,12 +40,28 @@ const ACTION_TYPES = [
     label: "Order status",
   },
   {
+    value: "order_cancelled",
+    label: "Order cancelled",
+  },
+  {
     value: "order_refund_retried",
     label: "Refund retry",
   },
   {
+    value: "delivery_partner_assigned",
+    label: "Delivery assigned",
+  },
+  {
+    value: "delivery_partner_reassigned",
+    label: "Delivery reassigned",
+  },
+  {
     value: "cod_collected",
     label: "COD collected",
+  },
+  {
+    value: "cash_handed_over",
+    label: "Cash handover",
   },
   {
     value: "inventory_updated",
@@ -56,12 +72,28 @@ const ACTION_TYPES = [
     label: "Customer note",
   },
   {
+    value: "customer_follow_up_added",
+    label: "Customer follow-up",
+  },
+  {
     value: "follow_up_status_changed",
-    label: "Follow-up",
+    label: "Follow-up status",
+  },
+  {
+    value: "customer_follow_up_status_changed",
+    label: "Customer follow-up status",
   },
   {
     value: "notification_read",
     label: "Notification read",
+  },
+  {
+    value: "notifications_marked_all_read",
+    label: "Notifications all read",
+  },
+  {
+    value: "admin_notifications_generated",
+    label: "Notifications generated",
   },
   {
     value: "user_status_changed",
@@ -175,6 +207,216 @@ function formatLabel(value: string) {
       (letter) =>
         letter.toUpperCase()
     );
+}
+
+function getMetadataString(
+  metadata: Record<string, unknown>,
+  key: string
+) {
+  const value =
+    metadata?.[key];
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function getCustomerSearchText(
+  log: AdminActivityLog
+) {
+  return (
+    log.targetUserSnapshot?.phone ||
+    log.targetUserSnapshot?.email ||
+    log.targetUserSnapshot?.fullName ||
+    getMetadataString(
+      log.metadata,
+      "customerPhone"
+    ) ||
+    getMetadataString(
+      log.metadata,
+      "customerEmail"
+    ) ||
+    getMetadataString(
+      log.metadata,
+      "customerName"
+    ) ||
+    log.entityLabel ||
+    ""
+  ).trim();
+}
+
+function getOrderSearchText(
+  log: AdminActivityLog
+) {
+  return (
+    getMetadataString(
+      log.metadata,
+      "orderNumber"
+    ) ||
+    log.entityLabel ||
+    ""
+  ).trim();
+}
+
+function buildInternalUrl(
+  path: string,
+  searchValue?: string
+) {
+  if (!searchValue?.trim()) {
+    return path;
+  }
+
+  return `${path}?search=${encodeURIComponent(
+    searchValue.trim()
+  )}`;
+}
+
+function openInternalPage(
+  url: string
+) {
+  window.open(
+    `${window.location.origin}${url}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+function getActivityActions(
+  log: AdminActivityLog
+) {
+  const actions: {
+    label: string;
+    url: string;
+  }[] = [];
+
+  const orderSearch =
+    getOrderSearchText(log);
+
+  const customerSearch =
+    getCustomerSearchText(log);
+
+  if (
+    log.entityType === "order" ||
+    log.actionType.includes("order") ||
+    orderSearch.startsWith("SS-")
+  ) {
+    actions.push({
+      label: "Open order",
+      url: buildInternalUrl(
+        "/orders",
+        orderSearch
+      ),
+    });
+  }
+
+  if (
+    log.entityType === "cash_collection" ||
+    log.actionType.includes("cod") ||
+    log.actionType.includes("cash")
+  ) {
+    actions.push({
+      label: "Open operations",
+      url: "/operations",
+    });
+
+    if (orderSearch) {
+      actions.push({
+        label: "Open order",
+        url: buildInternalUrl(
+          "/orders",
+          orderSearch
+        ),
+      });
+    }
+  }
+
+  if (
+    log.entityType === "customer" ||
+    log.entityType === "user" ||
+    log.actionType.includes("user_") ||
+    log.actionType.includes("customer_")
+  ) {
+    if (customerSearch) {
+      actions.push({
+        label: "Open customer",
+        url: buildInternalUrl(
+          "/users",
+          customerSearch
+        ),
+      });
+    }
+  }
+
+  if (
+    log.entityType === "follow_up" ||
+    log.actionType.includes("follow_up")
+  ) {
+    actions.push({
+      label: "Open follow-ups",
+      url: buildInternalUrl(
+        "/follow-ups",
+        log.entityLabel ||
+          log.actionLabel
+      ),
+    });
+
+    if (customerSearch) {
+      actions.push({
+        label: "Open customer",
+        url: buildInternalUrl(
+          "/users",
+          customerSearch
+        ),
+      });
+    }
+  }
+
+  if (
+    log.entityType === "notification" ||
+    log.actionType.includes("notification")
+  ) {
+    actions.push({
+      label: "Open notifications",
+      url: buildInternalUrl(
+        "/notifications",
+        log.entityLabel ||
+          log.actionLabel
+      ),
+    });
+  }
+
+  if (
+    log.entityType === "inventory" ||
+    log.entityType === "product" ||
+    log.actionType.includes("inventory")
+  ) {
+    actions.push({
+      label: "Open products",
+      url: "/products",
+    });
+  }
+
+  const uniqueActions =
+    new Map<string, {
+      label: string;
+      url: string;
+    }>();
+
+  for (const action of actions) {
+    uniqueActions.set(
+      `${action.label}-${action.url}`,
+      action
+    );
+  }
+
+  return [
+    ...uniqueActions.values(),
+  ];
 }
 
 export default function ActivityLogPage() {
@@ -621,6 +863,9 @@ function ActivityLogCard({
 }: {
   log: AdminActivityLog;
 }) {
+  const actions =
+    getActivityActions(log);
+
   return (
     <article
       className={`activity-log-card activity-${log.severity}`}
@@ -720,6 +965,25 @@ function ActivityLogCard({
           </small>
         </div>
       </div>
+
+      {actions.length > 0 ? (
+        <div className="activity-action-row">
+          {actions.map((action) => (
+            <button
+              key={`${action.label}-${action.url}`}
+              type="button"
+              className="activity-open-button"
+              onClick={() =>
+                openInternalPage(
+                  action.url
+                )
+              }
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }

@@ -285,3 +285,34 @@
     grid-template-columns: 1fr;
   }
 }
+
+.activity-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid #eef2ef;
+}
+
+.activity-open-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #dce8df;
+  border-radius: 999px;
+  background: #f7fbf8;
+  color: #245b3c;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.activity-open-button:hover {
+  transform: translateY(-1px);
+  border-color: #9dc3a9;
+  background: #edf7ef;
+}
