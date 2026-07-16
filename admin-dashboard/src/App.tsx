@@ -36,6 +36,7 @@ import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
+import ExportCenterPage from "./pages/ExportCenterPage";
 
 export default function App() {
   return (
@@ -132,6 +133,13 @@ export default function App() {
                 <ActivityLogPage />
               }
             />
+
+            <Route
+  path="/export-center"
+  element={
+    <ExportCenterPage />
+  }
+/>
 
             <Route
               path="/sales-report"

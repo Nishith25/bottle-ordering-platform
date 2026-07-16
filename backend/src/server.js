@@ -54,6 +54,9 @@ const adminUserRoutes = require(
 const adminActivityLogRoutes = require(
   "./routes/adminActivityLogs"
 );
+const adminExportCenterRoutes = require(
+  "./routes/adminExportCenter"
+);
 
 const authRoutes = require("./routes/auth");
 const couponRoutes = require("./routes/coupons");
@@ -513,6 +516,10 @@ app.use(
 app.use(
   "/api/admin/activity-logs",
   adminActivityLogRoutes
+);
+app.use(
+  "/api/admin/export-center",
+  adminExportCenterRoutes
 );
 
 app.use(

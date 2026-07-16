@@ -93,6 +93,9 @@ const PAGE_TITLES:
 
     "/users":
       "Customer account management",
+
+      "/export-center":
+  "Export Center",
   };
 
 function getPageTitle(pathname: string) {
@@ -380,6 +383,15 @@ export default function AdminLayout() {
               closeMobileMenu
             }
           />
+
+          <NavigationLink
+  to="/export-center"
+  icon="⇩"
+  label="Export Center"
+  onClick={
+    closeMobileMenu
+  }
+/>
 
           <NavigationLink
             to="/sales-report"
