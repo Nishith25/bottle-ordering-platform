@@ -75,10 +75,26 @@ export type AdminActivityAdmin = {
   active: boolean;
 };
 
+export type AdminActivityActionType = {
+  actionType: string;
+  count: number;
+};
+
+export type AdminActivityPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
 export type AdminActivityLogsResult = {
   logs: AdminActivityLog[];
   summary: AdminActivitySummary;
   admins: AdminActivityAdmin[];
+  actionTypes: AdminActivityActionType[];
+  pagination: AdminActivityPagination;
 };
 
 type ApiBaseResponse = {
@@ -163,6 +179,7 @@ export async function fetchAdminActivityLogs(
     search?: string;
     dateFrom?: string;
     dateTo?: string;
+    page?: number;
     limit?: number;
   } = {}
 ): Promise<AdminActivityLogsResult> {
@@ -215,6 +232,13 @@ export async function fetchAdminActivityLogs(
     params.set(
       "dateTo",
       options.dateTo
+    );
+  }
+
+  if (options.page) {
+    params.set(
+      "page",
+      String(options.page)
     );
   }
 

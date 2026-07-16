@@ -68,6 +68,36 @@ function parseDate(value) {
     : date;
 }
 
+function mergeTodayFilter(filter) {
+  const todayStart =
+    new Date();
+
+  todayStart.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  const todayFilter = {
+    ...filter,
+  };
+
+  const existingCreatedAt =
+    filter.createdAt || {};
+
+  todayFilter.createdAt = {
+    ...existingCreatedAt,
+    $gte:
+      existingCreatedAt.$gte &&
+      existingCreatedAt.$gte > todayStart
+        ? existingCreatedAt.$gte
+        : todayStart,
+  };
+
+  return todayFilter;
+}
+
 function serializeActivityLog(log) {
   return {
     _id: log._id,
@@ -125,19 +155,9 @@ async function buildSummary(filter = {}) {
       severity: "danger",
     }),
 
-    AdminActivityLog.countDocuments({
-      ...filter,
-      createdAt: {
-        $gte: new Date(
-          new Date().setHours(
-            0,
-            0,
-            0,
-            0
-          )
-        ),
-      },
-    }),
+    AdminActivityLog.countDocuments(
+      mergeTodayFilter(filter)
+    ),
   ]);
 
   return {
@@ -148,6 +168,41 @@ async function buildSummary(filter = {}) {
     danger,
     today,
   };
+}
+
+async function buildActionTypes() {
+  const items =
+    await AdminActivityLog.aggregate([
+      {
+        $match: {
+          active: true,
+        },
+      },
+      {
+        $group: {
+          _id: "$actionType",
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $sort: {
+          count: -1,
+          _id: 1,
+        },
+      },
+      {
+        $limit: 100,
+      },
+    ]);
+
+  return items
+    .filter((item) => item._id)
+    .map((item) => ({
+      actionType: item._id,
+      count: item.count,
+    }));
 }
 
 router.get(
@@ -175,13 +230,24 @@ router.get(
       const dateTo =
         parseDate(req.query.dateTo);
 
+      const page = Math.min(
+        Math.max(
+          Number(req.query.page || 1),
+          1
+        ),
+        10000
+      );
+
       const limit = Math.min(
         Math.max(
-          Number(req.query.limit || 250),
+          Number(req.query.limit || 50),
           1
         ),
         500
       );
+
+      const skip =
+        (page - 1) * limit;
 
       const filter = {
         active: true,
@@ -252,8 +318,23 @@ router.get(
         }
 
         if (dateTo) {
+          const endDate =
+            new Date(dateTo);
+
+          if (
+            req.query.dateTo &&
+            !String(req.query.dateTo).includes("T")
+          ) {
+            endDate.setHours(
+              23,
+              59,
+              59,
+              999
+            );
+          }
+
           filter.createdAt.$lte =
-            dateTo;
+            endDate;
         }
       }
 
@@ -297,15 +378,22 @@ router.get(
 
       const [
         logs,
+        totalMatching,
         summary,
         admins,
+        actionTypes,
       ] = await Promise.all([
         AdminActivityLog.find(filter)
           .sort({
             createdAt: -1,
           })
+          .skip(skip)
           .limit(limit)
           .lean(),
+
+        AdminActivityLog.countDocuments(
+          filter
+        ),
 
         buildSummary(filter),
 
@@ -319,7 +407,17 @@ router.get(
             fullName: 1,
           })
           .lean(),
+
+        buildActionTypes(),
       ]);
+
+      const totalPages =
+        Math.max(
+          Math.ceil(
+            totalMatching / limit
+          ),
+          1
+        );
 
       return res.status(200).json({
         success: true,
@@ -340,6 +438,20 @@ router.get(
               role: admin.role,
               active: admin.active,
             })),
+
+          actionTypes,
+
+          pagination: {
+            page,
+            limit,
+            total:
+              totalMatching,
+            totalPages,
+            hasPreviousPage:
+              page > 1,
+            hasNextPage:
+              page < totalPages,
+          },
         },
       });
     } catch (error) {

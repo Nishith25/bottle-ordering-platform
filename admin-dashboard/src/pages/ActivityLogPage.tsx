@@ -4,6 +4,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -13,8 +14,10 @@ import {
 
 import {
   fetchAdminActivityLogs,
+  type AdminActivityActionType,
   type AdminActivityAdmin,
   type AdminActivityLog,
+  type AdminActivityPagination,
   type AdminActivitySummary,
 } from "../services/adminActivityLogsApi";
 
@@ -30,7 +33,17 @@ const EMPTY_SUMMARY: AdminActivitySummary =
     today: 0,
   };
 
-const ACTION_TYPES = [
+const EMPTY_PAGINATION: AdminActivityPagination =
+  {
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  };
+
+const DEFAULT_ACTION_TYPES = [
   {
     value: "all",
     label: "All actions",
@@ -207,6 +220,14 @@ function formatLabel(value: string) {
       (letter) =>
         letter.toUpperCase()
     );
+}
+
+function getDateInputValue(
+  date: Date
+) {
+  return date
+    .toISOString()
+    .slice(0, 10);
 }
 
 function getMetadataString(
@@ -477,6 +498,7 @@ function exportActivityLogsCsv(
     "Target User Phone",
     "Request Method",
     "Request Path",
+    "Metadata JSON",
   ];
 
   const rows = logs.map((log) => [
@@ -493,6 +515,7 @@ function exportActivityLogsCsv(
     log.targetUserSnapshot?.phone || "",
     log.requestSnapshot?.method || "",
     log.requestSnapshot?.path || "",
+    JSON.stringify(log.metadata || {}),
   ]);
 
   const csv = [
@@ -511,6 +534,98 @@ function exportActivityLogsCsv(
     `solidsip-activity-log-${dateId}.csv`,
     csv
   );
+}
+
+async function copyText(
+  text: string
+) {
+  if (
+    navigator.clipboard &&
+    navigator.clipboard.writeText
+  ) {
+    await navigator.clipboard.writeText(
+      text
+    );
+    return;
+  }
+
+  const textarea =
+    document.createElement("textarea");
+
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function buildCopySummary(
+  log: AdminActivityLog
+) {
+  return [
+    `Action: ${log.actionLabel}`,
+    `Type: ${log.actionType}`,
+    `Severity: ${log.severity}`,
+    `Message: ${log.message}`,
+    `Admin: ${
+      log.actorSnapshot?.fullName || "System/Admin"
+    }`,
+    `Entity: ${
+      log.entityLabel || log.entityType || "—"
+    }`,
+    `Target: ${
+      log.targetUserSnapshot?.fullName || "—"
+    }`,
+    `Date: ${formatDate(log.createdAt)}`,
+  ].join("\n");
+}
+
+function buildActionOptions(
+  actionTypes: AdminActivityActionType[]
+) {
+  const options =
+    new Map<
+      string,
+      {
+        value: string;
+        label: string;
+      }
+    >();
+
+  for (const option of DEFAULT_ACTION_TYPES) {
+    options.set(
+      option.value,
+      option
+    );
+  }
+
+  for (const item of actionTypes) {
+    if (!item.actionType) {
+      continue;
+    }
+
+    if (
+      !options.has(item.actionType)
+    ) {
+      options.set(
+        item.actionType,
+        {
+          value:
+            item.actionType,
+          label:
+            `${formatLabel(item.actionType)} (${item.count})`,
+        }
+      );
+    }
+  }
+
+  return [
+    ...options.values(),
+  ];
 }
 
 export default function ActivityLogPage() {
@@ -539,6 +654,22 @@ export default function ActivityLogPage() {
   ] =
     useState<AdminActivityAdmin[]>(
       []
+    );
+
+  const [
+    actionTypes,
+    setActionTypes,
+  ] =
+    useState<AdminActivityActionType[]>(
+      []
+    );
+
+  const [
+    pagination,
+    setPagination,
+  ] =
+    useState<AdminActivityPagination>(
+      EMPTY_PAGINATION
     );
 
   const [
@@ -582,6 +713,32 @@ export default function ActivityLogPage() {
   ] = useState("");
 
   const [
+    page,
+    setPage,
+  ] = useState(1);
+
+  const [
+    limit,
+    setLimit,
+  ] = useState(50);
+
+  const [
+    expandedLogId,
+    setExpandedLogId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    copiedLogId,
+    setCopiedLogId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -592,6 +749,15 @@ export default function ActivityLogPage() {
   ] =
     useState<string | null>(
       null
+    );
+
+  const actionOptions =
+    useMemo(
+      () =>
+        buildActionOptions(
+          actionTypes
+        ),
+      [actionTypes]
     );
 
   const loadLogs =
@@ -616,13 +782,21 @@ export default function ActivityLogPage() {
                 submittedSearch,
               dateFrom,
               dateTo,
-              limit: 300,
+              page,
+              limit,
             }
           );
 
         setLogs(result.logs);
         setSummary(result.summary);
         setAdmins(result.admins);
+        setActionTypes(
+          result.actionTypes || []
+        );
+        setPagination(
+          result.pagination ||
+            EMPTY_PAGINATION
+        );
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -641,21 +815,95 @@ export default function ActivityLogPage() {
       submittedSearch,
       dateFrom,
       dateTo,
+      page,
+      limit,
     ]);
 
   useEffect(() => {
     void loadLogs();
   }, [loadLogs]);
 
+  function resetToFirstPage() {
+    setPage(1);
+    setExpandedLogId(null);
+  }
+
   const handleSearch = (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
+    resetToFirstPage();
+
     setSubmittedSearch(
       search.trim()
     );
   };
+
+  function applyDatePreset(
+    preset:
+      | "today"
+      | "7"
+      | "30"
+      | "clear"
+  ) {
+    resetToFirstPage();
+
+    if (preset === "clear") {
+      setDateFrom("");
+      setDateTo("");
+      return;
+    }
+
+    const today =
+      new Date();
+
+    const start =
+      new Date();
+
+    if (preset === "7") {
+      start.setDate(
+        today.getDate() - 6
+      );
+    }
+
+    if (preset === "30") {
+      start.setDate(
+        today.getDate() - 29
+      );
+    }
+
+    setDateFrom(
+      getDateInputValue(start)
+    );
+    setDateTo(
+      getDateInputValue(today)
+    );
+  }
+
+  async function handleCopyLog(
+    log: AdminActivityLog
+  ) {
+    try {
+      await copyText(
+        buildCopySummary(log)
+      );
+
+      setCopiedLogId(log._id);
+
+      window.setTimeout(() => {
+        setCopiedLogId((current) =>
+          current === log._id
+            ? null
+            : current
+        );
+      }, 1600);
+    } catch {
+      setError(
+        "Unable to copy activity log."
+      );
+    }
+  }
 
   return (
     <div className="activity-log-page">
@@ -711,7 +959,7 @@ export default function ActivityLogPage() {
 
       <div className="activity-summary-grid">
         <ActivitySummaryCard
-          label="Total logs"
+          label="Total filtered"
           value={summary.total}
         />
 
@@ -751,13 +999,14 @@ export default function ActivityLogPage() {
 
             <select
               value={actionType}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setActionType(
                   event.target.value
-                )
-              }
+                );
+              }}
             >
-              {ACTION_TYPES.map(
+              {actionOptions.map(
                 (option) => (
                   <option
                     key={option.value}
@@ -775,11 +1024,12 @@ export default function ActivityLogPage() {
 
             <select
               value={entityType}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setEntityType(
                   event.target.value
-                )
-              }
+                );
+              }}
             >
               {ENTITY_TYPES.map(
                 (option) => (
@@ -799,11 +1049,12 @@ export default function ActivityLogPage() {
 
             <select
               value={severity}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setSeverity(
                   event.target.value
-                )
-              }
+                );
+              }}
             >
               {SEVERITY_OPTIONS.map(
                 (option) => (
@@ -823,11 +1074,12 @@ export default function ActivityLogPage() {
 
             <select
               value={adminId}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setAdminId(
                   event.target.value
-                )
-              }
+                );
+              }}
             >
               <option value="">
                 All admins
@@ -850,11 +1102,12 @@ export default function ActivityLogPage() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setDateFrom(
                   event.target.value
-                )
-              }
+                );
+              }}
             />
           </label>
 
@@ -864,13 +1117,52 @@ export default function ActivityLogPage() {
             <input
               type="date"
               value={dateTo}
-              onChange={(event) =>
+              onChange={(event) => {
+                resetToFirstPage();
                 setDateTo(
                   event.target.value
-                )
-              }
+                );
+              }}
             />
           </label>
+        </div>
+
+        <div className="activity-preset-row">
+          <button
+            type="button"
+            onClick={() =>
+              applyDatePreset("today")
+            }
+          >
+            Today
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              applyDatePreset("7")
+            }
+          >
+            Last 7 days
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              applyDatePreset("30")
+            }
+          >
+            Last 30 days
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              applyDatePreset("clear")
+            }
+          >
+            Clear dates
+          </button>
         </div>
 
         <form
@@ -899,6 +1191,7 @@ export default function ActivityLogPage() {
               type="button"
               className="secondary-button"
               onClick={() => {
+                resetToFirstPage();
                 setSearch("");
                 setSubmittedSearch("");
               }}
@@ -907,6 +1200,88 @@ export default function ActivityLogPage() {
             </button>
           ) : null}
         </form>
+
+        <div className="activity-pagination-bar">
+          <div>
+            Showing page{" "}
+            <strong>
+              {pagination.page}
+            </strong>{" "}
+            of{" "}
+            <strong>
+              {pagination.totalPages}
+            </strong>{" "}
+            ·{" "}
+            <strong>
+              {pagination.total}
+            </strong>{" "}
+            filtered logs
+          </div>
+
+          <div className="activity-pagination-actions">
+            <label>
+              Rows
+
+              <select
+                value={limit}
+                onChange={(event) => {
+                  resetToFirstPage();
+                  setLimit(
+                    Number(
+                      event.target.value
+                    )
+                  );
+                }}
+              >
+                <option value={25}>
+                  25
+                </option>
+                <option value={50}>
+                  50
+                </option>
+                <option value={100}>
+                  100
+                </option>
+                <option value={250}>
+                  250
+                </option>
+              </select>
+            </label>
+
+            <button
+              type="button"
+              disabled={
+                !pagination.hasPreviousPage ||
+                loading
+              }
+              onClick={() =>
+                setPage((current) =>
+                  Math.max(
+                    current - 1,
+                    1
+                  )
+                )
+              }
+            >
+              Previous
+            </button>
+
+            <button
+              type="button"
+              disabled={
+                !pagination.hasNextPage ||
+                loading
+              }
+              onClick={() =>
+                setPage((current) =>
+                  current + 1
+                )
+              }
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="panel activity-list-panel">
@@ -939,6 +1314,24 @@ export default function ActivityLogPage() {
               <ActivityLogCard
                 key={log._id}
                 log={log}
+                expanded={
+                  expandedLogId ===
+                  log._id
+                }
+                copied={
+                  copiedLogId === log._id
+                }
+                onToggleDetails={() =>
+                  setExpandedLogId(
+                    expandedLogId ===
+                      log._id
+                      ? null
+                      : log._id
+                  )
+                }
+                onCopy={() => {
+                  void handleCopyLog(log);
+                }}
               />
             ))}
           </div>
@@ -971,8 +1364,16 @@ function ActivitySummaryCard({
 
 function ActivityLogCard({
   log,
+  expanded,
+  copied,
+  onToggleDetails,
+  onCopy,
 }: {
   log: AdminActivityLog;
+  expanded: boolean;
+  copied: boolean;
+  onToggleDetails: () => void;
+  onCopy: () => void;
 }) {
   const actions =
     getActivityActions(log);
@@ -1077,22 +1478,86 @@ function ActivityLogCard({
         </div>
       </div>
 
-      {actions.length > 0 ? (
-        <div className="activity-action-row">
-          {actions.map((action) => (
-            <button
-              key={`${action.label}-${action.url}`}
-              type="button"
-              className="activity-open-button"
-              onClick={() =>
-                openInternalPage(
-                  action.url
-                )
-              }
-            >
-              {action.label}
-            </button>
-          ))}
+      <div className="activity-action-row">
+        {actions.map((action) => (
+          <button
+            key={`${action.label}-${action.url}`}
+            type="button"
+            className="activity-open-button"
+            onClick={() =>
+              openInternalPage(
+                action.url
+              )
+            }
+          >
+            {action.label}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          className="activity-open-button"
+          onClick={onToggleDetails}
+        >
+          {expanded
+            ? "Hide details"
+            : "View details"}
+        </button>
+
+        <button
+          type="button"
+          className="activity-open-button"
+          onClick={onCopy}
+        >
+          {copied
+            ? "Copied"
+            : "Copy summary"}
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="activity-expanded-panel">
+          <div>
+            <h4>
+              Metadata
+            </h4>
+
+            <pre>
+              {JSON.stringify(
+                log.metadata || {},
+                null,
+                2
+              )}
+            </pre>
+          </div>
+
+          <div>
+            <h4>
+              Request snapshot
+            </h4>
+
+            <pre>
+              {JSON.stringify(
+                log.requestSnapshot || {},
+                null,
+                2
+              )}
+            </pre>
+          </div>
+
+          <div>
+            <h4>
+              Target user snapshot
+            </h4>
+
+            <pre>
+              {JSON.stringify(
+                log.targetUserSnapshot || {},
+                null,
+                2
+              )}
+            </pre>
+          </div>
         </div>
       ) : null}
     </article>
