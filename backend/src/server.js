@@ -33,6 +33,9 @@ const adminOrderRoutes = require(
 const adminOperationsRoutes = require(
   "./routes/adminOperations"
 );
+const adminProductionControlRoutes = require(
+  "./routes/adminProductionControl"
+);
 const adminSalesReportRoutes = require(
   "./routes/adminSalesReports"
 );
@@ -500,6 +503,11 @@ app.use(
 app.use(
   "/api/admin/operations",
   adminOperationsRoutes
+);
+
+app.use(
+  "/api/admin/production-control",
+  adminProductionControlRoutes
 );
 
 app.use(

@@ -10,7 +10,14 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
-import { useAdminAuth } from "../context/AuthContext";
+import {
+  useAdminAuth,
+} from "../context/AuthContext";
+
+import {
+  fetchAdminActivityLogs,
+  type AdminActivityLog,
+} from "../services/adminActivityLogsApi";
 
 import {
   fetchAdminOrders,
@@ -110,6 +117,16 @@ function formatOptionalDate(value?: string | null) {
   return value ? formatDate(value) : "Not available";
 }
 
+function formatLabel(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(
+      /\b\w/g,
+      (letter) =>
+        letter.toUpperCase()
+    );
+}
+
 function getCustomer(order: AdminOrder): AdminOrderUser | null {
   return order.user && typeof order.user === "object"
     ? order.user
@@ -156,6 +173,101 @@ function getRefundSuccessMessage(order: AdminOrder) {
   return `${order.orderNumber} was cancelled.`;
 }
 
+function getCustomerPhone(order: AdminOrder) {
+  const customer = getCustomer(order);
+
+  return (
+    customer?.phone ||
+    order.deliveryAddress.phone ||
+    ""
+  );
+}
+
+function cleanIndianPhone(value: string) {
+  const digits =
+    String(value || "").replace(
+      /\D/g,
+      ""
+    );
+
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+
+  return digits;
+}
+
+function buildOrderSummary(order: AdminOrder) {
+  const customer = getCustomer(order);
+
+  return [
+    `Order: ${order.orderNumber}`,
+    `Customer: ${customer?.fullName ?? order.deliveryAddress.fullName}`,
+    `Phone: +91 ${getCustomerPhone(order)}`,
+    `Status: ${STATUS_LABELS[order.orderStatus]}`,
+    `Payment: ${order.paymentMethod.toUpperCase()} · ${order.paymentStatus}`,
+    `Total: ${formatCurrency(order.total)}`,
+    `Delivery: ${order.deliverySchedule.deliveryDateLabel} · ${order.deliverySchedule.deliverySlot}`,
+    `Address: ${order.deliveryAddress.houseDetails}, ${order.deliveryAddress.areaDetails}, ${order.deliveryAddress.area}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode}`,
+    `Items: ${order.items
+      .map((item) => `${item.quantity} x ${item.name}`)
+      .join(", ")}`,
+  ].join("\n");
+}
+
+function openCall(phone: string) {
+  const cleanPhone =
+    cleanIndianPhone(phone);
+
+  if (!cleanPhone) {
+    return;
+  }
+
+  window.location.href =
+    `tel:+91${cleanPhone}`;
+}
+
+function openWhatsApp(
+  phone: string,
+  message: string
+) {
+  const cleanPhone =
+    cleanIndianPhone(phone);
+
+  if (!cleanPhone) {
+    return;
+  }
+
+  window.open(
+    `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+async function copyText(text: string) {
+  if (
+    navigator.clipboard &&
+    navigator.clipboard.writeText
+  ) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea =
+    document.createElement("textarea");
+
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 export default function OrdersPage() {
   const { token } = useAdminAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -172,8 +284,24 @@ export default function OrdersPage() {
   const [selectedPartnerByOrder, setSelectedPartnerByOrder] =
     useState<Record<string, string>>({});
 
+  const [selectedOrders, setSelectedOrders] =
+    useState<Record<string, boolean>>({});
+
+  const [timelineByOrder, setTimelineByOrder] =
+    useState<Record<string, AdminActivityLog[]>>({});
+
+  const [openTimelineOrderId, setOpenTimelineOrderId] =
+    useState<string | null>(null);
+
+  const [timelineLoadingOrderId, setTimelineLoadingOrderId] =
+    useState<string | null>(null);
+
+  const [copiedOrderId, setCopiedOrderId] =
+    useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -248,6 +376,25 @@ export default function OrdersPage() {
 
         return next;
       });
+
+      setSelectedOrders((current) => {
+        const visibleIds =
+          new Set(
+            orderResult.orders.map(
+              (order) => order._id
+            )
+          );
+
+        const next: Record<string, boolean> = {};
+
+        for (const [orderId, selected] of Object.entries(current)) {
+          if (visibleIds.has(orderId) && selected) {
+            next[orderId] = true;
+          }
+        }
+
+        return next;
+      });
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -271,6 +418,50 @@ export default function OrdersPage() {
       ),
     [statusCounts]
   );
+
+  const selectedVisibleOrders =
+    useMemo(
+      () =>
+        orders.filter(
+          (order) =>
+            selectedOrders[order._id]
+        ),
+      [
+        orders,
+        selectedOrders,
+      ]
+    );
+
+  const selectedPlacedOrders =
+    useMemo(
+      () =>
+        selectedVisibleOrders.filter(
+          (order) =>
+            order.orderStatus === "placed"
+        ),
+      [
+        selectedVisibleOrders,
+      ]
+    );
+
+  const selectedConfirmedOrders =
+    useMemo(
+      () =>
+        selectedVisibleOrders.filter(
+          (order) =>
+            order.orderStatus === "confirmed"
+        ),
+      [
+        selectedVisibleOrders,
+      ]
+    );
+
+  const allVisibleSelected =
+    orders.length > 0 &&
+    orders.every(
+      (order) =>
+        selectedOrders[order._id]
+    );
 
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -297,6 +488,7 @@ export default function OrdersPage() {
     const cleanStatus = normalizeStatusFilter(nextStatus);
 
     setStatusFilter(cleanStatus);
+    setSelectedOrders({});
 
     updateUrlFilters({
       nextStatus: cleanStatus,
@@ -372,6 +564,56 @@ export default function OrdersPage() {
       );
     } finally {
       setUpdatingOrderId(null);
+    }
+  };
+
+  const handleBulkStatusChange = async (
+    ordersToUpdate: AdminOrder[],
+    nextStatus: AdminOrderStatus
+  ) => {
+    if (!token || ordersToUpdate.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Update ${ordersToUpdate.length} selected order${
+        ordersToUpdate.length === 1 ? "" : "s"
+      } to ${STATUS_LABELS[nextStatus]}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBulkUpdating(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      for (const order of ordersToUpdate) {
+        await updateAdminOrderStatus(
+          token,
+          order._id,
+          nextStatus
+        );
+      }
+
+      setSelectedOrders({});
+      setSuccess(
+        `${ordersToUpdate.length} order${
+          ordersToUpdate.length === 1 ? "" : "s"
+        } updated to ${STATUS_LABELS[nextStatus]}.`
+      );
+
+      await loadOrders();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to bulk update orders."
+      );
+    } finally {
+      setBulkUpdating(false);
     }
   };
 
@@ -476,6 +718,79 @@ export default function OrdersPage() {
     }
   };
 
+  const handleToggleTimeline = async (order: AdminOrder) => {
+    if (!token) {
+      return;
+    }
+
+    if (openTimelineOrderId === order._id) {
+      setOpenTimelineOrderId(null);
+      return;
+    }
+
+    setOpenTimelineOrderId(order._id);
+
+    if (timelineByOrder[order._id]) {
+      return;
+    }
+
+    setTimelineLoadingOrderId(order._id);
+    setError(null);
+
+    try {
+      const result = await fetchAdminActivityLogs(token, {
+        search: order.orderNumber,
+        limit: 50,
+      });
+
+      setTimelineByOrder((current) => ({
+        ...current,
+        [order._id]: result.logs,
+      }));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load order timeline."
+      );
+    } finally {
+      setTimelineLoadingOrderId(null);
+    }
+  };
+
+  const handleCopyOrder = async (order: AdminOrder) => {
+    try {
+      await copyText(buildOrderSummary(order));
+
+      setCopiedOrderId(order._id);
+
+      window.setTimeout(() => {
+        setCopiedOrderId((current) =>
+          current === order._id
+            ? null
+            : current
+        );
+      }, 1600);
+    } catch {
+      setError("Unable to copy order summary.");
+    }
+  };
+
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedOrders({});
+      return;
+    }
+
+    const next: Record<string, boolean> = {};
+
+    for (const order of orders) {
+      next[order._id] = true;
+    }
+
+    setSelectedOrders(next);
+  };
+
   return (
     <div className="orders-page">
       <div className="page-heading-row">
@@ -547,6 +862,64 @@ export default function OrdersPage() {
             </button>
           ) : null}
         </form>
+
+        {orders.length > 0 ? (
+          <div className="bulk-order-toolbar">
+            <div>
+              <strong>
+                {selectedVisibleOrders.length} selected
+              </strong>
+
+              <span>
+                {selectedPlacedOrders.length} placed ·{" "}
+                {selectedConfirmedOrders.length} confirmed
+              </span>
+            </div>
+
+            <div className="bulk-order-actions">
+              <button
+                type="button"
+                onClick={toggleAllVisible}
+              >
+                {allVisibleSelected
+                  ? "Clear selection"
+                  : "Select visible"}
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  bulkUpdating ||
+                  selectedPlacedOrders.length === 0
+                }
+                onClick={() =>
+                  void handleBulkStatusChange(
+                    selectedPlacedOrders,
+                    "confirmed"
+                  )
+                }
+              >
+                Confirm selected
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  bulkUpdating ||
+                  selectedConfirmedOrders.length === 0
+                }
+                onClick={() =>
+                  void handleBulkStatusChange(
+                    selectedConfirmedOrders,
+                    "preparing"
+                  )
+                }
+              >
+                Mark preparing
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="panel orders-panel">
@@ -585,27 +958,98 @@ export default function OrdersPage() {
                 !assignedPartner ||
                 assignedPartner._id !== selectedPartnerId;
 
+              const customerPhone =
+                getCustomerPhone(order);
+
+              const orderTimeline =
+                timelineByOrder[order._id] || [];
+
+              const timelineOpen =
+                openTimelineOrderId === order._id;
+
               return (
                 <article key={order._id} className="admin-order-card">
                   <div className="admin-order-header">
-                    <div>
-                      <div className="order-number-row">
-                        <strong>{order.orderNumber}</strong>
-                        <span
-                          className={`admin-order-status status-${order.orderStatus}`}
-                        >
-                          {STATUS_LABELS[order.orderStatus]}
+                    <div className="order-header-left">
+                      <label className="order-select-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedOrders[order._id])}
+                          onChange={(event) =>
+                            setSelectedOrders((current) => ({
+                              ...current,
+                              [order._id]: event.target.checked,
+                            }))
+                          }
+                        />
+
+                        <span>Select</span>
+                      </label>
+
+                      <div>
+                        <div className="order-number-row">
+                          <strong>{order.orderNumber}</strong>
+                          <span
+                            className={`admin-order-status status-${order.orderStatus}`}
+                          >
+                            {STATUS_LABELS[order.orderStatus]}
+                          </span>
+                        </div>
+                        <span className="order-created-at">
+                          {formatDate(order.createdAt)}
                         </span>
                       </div>
-                      <span className="order-created-at">
-                        {formatDate(order.createdAt)}
-                      </span>
                     </div>
 
                     <div className="order-total-block">
                       <span>Order total</span>
                       <strong>{formatCurrency(order.total)}</strong>
                     </div>
+                  </div>
+
+                  <div className="order-quick-action-row">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openCall(customerPhone)
+                      }
+                    >
+                      Call customer
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openWhatsApp(
+                          customerPhone,
+                          buildOrderSummary(order)
+                        )
+                      }
+                    >
+                      WhatsApp
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleCopyOrder(order);
+                      }}
+                    >
+                      {copiedOrderId === order._id
+                        ? "Copied"
+                        : "Copy summary"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleToggleTimeline(order);
+                      }}
+                    >
+                      {timelineOpen
+                        ? "Hide timeline"
+                        : "Timeline"}
+                    </button>
                   </div>
 
                   <div className="admin-order-grid">
@@ -616,7 +1060,7 @@ export default function OrdersPage() {
                       </strong>
                       <span>{customer?.email ?? "Email unavailable"}</span>
                       <span>
-                        +91 {customer?.phone ?? order.deliveryAddress.phone}
+                        +91 {customerPhone}
                       </span>
                     </div>
 
@@ -654,6 +1098,44 @@ export default function OrdersPage() {
                       ) : null}
                     </div>
                   </div>
+
+                  {timelineOpen ? (
+                    <div className="order-timeline-panel">
+                      <div className="order-timeline-heading">
+                        <h4>Order timeline</h4>
+                        <span>
+                          From Activity Log
+                        </span>
+                      </div>
+
+                      {timelineLoadingOrderId === order._id ? (
+                        <p className="timeline-empty">
+                          Loading timeline...
+                        </p>
+                      ) : orderTimeline.length === 0 ? (
+                        <p className="timeline-empty">
+                          No activity log entries found for this order yet.
+                        </p>
+                      ) : (
+                        <div className="timeline-list">
+                          {orderTimeline.map((log) => (
+                            <div key={log._id} className="timeline-item">
+                              <span className={`timeline-dot timeline-${log.severity}`} />
+
+                              <div>
+                                <strong>{log.actionLabel}</strong>
+                                <p>{log.message || formatLabel(log.actionType)}</p>
+                                <small>
+                                  {formatDate(log.createdAt)} ·{" "}
+                                  {log.actorSnapshot?.fullName || "Admin/System"}
+                                </small>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
 
                   <div className="delivery-assignment-panel">
                     <div className="delivery-assignment-heading">

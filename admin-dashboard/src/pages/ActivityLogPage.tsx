@@ -13,10 +13,13 @@ import {
 } from "../context/AuthContext";
 
 import {
+  downloadAdminActivityLogsCsv,
   fetchAdminActivityLogs,
   type AdminActivityActionType,
   type AdminActivityAdmin,
+  type AdminActivityInsights,
   type AdminActivityLog,
+  type AdminActivityLogFilters,
   type AdminActivityPagination,
   type AdminActivitySummary,
 } from "../services/adminActivityLogsApi";
@@ -41,6 +44,13 @@ const EMPTY_PAGINATION: AdminActivityPagination =
     totalPages: 1,
     hasPreviousPage: false,
     hasNextPage: false,
+  };
+
+const EMPTY_INSIGHTS: AdminActivityInsights =
+  {
+    topActions: [],
+    topAdmins: [],
+    topEntities: [],
   };
 
 const DEFAULT_ACTION_TYPES = [
@@ -222,9 +232,7 @@ function formatLabel(value: string) {
     );
 }
 
-function getDateInputValue(
-  date: Date
-) {
+function getDateInputValue(date: Date) {
   return date
     .toISOString()
     .slice(0, 10);
@@ -297,9 +305,7 @@ function buildInternalUrl(
   )}`;
 }
 
-function openInternalPage(
-  url: string
-) {
+function openInternalPage(url: string) {
   window.open(
     `${window.location.origin}${url}`,
     "_blank",
@@ -531,14 +537,12 @@ function exportActivityLogsCsv(
       .slice(0, 10);
 
   downloadTextFile(
-    `solidsip-activity-log-${dateId}.csv`,
+    `solidsip-activity-log-page-${dateId}.csv`,
     csv
   );
 }
 
-async function copyText(
-  text: string
-) {
+async function copyText(text: string) {
   if (
     navigator.clipboard &&
     navigator.clipboard.writeText
@@ -665,6 +669,14 @@ export default function ActivityLogPage() {
     );
 
   const [
+    insights,
+    setInsights,
+  ] =
+    useState<AdminActivityInsights>(
+      EMPTY_INSIGHTS
+    );
+
+  const [
     pagination,
     setPagination,
   ] =
@@ -739,6 +751,11 @@ export default function ActivityLogPage() {
     );
 
   const [
+    exportingAll,
+    setExportingAll,
+  ] = useState(false);
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -760,6 +777,36 @@ export default function ActivityLogPage() {
       [actionTypes]
     );
 
+  const currentFilters =
+    useCallback(
+      (
+        overrides: Partial<AdminActivityLogFilters> = {}
+      ): AdminActivityLogFilters => ({
+        actionType,
+        entityType,
+        severity,
+        adminId,
+        search:
+          submittedSearch,
+        dateFrom,
+        dateTo,
+        page,
+        limit,
+        ...overrides,
+      }),
+      [
+        actionType,
+        entityType,
+        severity,
+        adminId,
+        submittedSearch,
+        dateFrom,
+        dateTo,
+        page,
+        limit,
+      ]
+    );
+
   const loadLogs =
     useCallback(async () => {
       if (!token) {
@@ -773,18 +820,7 @@ export default function ActivityLogPage() {
         const result =
           await fetchAdminActivityLogs(
             token,
-            {
-              actionType,
-              entityType,
-              severity,
-              adminId,
-              search:
-                submittedSearch,
-              dateFrom,
-              dateTo,
-              page,
-              limit,
-            }
+            currentFilters()
           );
 
         setLogs(result.logs);
@@ -792,6 +828,10 @@ export default function ActivityLogPage() {
         setAdmins(result.admins);
         setActionTypes(
           result.actionTypes || []
+        );
+        setInsights(
+          result.insights ||
+            EMPTY_INSIGHTS
         );
         setPagination(
           result.pagination ||
@@ -808,15 +848,7 @@ export default function ActivityLogPage() {
       }
     }, [
       token,
-      actionType,
-      entityType,
-      severity,
-      adminId,
-      submittedSearch,
-      dateFrom,
-      dateTo,
-      page,
-      limit,
+      currentFilters,
     ]);
 
   useEffect(() => {
@@ -824,6 +856,19 @@ export default function ActivityLogPage() {
   }, [loadLogs]);
 
   function resetToFirstPage() {
+    setPage(1);
+    setExpandedLogId(null);
+  }
+
+  function resetFilters() {
+    setActionType("all");
+    setEntityType("all");
+    setSeverity("all");
+    setAdminId("");
+    setDateFrom("");
+    setDateTo("");
+    setSearch("");
+    setSubmittedSearch("");
     setPage(1);
     setExpandedLogId(null);
   }
@@ -905,6 +950,33 @@ export default function ActivityLogPage() {
     }
   }
 
+  async function handleExportAllFiltered() {
+    if (!token) {
+      return;
+    }
+
+    setExportingAll(true);
+    setError(null);
+
+    try {
+      await downloadAdminActivityLogsCsv(
+        token,
+        currentFilters({
+          page: undefined,
+          limit: 10000,
+        })
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to export all filtered logs."
+      );
+    } finally {
+      setExportingAll(false);
+    }
+  }
+
   return (
     <div className="activity-log-page">
       <div className="page-heading-row">
@@ -933,7 +1005,23 @@ export default function ActivityLogPage() {
               )
             }
           >
-            Export CSV
+            Export page CSV
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={
+              exportingAll ||
+              pagination.total === 0
+            }
+            onClick={() => {
+              void handleExportAllFiltered();
+            }}
+          >
+            {exportingAll
+              ? "Exporting..."
+              : "Export all filtered"}
           </button>
 
           <button
@@ -991,6 +1079,10 @@ export default function ActivityLogPage() {
           value={summary.info}
         />
       </div>
+
+      <ActivityInsightsPanel
+        insights={insights}
+      />
 
       <section className="panel activity-toolbar">
         <div className="activity-filter-grid">
@@ -1199,6 +1291,14 @@ export default function ActivityLogPage() {
               Clear
             </button>
           ) : null}
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={resetFilters}
+          >
+            Reset filters
+          </button>
         </form>
 
         <div className="activity-pagination-bar">
@@ -1236,12 +1336,15 @@ export default function ActivityLogPage() {
                 <option value={25}>
                   25
                 </option>
+
                 <option value={50}>
                   50
                 </option>
+
                 <option value={100}>
                   100
                 </option>
+
                 <option value={250}>
                   250
                 </option>
@@ -1319,7 +1422,8 @@ export default function ActivityLogPage() {
                   log._id
                 }
                 copied={
-                  copiedLogId === log._id
+                  copiedLogId ===
+                  log._id
                 }
                 onToggleDetails={() =>
                   setExpandedLogId(
@@ -1358,6 +1462,83 @@ function ActivitySummaryCard({
     >
       <span>{label}</span>
       <strong>{value}</strong>
+    </article>
+  );
+}
+
+function ActivityInsightsPanel({
+  insights,
+}: {
+  insights: AdminActivityInsights;
+}) {
+  return (
+    <section className="activity-insights-grid">
+      <ActivityInsightCard
+        title="Top actions"
+        items={insights.topActions}
+      />
+
+      <ActivityInsightCard
+        title="Most active admins"
+        items={insights.topAdmins}
+      />
+
+      <ActivityInsightCard
+        title="Top entities"
+        items={insights.topEntities}
+      />
+    </section>
+  );
+}
+
+function ActivityInsightCard({
+  title,
+  items,
+}: {
+  title: string;
+  items: {
+    label: string;
+    email?: string;
+    entityType?: string;
+    count: number;
+  }[];
+}) {
+  return (
+    <article className="activity-insight-card">
+      <h3>{title}</h3>
+
+      {items.length === 0 ? (
+        <p>No data yet.</p>
+      ) : (
+        <div className="activity-insight-list">
+          {items.map((item) => (
+            <div
+              key={`${title}-${item.label}-${item.count}`}
+              className="activity-insight-row"
+            >
+              <div>
+                <strong>
+                  {formatLabel(
+                    item.label
+                  )}
+                </strong>
+
+                {item.email ? (
+                  <span>{item.email}</span>
+                ) : item.entityType ? (
+                  <span>
+                    {formatLabel(
+                      item.entityType
+                    )}
+                  </span>
+                ) : null}
+              </div>
+
+              <b>{item.count}</b>
+            </div>
+          ))}
+        </div>
+      )}
     </article>
   );
 }
@@ -1425,10 +1606,12 @@ function ActivityLogCard({
       <div className="activity-detail-grid">
         <div>
           <span>Admin</span>
+
           <strong>
             {log.actorSnapshot?.fullName ||
               "System/Admin"}
           </strong>
+
           <small>
             {log.actorSnapshot?.email ||
               "No email"}
@@ -1437,11 +1620,13 @@ function ActivityLogCard({
 
         <div>
           <span>Entity</span>
+
           <strong>
             {log.entityLabel ||
               log.entityType ||
               "—"}
           </strong>
+
           <small>
             {log.entityType
               ? formatLabel(
@@ -1453,10 +1638,12 @@ function ActivityLogCard({
 
         <div>
           <span>Target user</span>
+
           <strong>
             {log.targetUserSnapshot?.fullName ||
               "—"}
           </strong>
+
           <small>
             {log.targetUserSnapshot?.phone
               ? `+91 ${log.targetUserSnapshot.phone}`
@@ -1467,10 +1654,12 @@ function ActivityLogCard({
 
         <div>
           <span>Request</span>
+
           <strong>
             {log.requestSnapshot?.method ||
               "—"}
           </strong>
+
           <small>
             {log.requestSnapshot?.path ||
               ""}

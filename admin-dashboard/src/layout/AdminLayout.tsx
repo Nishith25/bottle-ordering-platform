@@ -24,12 +24,12 @@ import {
 } from "../services/adminNotificationsApi";
 
 const PAGE_TITLES:
-  Record<
-    string,
-    string
-  > = {
+  Record<string, string> = {
     "/dashboard":
       "Dashboard",
+
+    "/production-control":
+      "Production Control",
 
     "/products":
       "Bottle management",
@@ -48,6 +48,9 @@ const PAGE_TITLES:
 
     "/notifications":
       "Notification Center",
+
+    "/activity-log":
+      "Activity Log",
 
     "/sales-report":
       "Sales & profit report",
@@ -90,14 +93,9 @@ const PAGE_TITLES:
 
     "/users":
       "Customer account management",
-
-      "/activity-log":
-  "Activity Log",
   };
 
-function getPageTitle(
-  pathname: string
-) {
+function getPageTitle(pathname: string) {
   if (
     pathname.startsWith(
       "/subscriptions/"
@@ -109,9 +107,7 @@ function getPageTitle(
   }
 
   return (
-    PAGE_TITLES[
-      pathname
-    ] ??
+    PAGE_TITLES[pathname] ??
     "Administration"
   );
 }
@@ -230,7 +226,7 @@ export default function AdminLayout() {
       () => {
         if (
           document.visibilityState ===
-            "visible"
+          "visible"
         ) {
           void loadBadges();
         }
@@ -257,9 +253,7 @@ export default function AdminLayout() {
 
   const closeMobileMenu =
     () => {
-      setMobileMenuOpen(
-        false
-      );
+      setMobileMenuOpen(false);
     };
 
   const handleLogout =
@@ -304,6 +298,15 @@ export default function AdminLayout() {
             to="/dashboard"
             icon="▦"
             label="Dashboard"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
+            to="/production-control"
+            icon="◎"
+            label="Control Center"
             onClick={
               closeMobileMenu
             }
@@ -370,13 +373,13 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
-  to="/activity-log"
-  icon="☷"
-  label="Activity Log"
-  onClick={
-    closeMobileMenu
-  }
-/>
+            to="/activity-log"
+            icon="☷"
+            label="Activity Log"
+            onClick={
+              closeMobileMenu
+            }
+          />
 
           <NavigationLink
             to="/sales-report"
@@ -559,9 +562,7 @@ export default function AdminLayout() {
             className="mobile-menu-button"
             onClick={() =>
               setMobileMenuOpen(
-                (
-                  currentValue
-                ) =>
+                (currentValue) =>
                   !currentValue
               )
             }
@@ -698,9 +699,7 @@ function NavigationLink({
   return (
     <NavLink
       to={to}
-      onClick={
-        onClick
-      }
+      onClick={onClick}
       className={({
         isActive,
       }) =>

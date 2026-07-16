@@ -10,6 +10,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
 import DeliveryLayout from "./layout/DeliveryLayout";
 
+import ActivityLogPage from "./pages/ActivityLogPage";
 import BatchLabelsPage from "./pages/BatchLabelsPage";
 import BatchRegisterPage from "./pages/BatchRegisterPage";
 import CostingPage from "./pages/CostingPage";
@@ -28,13 +29,13 @@ import OperationsPage from "./pages/OperationsPage";
 import OrdersPage from "./pages/OrdersPage";
 import PlansPage from "./pages/PlansPage";
 import ProductsPage from "./pages/ProductsPage";
+import ProductionControlPage from "./pages/ProductionControlPage";
 import ProductionPlanPage from "./pages/ProductionPlanPage";
 import SalesReportPage from "./pages/SalesReportPage";
 import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
-import ActivityLogPage from "./pages/ActivityLogPage";
 
 export default function App() {
   return (
@@ -77,6 +78,13 @@ export default function App() {
             />
 
             <Route
+              path="/production-control"
+              element={
+                <ProductionControlPage />
+              }
+            />
+
+            <Route
               path="/products"
               element={
                 <ProductsPage />
@@ -115,6 +123,13 @@ export default function App() {
               path="/notifications"
               element={
                 <NotificationsPage />
+              }
+            />
+
+            <Route
+              path="/activity-log"
+              element={
+                <ActivityLogPage />
               }
             />
 
@@ -222,13 +237,6 @@ export default function App() {
                 <UsersPage />
               }
             />
-
-            <Route
-  path="/activity-log"
-  element={
-    <ActivityLogPage />
-  }
-/>
           </Route>
         </Route>
 

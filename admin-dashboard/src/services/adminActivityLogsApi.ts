@@ -80,6 +80,19 @@ export type AdminActivityActionType = {
   count: number;
 };
 
+export type AdminActivityInsightItem = {
+  label: string;
+  email?: string;
+  entityType?: string;
+  count: number;
+};
+
+export type AdminActivityInsights = {
+  topActions: AdminActivityInsightItem[];
+  topAdmins: AdminActivityInsightItem[];
+  topEntities: AdminActivityInsightItem[];
+};
+
 export type AdminActivityPagination = {
   page: number;
   limit: number;
@@ -94,7 +107,20 @@ export type AdminActivityLogsResult = {
   summary: AdminActivitySummary;
   admins: AdminActivityAdmin[];
   actionTypes: AdminActivityActionType[];
+  insights: AdminActivityInsights;
   pagination: AdminActivityPagination;
+};
+
+export type AdminActivityLogFilters = {
+  actionType?: string;
+  entityType?: string;
+  severity?: string;
+  adminId?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
 };
 
 type ApiBaseResponse = {
@@ -116,73 +142,9 @@ function requireToken(token: string) {
   }
 }
 
-async function request<T>(
-  path: string,
-  token: string,
-  options: RequestInit = {}
-): Promise<T> {
-  requireToken(token);
-
-  const response = await fetch(
-    `${API_BASE_URL}${path}`,
-    {
-      ...options,
-
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...(options.headers ?? {}),
-      },
-    }
-  );
-
-  const responseText =
-    await response.text();
-
-  let payload:
-    T & {
-      success?: boolean;
-      message?: string;
-    };
-
-  try {
-    payload = responseText
-      ? JSON.parse(responseText)
-      : ({} as T);
-  } catch {
-    throw new Error(
-      "The server returned an invalid response."
-    );
-  }
-
-  if (
-    !response.ok ||
-    payload.success === false
-  ) {
-    throw new Error(
-      payload.message ??
-        "Unable to complete the request."
-    );
-  }
-
-  return payload;
-}
-
-export async function fetchAdminActivityLogs(
-  token: string,
-  options: {
-    actionType?: string;
-    entityType?: string;
-    severity?: string;
-    adminId?: string;
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    page?: number;
-    limit?: number;
-  } = {}
-): Promise<AdminActivityLogsResult> {
+function buildActivityLogQuery(
+  options: AdminActivityLogFilters
+) {
   const params =
     new URLSearchParams();
 
@@ -249,8 +211,68 @@ export async function fetchAdminActivityLogs(
     );
   }
 
+  return params.toString();
+}
+
+async function request<T>(
+  path: string,
+  token: string,
+  options: RequestInit = {}
+): Promise<T> {
+  requireToken(token);
+
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      ...options,
+
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options.headers ?? {}),
+      },
+    }
+  );
+
+  const responseText =
+    await response.text();
+
+  let payload:
+    T & {
+      success?: boolean;
+      message?: string;
+    };
+
+  try {
+    payload = responseText
+      ? JSON.parse(responseText)
+      : ({} as T);
+  } catch {
+    throw new Error(
+      "The server returned an invalid response."
+    );
+  }
+
+  if (
+    !response.ok ||
+    payload.success === false
+  ) {
+    throw new Error(
+      payload.message ??
+        "Unable to complete the request."
+    );
+  }
+
+  return payload;
+}
+
+export async function fetchAdminActivityLogs(
+  token: string,
+  options: AdminActivityLogFilters = {}
+): Promise<AdminActivityLogsResult> {
   const query =
-    params.toString();
+    buildActivityLogQuery(options);
 
   const response =
     await request<ActivityLogsResponse>(
@@ -261,4 +283,83 @@ export async function fetchAdminActivityLogs(
     );
 
   return response.data;
+}
+
+export async function downloadAdminActivityLogsCsv(
+  token: string,
+  options: AdminActivityLogFilters = {}
+): Promise<void> {
+  requireToken(token);
+
+  const query =
+    buildActivityLogQuery({
+      ...options,
+      page: undefined,
+      limit:
+        options.limit || 10000,
+    });
+
+  const response =
+    await fetch(
+      `${API_BASE_URL}/api/admin/activity-logs/export.csv${
+        query ? `?${query}` : ""
+      }`,
+      {
+        headers: {
+          Accept: "text/csv",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+  if (!response.ok) {
+    let message =
+      "Unable to export activity logs.";
+
+    try {
+      const payload =
+        await response.json();
+
+      message =
+        payload.message || message;
+    } catch {
+      // Keep fallback message.
+    }
+
+    throw new Error(message);
+  }
+
+  const blob =
+    await response.blob();
+
+  const disposition =
+    response.headers.get(
+      "content-disposition"
+    );
+
+  const fileNameMatch =
+    disposition?.match(
+      /filename="?([^"]+)"?/i
+    );
+
+  const fileName =
+    fileNameMatch?.[1] ||
+    `solidsip-activity-log-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
 }
