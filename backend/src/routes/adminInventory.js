@@ -1,5 +1,3 @@
-// backend/src/routes/adminInventory.js
-
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -10,6 +8,10 @@ const {
 
 const Product = require("../models/Product");
 const InventoryMovement = require("../models/InventoryMovement");
+
+const {
+  logAdminActivity,
+} = require("../services/adminActivityLogger");
 
 const router = express.Router();
 
@@ -304,6 +306,20 @@ router.patch(
 
       let updatedProduct = null;
 
+      const activityMetadata = {
+        productId,
+        productName: "",
+        stockBefore: null,
+        stockAfter: null,
+        stockChanged: false,
+        quantityChange: 0,
+        lowStockThresholdBefore: null,
+        lowStockThresholdAfter: null,
+        thresholdChanged: false,
+        movementTypes: [],
+        requestedAdjustment: null,
+      };
+
       await session.withTransaction(
         async () => {
           const existingProduct =
@@ -317,6 +333,9 @@ router.patch(
               404
             );
           }
+
+          activityMetadata.productName =
+            existingProduct.name;
 
           const filter = {
             _id: existingProduct._id,
@@ -372,6 +391,9 @@ router.patch(
 
             requestedAdjustment =
               adjustment;
+
+            activityMetadata.requestedAdjustment =
+              requestedAdjustment;
 
             if (adjustment < 0) {
               filter.stockQuantity = {
@@ -441,11 +463,31 @@ router.patch(
                 0
             );
 
+          activityMetadata.stockBefore =
+            stockBefore;
+          activityMetadata.stockAfter =
+            stockAfter;
+          activityMetadata.lowStockThresholdBefore =
+            thresholdBefore;
+          activityMetadata.lowStockThresholdAfter =
+            thresholdAfter;
+
           if (
             stockBefore !== stockAfter
           ) {
             const quantityChange =
               stockAfter - stockBefore;
+
+            activityMetadata.stockChanged =
+              true;
+            activityMetadata.quantityChange =
+              quantityChange;
+
+            activityMetadata.movementTypes.push(
+              requestedAdjustment !== null
+                ? "manual_adjustment"
+                : "manual_set"
+            );
 
             await createManualMovement({
               productBefore,
@@ -482,6 +524,13 @@ router.patch(
             thresholdBefore !==
             thresholdAfter
           ) {
+            activityMetadata.thresholdChanged =
+              true;
+
+            activityMetadata.movementTypes.push(
+              "threshold_update"
+            );
+
             await createManualMovement({
               productBefore,
               productAfter,
@@ -508,6 +557,52 @@ router.patch(
             productAfter;
         }
       );
+
+      const changedParts = [];
+
+      if (activityMetadata.stockChanged) {
+        changedParts.push(
+          `stock ${activityMetadata.stockBefore} → ${activityMetadata.stockAfter}`
+        );
+      }
+
+      if (activityMetadata.thresholdChanged) {
+        changedParts.push(
+          `threshold ${activityMetadata.lowStockThresholdBefore} → ${activityMetadata.lowStockThresholdAfter}`
+        );
+      }
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "inventory_updated",
+
+        actionLabel:
+          "Inventory updated",
+
+        severity:
+          activityMetadata.stockChanged ||
+          activityMetadata.thresholdChanged
+            ? "success"
+            : "info",
+
+        message:
+          changedParts.length > 0
+            ? `${updatedProduct.name} ${changedParts.join(", ")}.`
+            : `${updatedProduct.name} inventory was already up to date.`,
+
+        entityType:
+          "inventory",
+
+        entityId:
+          updatedProduct._id,
+
+        entityLabel:
+          updatedProduct.name,
+
+        metadata:
+          activityMetadata,
+      });
 
       return res.status(200).json({
         success: true,

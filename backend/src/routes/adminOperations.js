@@ -8,6 +8,10 @@ const {
 const Order = require("../models/Order");
 const CashCollection = require("../models/CashCollection");
 
+const {
+  logAdminActivity,
+} = require("../services/adminActivityLogger");
+
 const router = express.Router();
 
 router.use(protect);
@@ -566,6 +570,9 @@ router.patch(
       const order =
         await Order.findById(
           req.params.orderId
+        ).populate(
+          "user",
+          "fullName email phone role"
         );
 
       if (!order) {
@@ -597,6 +604,9 @@ router.patch(
         });
       }
 
+      const previousPaymentStatus =
+        order.paymentStatus;
+
       const amountCollected =
         Number(
           req.body.amountCollected ??
@@ -626,6 +636,11 @@ router.patch(
 
       const userSnapshot =
         buildUserSnapshot(req.user);
+
+      const existingCollection =
+        await CashCollection.findOne({
+          order: order._id,
+        }).lean();
 
       const collection =
         await CashCollection.findOneAndUpdate(
@@ -679,6 +694,62 @@ router.patch(
 
         await order.save();
       }
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "cod_collected",
+
+        actionLabel:
+          status === "collected"
+            ? "COD marked collected"
+            : "COD short collected",
+
+        severity:
+          status === "collected"
+            ? "success"
+            : "warning",
+
+        message:
+          `${order.orderNumber} COD ${status === "collected" ? "collected" : "short collected"}: ₹${amountCollected} of ₹${amountDue}.`,
+
+        entityType:
+          "cash_collection",
+
+        entityId:
+          collection._id,
+
+        entityLabel:
+          order.orderNumber,
+
+        targetUser:
+          order.user &&
+          typeof order.user === "object"
+            ? order.user
+            : null,
+
+        metadata: {
+          orderId:
+            String(order._id),
+          orderNumber:
+            order.orderNumber,
+          previousCollectionStatus:
+            existingCollection?.status || "",
+          previousAmountCollected:
+            Number(
+              existingCollection?.amountCollected || 0
+            ),
+          previousPaymentStatus,
+          newPaymentStatus:
+            order.paymentStatus,
+          amountDue,
+          amountCollected,
+          collectionStatus:
+            status,
+          notes:
+            cleanText(req.body.notes),
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -734,6 +805,9 @@ router.patch(
         });
       }
 
+      const previousStatus =
+        existing.status;
+
       existing.status =
         "handed_over";
 
@@ -757,6 +831,47 @@ router.patch(
       }
 
       await existing.save();
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "cash_handed_over",
+
+        actionLabel:
+          "Cash collection handed over",
+
+        severity:
+          "success",
+
+        message:
+          `${existing.orderNumber} cash handed over: ₹${Number(existing.amountCollected || 0)}.`,
+
+        entityType:
+          "cash_collection",
+
+        entityId:
+          existing._id,
+
+        entityLabel:
+          existing.orderNumber,
+
+        metadata: {
+          order:
+            String(existing.order),
+          orderNumber:
+            existing.orderNumber,
+          previousStatus,
+          newStatus:
+            existing.status,
+          amountDue:
+            Number(existing.amountDue || 0),
+          amountCollected:
+            Number(existing.amountCollected || 0),
+          handedOverAt:
+            existing.handedOverAt,
+          handoverNote,
+        },
+      });
 
       return res.status(200).json({
         success: true,

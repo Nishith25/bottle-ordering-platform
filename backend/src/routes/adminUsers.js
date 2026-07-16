@@ -13,6 +13,10 @@ const Order = require("../models/Order");
 const Subscription = require("../models/Subscription");
 const User = require("../models/User");
 
+const {
+  logAdminActivity,
+} = require("../services/adminActivityLogger");
+
 const router = express.Router();
 
 router.use(protect);
@@ -1059,6 +1063,40 @@ router.post(
             buildAdminSnapshot(req.user),
         });
 
+      await logAdminActivity({
+        req,
+        actionType:
+          "customer_note_added",
+
+        actionLabel:
+          "Customer note added",
+
+        severity:
+          "info",
+
+        message:
+          `Internal note added for ${customer.fullName}.`,
+
+        entityType:
+          "customer",
+
+        entityId:
+          customer._id,
+
+        entityLabel:
+          customer.fullName,
+
+        targetUser:
+          customer,
+
+        metadata: {
+          noteId:
+            String(note._id),
+          notePreview:
+            noteText.slice(0, 140),
+        },
+      });
+
       return res.status(201).json({
         success: true,
         message:
@@ -1153,6 +1191,43 @@ router.post(
             buildAdminSnapshot(req.user),
         });
 
+      await logAdminActivity({
+        req,
+        actionType:
+          "customer_follow_up_added",
+
+        actionLabel:
+          "Customer follow-up added",
+
+        severity:
+          "success",
+
+        message:
+          `Follow-up "${title}" added for ${customer.fullName}.`,
+
+        entityType:
+          "follow_up",
+
+        entityId:
+          followUp._id,
+
+        entityLabel:
+          title,
+
+        targetUser:
+          customer,
+
+        metadata: {
+          customerId:
+            String(customer._id),
+          title,
+          description,
+          dueAt,
+          status:
+            followUp.status,
+        },
+      });
+
       return res.status(201).json({
         success: true,
         message:
@@ -1202,7 +1277,9 @@ router.patch(
       const customer =
         await User.findById(
           req.params.userId
-        ).select("_id");
+        ).select(
+          "_id fullName email phone role"
+        );
 
       if (!customer) {
         return res.status(404).json({
@@ -1227,6 +1304,9 @@ router.patch(
         });
       }
 
+      const previousStatus =
+        followUp.status;
+
       followUp.status = status;
 
       if (status === "done") {
@@ -1249,6 +1329,47 @@ router.patch(
       }
 
       await followUp.save();
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "customer_follow_up_status_changed",
+
+        actionLabel:
+          "Customer follow-up status changed",
+
+        severity:
+          status === "done"
+            ? "success"
+            : status === "cancelled"
+              ? "warning"
+              : "info",
+
+        message:
+          `Follow-up "${followUp.title}" changed from ${previousStatus} to ${status}.`,
+
+        entityType:
+          "follow_up",
+
+        entityId:
+          followUp._id,
+
+        entityLabel:
+          followUp.title,
+
+        targetUser:
+          customer,
+
+        metadata: {
+          customerId:
+            String(customer._id),
+          previousStatus,
+          nextStatus:
+            status,
+          dueAt:
+            followUp.dueAt,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -1354,10 +1475,54 @@ router.patch(
         }
       }
 
+      const previousActive =
+        user.active;
+
       user.active =
         req.body.active;
 
       await user.save();
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "user_status_changed",
+
+        actionLabel:
+          user.active
+            ? "User account activated"
+            : "User account disabled",
+
+        severity:
+          user.active
+            ? "success"
+            : "warning",
+
+        message:
+          `${user.fullName} was ${user.active ? "activated" : "disabled"}.`,
+
+        entityType:
+          user.role === "customer"
+            ? "customer"
+            : "user",
+
+        entityId:
+          user._id,
+
+        entityLabel:
+          user.fullName,
+
+        targetUser:
+          user,
+
+        metadata: {
+          previousActive,
+          nextActive:
+            user.active,
+          role:
+            user.role,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -1471,9 +1636,49 @@ router.patch(
         }
       }
 
+      const previousRole =
+        user.role;
+
       user.role = role;
 
       await user.save();
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "user_role_changed",
+
+        actionLabel:
+          "User role changed",
+
+        severity:
+          role === "admin"
+            ? "warning"
+            : "info",
+
+        message:
+          `${user.fullName} role changed from ${previousRole} to ${role}.`,
+
+        entityType:
+          "user",
+
+        entityId:
+          user._id,
+
+        entityLabel:
+          user.fullName,
+
+        targetUser:
+          user,
+
+        metadata: {
+          previousRole,
+          nextRole:
+            role,
+          active:
+            user.active,
+        },
+      });
 
       return res.status(200).json({
         success: true,

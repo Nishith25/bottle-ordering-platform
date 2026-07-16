@@ -1,5 +1,3 @@
-// backend/src/routes/adminFollowUps.js
-
 const express = require("express");
 
 const {
@@ -13,6 +11,10 @@ const User = require("../models/User");
 const {
   runCustomerFollowUpAutomation,
 } = require("../services/customerFollowUpAutomation");
+
+const {
+  logAdminActivity,
+} = require("../services/adminActivityLogger");
 
 const router = express.Router();
 
@@ -425,6 +427,45 @@ router.post(
       const result =
         await runCustomerFollowUpAutomation();
 
+      await logAdminActivity({
+        req,
+        actionType:
+          "customer_follow_up_automation_run",
+
+        actionLabel:
+          "Follow-up automation run",
+
+        severity:
+          result.totalCreated > 0
+            ? "success"
+            : "info",
+
+        message:
+          `${result.totalCreated || 0} new follow-up${result.totalCreated === 1 ? "" : "s"} created by automation.`,
+
+        entityType:
+          "follow_up",
+
+        entityId:
+          null,
+
+        entityLabel:
+          "Follow-up Automation",
+
+        metadata: {
+          totalCreated:
+            result.totalCreated || 0,
+          results:
+            result.results || {},
+          errors:
+            result.errors || {},
+          startedAt:
+            result.startedAt,
+          finishedAt:
+            result.finishedAt,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         message:
@@ -474,6 +515,9 @@ router.patch(
         });
       }
 
+      const previousStatus =
+        followUp.status;
+
       followUp.status = status;
 
       if (status === "done") {
@@ -506,6 +550,61 @@ router.patch(
             "fullName email phone role active"
           )
           .lean();
+
+      await logAdminActivity({
+        req,
+        actionType:
+          "follow_up_status_changed",
+
+        actionLabel:
+          "Follow-up status changed",
+
+        severity:
+          status === "done"
+            ? "success"
+            : status === "cancelled"
+              ? "warning"
+              : "info",
+
+        message:
+          `${populatedFollowUp.title} changed from ${previousStatus} to ${status}.`,
+
+        entityType:
+          "follow_up",
+
+        entityId:
+          populatedFollowUp._id,
+
+        entityLabel:
+          populatedFollowUp.sourceLabel ||
+          populatedFollowUp.title,
+
+        targetUser:
+          populatedFollowUp.customer &&
+          typeof populatedFollowUp.customer === "object"
+            ? populatedFollowUp.customer
+            : null,
+
+        metadata: {
+          previousStatus,
+          nextStatus:
+            status,
+          title:
+            populatedFollowUp.title,
+          category:
+            populatedFollowUp.category || "manual",
+          priority:
+            populatedFollowUp.priority || "normal",
+          sourceType:
+            populatedFollowUp.sourceType || "",
+          sourceLabel:
+            populatedFollowUp.sourceLabel || "",
+          autoCreated:
+            Boolean(populatedFollowUp.autoCreated),
+          dueAt:
+            populatedFollowUp.dueAt,
+        },
+      });
 
       return res.status(200).json({
         success: true,
