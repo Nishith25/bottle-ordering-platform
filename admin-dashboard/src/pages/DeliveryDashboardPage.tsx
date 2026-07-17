@@ -714,8 +714,10 @@ export default function DeliveryDashboardPage() {
         );
 
         setSuccess(
-          `${acceptedOrder.orderNumber} accepted successfully.`
+          `${acceptedOrder.orderNumber} accepted successfully. Scroll to My delivery operations to continue.`
         );
+
+        setFilter("active");
 
         await loadDashboard();
       } catch (requestError) {
@@ -1056,7 +1058,7 @@ export default function DeliveryDashboardPage() {
           </h1>
 
           <p>
-            Accept open delivery orders, then complete assigned deliveries from this screen. Use Customer Mode only for personal bottle orders.
+            Your accepted deliveries appear first. Open orders are shown below, and only the first delivery partner who accepts gets the order.
           </p>
 
           <div className="delivery-hero-progress">
@@ -1093,29 +1095,6 @@ export default function DeliveryDashboardPage() {
         </div>
       </section>
 
-      <section className="delivery-mode-card">
-        <div>
-          <span>
-            ROLE SWITCH
-          </span>
-
-          <h2>
-            Delivery Mode is active
-          </h2>
-
-          <p>
-            This dashboard is only for delivery work. Open orders are shown to all delivery partners, but only the first person who accepts the order can deliver it.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={openCustomerMode}
-        >
-          Open Customer App
-        </button>
-      </section>
-
       {error ? (
         <div className="delivery-alert delivery-error">
           {error}
@@ -1130,12 +1109,7 @@ export default function DeliveryDashboardPage() {
 
       <section className="delivery-metric-grid">
         <Metric
-          label="Available pool"
-          value={availableOrders.length}
-        />
-
-        <Metric
-          label="Active deliveries"
+          label="My active deliveries"
           value={performance.activeDeliveries}
         />
 
@@ -1152,6 +1126,11 @@ export default function DeliveryDashboardPage() {
         <Metric
           label="Out for delivery"
           value={statusCounts.out_for_delivery}
+        />
+
+        <Metric
+          label="Available pool"
+          value={availableOrders.length}
         />
 
         <Metric
@@ -1179,418 +1158,10 @@ export default function DeliveryDashboardPage() {
         />
       </section>
 
-      <section className="delivery-cash-summary-card">
-        <div>
-          <span>
-            CASH AND CLOSING
-          </span>
-
-          <h2>
-            Today’s delivery closing
-          </h2>
-
-          <p>
-            Track COD collection and completed deliveries before ending the shift.
-          </p>
-        </div>
-
-        <div className="delivery-cash-grid">
-          <CashItem
-            label="Active orders"
-            value={cashSummary.activeOrderCount}
-          />
-
-          <CashItem
-            label="Active bottles"
-            value={cashSummary.activeBottleCount}
-          />
-
-          <CashItem
-            label="Pending COD orders"
-            value={cashSummary.pendingCodOrderCount}
-          />
-
-          <CashItem
-            label="Pending COD amount"
-            value={formatCurrency(
-              cashSummary.pendingCodAmount
-            )}
-          />
-
-          <CashItem
-            label="COD collected today"
-            value={formatCurrency(
-              cashSummary.collectedTodayAmount
-            )}
-          />
-
-          <CashItem
-            label="Delivered today"
-            value={cashSummary.deliveredTodayOrderCount}
-          />
-        </div>
-      </section>
-
-      <section className="delivery-available-heading">
-        <div>
-          <span>
-            AVAILABLE ORDERS
-          </span>
-
-          <h2>
-            Open delivery pool
-          </h2>
-
-          <p>
-            These orders are visible to all delivery partners. Once accepted, the order is locked to one delivery partner only.
-          </p>
-        </div>
-
-        <strong>
-          {availableOrders.length} open
-        </strong>
-      </section>
-
-      {availableOrders.length === 0 ? (
-        <div className="delivery-open-empty">
-          <span>✓</span>
-
-          <div>
-            <strong>
-              No open delivery orders
-            </strong>
-
-            <p>
-              New active orders will appear here automatically when they are ready for delivery acceptance.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <section className="delivery-open-order-list">
-          {availableOrders.map((order) => {
-            const customer =
-              order.user &&
-              typeof order.user === "object"
-                ? order.user
-                : null;
-
-            const customerPhone =
-              getCustomerPhone(order);
-
-            const address =
-              getFullAddress(order);
-
-            return (
-              <article
-                key={order._id}
-                className="delivery-open-order-card"
-              >
-                <div className="delivery-order-heading">
-                  <div>
-                    <div className="delivery-number-row">
-                      <strong>
-                        {order.orderNumber}
-                      </strong>
-
-                      <span className="delivery-open-badge">
-                        Open
-                      </span>
-                    </div>
-
-                    <span>
-                      {formatDate(order.createdAt)}
-                    </span>
-                  </div>
-
-                  <strong className="delivery-order-total">
-                    {formatCurrency(order.total)}
-                  </strong>
-                </div>
-
-                <div className="delivery-quick-actions">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openCall(customerPhone)
-                    }
-                  >
-                    Call
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openWhatsApp(
-                        customerPhone,
-                        buildDeliverySummary(order)
-                      )
-                    }
-                  >
-                    WhatsApp
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openMaps(address)
-                    }
-                  >
-                    Maps
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleCopyOrder(order);
-                    }}
-                  >
-                    {copiedOrderId === order._id
-                      ? "Copied"
-                      : "Copy"}
-                  </button>
-                </div>
-
-                <div className="delivery-info-grid">
-                  <div>
-                    <span>
-                      Customer
-                    </span>
-
-                    <strong>
-                      {customer?.fullName ??
-                        order.deliveryAddress.fullName}
-                    </strong>
-
-                    <p>
-                      +91 {customerPhone}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span>
-                      Delivery time
-                    </span>
-
-                    <strong>
-                      {order.deliverySchedule.deliveryDateLabel}
-                    </strong>
-
-                    <p>
-                      {order.deliverySchedule.deliverySlot}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span>
-                      Payment
-                    </span>
-
-                    <strong>
-                      {order.paymentMethod === "cod"
-                        ? "Collect cash"
-                        : "Paid online"}
-                    </strong>
-
-                    <p>
-                      {formatCurrency(order.total)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="delivery-address-block">
-                  <span>
-                    Complete address
-                  </span>
-
-                  <p>
-                    {address}
-                  </p>
-                </div>
-
-                <div className="delivery-items-block">
-                  <span>
-                    Order items
-                  </span>
-
-                  {order.items.map((item) => (
-                    <div key={item.productId}>
-                      <p>
-                        {item.quantity} × {item.name}
-                      </p>
-
-                      <strong>
-                        {formatCurrency(item.lineTotal)}
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="delivery-accept-panel">
-                  <div>
-                    <span>
-                      Accept delivery
-                    </span>
-
-                    <p>
-                      After accepting, this order will disappear from other delivery partners and move to your assigned list.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={
-                      updatingOrderId === order._id
-                    }
-                    onClick={() => {
-                      void handleAcceptAvailableOrder(order);
-                    }}
-                  >
-                    {updatingOrderId === order._id
-                      ? "Accepting..."
-                      : "Accept this order"}
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </section>
-      )}
-
-      <section className="delivery-performance-grid">
-        <div className="delivery-feedback-panel">
-          <div className="delivery-section-heading">
-            <div>
-              <span>
-                CUSTOMER FEEDBACK
-              </span>
-
-              <h2>
-                Recent reviews
-              </h2>
-            </div>
-
-            <strong>
-              {performance.reviewCount} total
-            </strong>
-          </div>
-
-          {performance.recentReviews.length === 0 ? (
-            <div className="delivery-mini-empty">
-              <span>★</span>
-
-              <p>
-                Customer feedback will appear after completed orders are reviewed.
-              </p>
-            </div>
-          ) : (
-            <div className="delivery-feedback-list">
-              {performance.recentReviews.map(
-                (review) => (
-                  <article
-                    key={review._id}
-                    className="delivery-feedback-card"
-                  >
-                    <div className="delivery-feedback-top">
-                      <div>
-                        <strong>
-                          {getReviewCustomerName(review)}
-                        </strong>
-
-                        <span>
-                          {review.orderNumber}
-                        </span>
-                      </div>
-
-                      <StarDisplay
-                        value={review.deliveryRating}
-                      />
-                    </div>
-
-                    <p>
-                      {review.comment ||
-                        "The customer submitted a rating without a written comment."}
-                    </p>
-
-                    <small>
-                      {formatDate(
-                        review.submittedAt ||
-                          review.createdAt
-                      )}
-                    </small>
-                  </article>
-                )
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="delivery-history-panel">
-          <div className="delivery-section-heading">
-            <div>
-              <span>
-                DELIVERY HISTORY
-              </span>
-
-              <h2>
-                Recently completed
-              </h2>
-            </div>
-
-            <strong>
-              {performance.completedDeliveries} completed
-            </strong>
-          </div>
-
-          {performance.recentDeliveries.length === 0 ? (
-            <div className="delivery-mini-empty">
-              <span>✓</span>
-
-              <p>
-                Completed deliveries will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="delivery-history-list">
-              {performance.recentDeliveries.map(
-                (order) => (
-                  <article
-                    key={order._id}
-                    className="delivery-history-row"
-                  >
-                    <div>
-                      <strong>
-                        {order.orderNumber}
-                      </strong>
-
-                      <span>
-                        {getCustomerName(order)}
-                      </span>
-                    </div>
-
-                    <div>
-                      <strong>
-                        {formatCurrency(order.total)}
-                      </strong>
-
-                      <span>
-                        {formatDate(
-                          order.deliveryCompletedAt ||
-                            order.deliveredAt
-                        )}
-                      </span>
-                    </div>
-                  </article>
-                )
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
       <section className="delivery-orders-heading">
         <div>
           <span>
-            ASSIGNED ORDERS
+            MY ACCEPTED ORDERS
           </span>
 
           <h2>
@@ -1635,7 +1206,7 @@ export default function DeliveryDashboardPage() {
           <div className="spinner" />
 
           <p>
-            Loading assigned deliveries
+            Loading your accepted deliveries
           </p>
         </div>
       ) : visibleOrders.length === 0 ? (
@@ -1645,11 +1216,11 @@ export default function DeliveryDashboardPage() {
           </div>
 
           <h2>
-            No deliveries here
+            No accepted deliveries here
           </h2>
 
           <p>
-            There are no orders matching this delivery filter.
+            Accept an order from the open delivery pool below to start delivery work.
           </p>
         </div>
       ) : (
@@ -2112,6 +1683,414 @@ export default function DeliveryDashboardPage() {
           })}
         </section>
       )}
+
+      <section className="delivery-available-heading">
+        <div>
+          <span>
+            AVAILABLE ORDERS
+          </span>
+
+          <h2>
+            Open delivery pool
+          </h2>
+
+          <p>
+            These orders are visible to all delivery partners. Once accepted, the order is locked to one delivery partner only.
+          </p>
+        </div>
+
+        <strong>
+          {availableOrders.length} open
+        </strong>
+      </section>
+
+      {availableOrders.length === 0 ? (
+        <div className="delivery-open-empty">
+          <span>✓</span>
+
+          <div>
+            <strong>
+              No open delivery orders
+            </strong>
+
+            <p>
+              New active orders will appear here automatically when they are ready for delivery acceptance.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <section className="delivery-open-order-list">
+          {availableOrders.map((order) => {
+            const customer =
+              order.user &&
+              typeof order.user === "object"
+                ? order.user
+                : null;
+
+            const customerPhone =
+              getCustomerPhone(order);
+
+            const address =
+              getFullAddress(order);
+
+            return (
+              <article
+                key={order._id}
+                className="delivery-open-order-card"
+              >
+                <div className="delivery-order-heading">
+                  <div>
+                    <div className="delivery-number-row">
+                      <strong>
+                        {order.orderNumber}
+                      </strong>
+
+                      <span className="delivery-open-badge">
+                        Open
+                      </span>
+                    </div>
+
+                    <span>
+                      {formatDate(order.createdAt)}
+                    </span>
+                  </div>
+
+                  <strong className="delivery-order-total">
+                    {formatCurrency(order.total)}
+                  </strong>
+                </div>
+
+                <div className="delivery-quick-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openCall(customerPhone)
+                    }
+                  >
+                    Call
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openWhatsApp(
+                        customerPhone,
+                        buildDeliverySummary(order)
+                      )
+                    }
+                  >
+                    WhatsApp
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openMaps(address)
+                    }
+                  >
+                    Maps
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleCopyOrder(order);
+                    }}
+                  >
+                    {copiedOrderId === order._id
+                      ? "Copied"
+                      : "Copy"}
+                  </button>
+                </div>
+
+                <div className="delivery-info-grid">
+                  <div>
+                    <span>
+                      Customer
+                    </span>
+
+                    <strong>
+                      {customer?.fullName ??
+                        order.deliveryAddress.fullName}
+                    </strong>
+
+                    <p>
+                      +91 {customerPhone}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>
+                      Delivery time
+                    </span>
+
+                    <strong>
+                      {order.deliverySchedule.deliveryDateLabel}
+                    </strong>
+
+                    <p>
+                      {order.deliverySchedule.deliverySlot}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>
+                      Payment
+                    </span>
+
+                    <strong>
+                      {order.paymentMethod === "cod"
+                        ? "Collect cash"
+                        : "Paid online"}
+                    </strong>
+
+                    <p>
+                      {formatCurrency(order.total)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="delivery-address-block">
+                  <span>
+                    Complete address
+                  </span>
+
+                  <p>
+                    {address}
+                  </p>
+                </div>
+
+                <div className="delivery-items-block">
+                  <span>
+                    Order items
+                  </span>
+
+                  {order.items.map((item) => (
+                    <div key={item.productId}>
+                      <p>
+                        {item.quantity} × {item.name}
+                      </p>
+
+                      <strong>
+                        {formatCurrency(item.lineTotal)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="delivery-accept-panel">
+                  <div>
+                    <span>
+                      Accept delivery
+                    </span>
+
+                    <p>
+                      After accepting, this order will disappear from other delivery partners and move to your accepted list above.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={
+                      updatingOrderId === order._id
+                    }
+                    onClick={() => {
+                      void handleAcceptAvailableOrder(order);
+                    }}
+                  >
+                    {updatingOrderId === order._id
+                      ? "Accepting..."
+                      : "Accept this order"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
+
+      <section className="delivery-cash-summary-card">
+        <div>
+          <span>
+            CASH AND CLOSING
+          </span>
+
+          <h2>
+            Today’s delivery closing
+          </h2>
+
+          <p>
+            Track COD collection and completed deliveries before ending the shift.
+          </p>
+        </div>
+
+        <div className="delivery-cash-grid">
+          <CashItem
+            label="Active orders"
+            value={cashSummary.activeOrderCount}
+          />
+
+          <CashItem
+            label="Active bottles"
+            value={cashSummary.activeBottleCount}
+          />
+
+          <CashItem
+            label="Pending COD orders"
+            value={cashSummary.pendingCodOrderCount}
+          />
+
+          <CashItem
+            label="Pending COD amount"
+            value={formatCurrency(
+              cashSummary.pendingCodAmount
+            )}
+          />
+
+          <CashItem
+            label="COD collected today"
+            value={formatCurrency(
+              cashSummary.collectedTodayAmount
+            )}
+          />
+
+          <CashItem
+            label="Delivered today"
+            value={cashSummary.deliveredTodayOrderCount}
+          />
+        </div>
+      </section>
+
+      <section className="delivery-performance-grid">
+        <div className="delivery-feedback-panel">
+          <div className="delivery-section-heading">
+            <div>
+              <span>
+                CUSTOMER FEEDBACK
+              </span>
+
+              <h2>
+                Recent reviews
+              </h2>
+            </div>
+
+            <strong>
+              {performance.reviewCount} total
+            </strong>
+          </div>
+
+          {performance.recentReviews.length === 0 ? (
+            <div className="delivery-mini-empty">
+              <span>★</span>
+
+              <p>
+                Customer feedback will appear after completed orders are reviewed.
+              </p>
+            </div>
+          ) : (
+            <div className="delivery-feedback-list">
+              {performance.recentReviews.map(
+                (review) => (
+                  <article
+                    key={review._id}
+                    className="delivery-feedback-card"
+                  >
+                    <div className="delivery-feedback-top">
+                      <div>
+                        <strong>
+                          {getReviewCustomerName(review)}
+                        </strong>
+
+                        <span>
+                          {review.orderNumber}
+                        </span>
+                      </div>
+
+                      <StarDisplay
+                        value={review.deliveryRating}
+                      />
+                    </div>
+
+                    <p>
+                      {review.comment ||
+                        "The customer submitted a rating without a written comment."}
+                    </p>
+
+                    <small>
+                      {formatDate(
+                        review.submittedAt ||
+                          review.createdAt
+                      )}
+                    </small>
+                  </article>
+                )
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="delivery-history-panel">
+          <div className="delivery-section-heading">
+            <div>
+              <span>
+                DELIVERY HISTORY
+              </span>
+
+              <h2>
+                Recently completed
+              </h2>
+            </div>
+
+            <strong>
+              {performance.completedDeliveries} completed
+            </strong>
+          </div>
+
+          {performance.recentDeliveries.length === 0 ? (
+            <div className="delivery-mini-empty">
+              <span>✓</span>
+
+              <p>
+                Completed deliveries will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="delivery-history-list">
+              {performance.recentDeliveries.map(
+                (order) => (
+                  <article
+                    key={order._id}
+                    className="delivery-history-row"
+                  >
+                    <div>
+                      <strong>
+                        {order.orderNumber}
+                      </strong>
+
+                      <span>
+                        {getCustomerName(order)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {formatCurrency(order.total)}
+                      </strong>
+
+                      <span>
+                        {formatDate(
+                          order.deliveryCompletedAt ||
+                            order.deliveredAt
+                        )}
+                      </span>
+                    </div>
+                  </article>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
