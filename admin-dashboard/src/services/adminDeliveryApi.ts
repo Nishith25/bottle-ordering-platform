@@ -93,6 +93,9 @@ export type DeliveryOrder = Omit<
   codCollectedByDeliveryPartner?: boolean;
   codCollectedAmount?: number;
   codCollectedAt?: string | null;
+
+  deliveryAcceptedAt?: string | null;
+  deliveryAssignedAt?: string | null;
 };
 
 export type DeliveryCashSummary = {
@@ -197,6 +200,16 @@ type DeliveryOrdersResponse =
     };
   };
 
+type AvailableDeliveryOrdersResponse =
+  ApiResponse & {
+    count: number;
+
+    data: {
+      orders:
+        DeliveryOrder[];
+    };
+  };
+
 type DeliveryPerformanceResponse =
   ApiResponse & {
     data: {
@@ -263,7 +276,9 @@ async function request<T>(
 
     try {
       payload = responseText
-        ? JSON.parse(responseText)
+        ? JSON.parse(
+            responseText
+          )
         : ({
             success:
               response.ok,
@@ -400,6 +415,36 @@ export async function assignDeliveryPartner(
         body: JSON.stringify({
           deliveryPartnerId,
         }),
+      }
+    );
+
+  return response.data.order;
+}
+
+export async function fetchAvailableDeliveryOrders(
+  token: string
+): Promise<DeliveryOrder[]> {
+  const response =
+    await request<AvailableDeliveryOrdersResponse>(
+      "/api/delivery/orders/available",
+      token
+    );
+
+  return response.data.orders;
+}
+
+export async function acceptAvailableDeliveryOrder(
+  token: string,
+  orderId: string
+): Promise<DeliveryOrder> {
+  const response =
+    await request<DeliveryOrderResponse>(
+      `/api/delivery/orders/${encodeURIComponent(
+        orderId
+      )}/accept`,
+      token,
+      {
+        method: "POST",
       }
     );
 

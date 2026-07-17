@@ -24,6 +24,12 @@ const ACTIVE_DELIVERY_STATUSES = [
   "out_for_delivery",
 ];
 
+const AVAILABLE_ORDER_STATUSES = [
+  "placed",
+  "confirmed",
+  "preparing",
+];
+
 const DELIVERY_FAILURE_REASONS = [
   "customer_not_available",
   "customer_no_response",
@@ -101,6 +107,65 @@ function getBottleCount(order) {
         0
       )
     : 0;
+}
+
+function buildAvailableDeliveryQuery(orderId = null) {
+  return {
+    ...(orderId
+      ? {
+          _id: orderId,
+        }
+      : {}),
+
+    orderStatus: {
+      $in: AVAILABLE_ORDER_STATUSES,
+    },
+
+    $and: [
+      {
+        $or: [
+          {
+            deliveryPartner: null,
+          },
+          {
+            deliveryPartner: {
+              $exists: false,
+            },
+          },
+        ],
+      },
+
+      {
+        $or: [
+          {
+            deliveryStatus: "unassigned",
+          },
+          {
+            deliveryStatus: "",
+          },
+          {
+            deliveryStatus: null,
+          },
+          {
+            deliveryStatus: {
+              $exists: false,
+            },
+          },
+        ],
+      },
+
+      {
+        $or: [
+          {
+            paymentMethod: "cod",
+          },
+          {
+            paymentStatus: "paid",
+          },
+        ],
+      },
+    ],
+  };
 }
 
 async function upsertDeliveryCashCollection({
@@ -701,6 +766,46 @@ router.get(
 );
 
 /**
+ * GET /api/delivery/orders/available
+ *
+ * Every delivery partner can see these orders.
+ */
+router.get(
+  "/available",
+  allowRoles("delivery"),
+  async (req, res, next) => {
+    try {
+      const orders =
+        await Order.find(
+          buildAvailableDeliveryQuery()
+        )
+          .populate(
+            "user",
+            "fullName phone"
+          )
+          .sort({
+            "deliverySchedule.deliveryDateId": 1,
+            createdAt: 1,
+          })
+          .limit(100)
+          .lean();
+
+      return res.status(200).json({
+        success: true,
+        count:
+          orders.length,
+
+        data: {
+          orders,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
  * GET /api/delivery/orders/assigned
  */
 router.get(
@@ -769,6 +874,92 @@ router.get(
         },
       });
     } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/delivery/orders/:orderId/accept
+ *
+ * Atomic accept. Only one delivery partner can
+ * accept the same available order.
+ */
+router.post(
+  "/:orderId/accept",
+  allowRoles("delivery"),
+  async (req, res, next) => {
+    try {
+      const acceptedAt =
+        new Date();
+
+      const order =
+        await Order.findOneAndUpdate(
+          buildAvailableDeliveryQuery(
+            req.params.orderId
+          ),
+          {
+            $set: {
+              deliveryPartner:
+                req.user._id,
+
+              deliveryStatus:
+                "assigned",
+
+              deliveryAcceptedAt:
+                acceptedAt,
+
+              deliveryAssignedAt:
+                acceptedAt,
+            },
+
+            $unset: {
+              lastDeliveryAttemptStatus:
+                "",
+              failedDeliveryReason:
+                "",
+              failedDeliveryNotes:
+                "",
+              failedDeliveryAt:
+                "",
+            },
+          },
+          {
+            new: true,
+            runValidators: false,
+            strict: false,
+          }
+        ).populate(
+          "user",
+          "fullName phone"
+        );
+
+      if (!order) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This order has already been accepted by another delivery partner.",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Order accepted successfully.",
+
+        data: {
+          order,
+        },
+      });
+    } catch (error) {
+      if (error.name === "CastError") {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Available order not found.",
+        });
+      }
+
       return next(error);
     }
   }
@@ -967,8 +1158,7 @@ router.patch(
         success: true,
 
         message:
-          nextStatus ===
-          "picked_up"
+          nextStatus === "picked_up"
             ? "Order marked as picked up."
             : "Order is now out for delivery.",
 
@@ -1337,8 +1527,7 @@ router.post(
           success: false,
           message:
             `Incorrect delivery OTP. ${result.attemptsRemaining} attempt${
-              result.attemptsRemaining ===
-              1
+              result.attemptsRemaining === 1
                 ? ""
                 : "s"
             } remaining.`,

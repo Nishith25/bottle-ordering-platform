@@ -10,7 +10,9 @@ import {
 } from "../context/AuthContext";
 
 import {
+  acceptAvailableDeliveryOrder,
   fetchAssignedDeliveryOrders,
+  fetchAvailableDeliveryOrders,
   fetchDeliveryCashSummary,
   fetchDeliveryPerformance,
   reportFailedDelivery,
@@ -367,6 +369,11 @@ export default function DeliveryDashboardPage() {
   } = useAdminAuth();
 
   const [
+    availableOrders,
+    setAvailableOrders,
+  ] = useState<DeliveryOrder[]>([]);
+
+  const [
     orders,
     setOrders,
   ] = useState<DeliveryOrder[]>([]);
@@ -464,6 +471,7 @@ export default function DeliveryDashboardPage() {
   const loadDashboard =
     useCallback(async () => {
       if (!token) {
+        setAvailableOrders([]);
         setOrders([]);
         setStatusCounts(
           EMPTY_COUNTS
@@ -484,10 +492,15 @@ export default function DeliveryDashboardPage() {
 
       try {
         const [
+          availableOrderResult,
           orderResult,
           performanceResult,
           cashSummaryResult,
         ] = await Promise.all([
+          fetchAvailableDeliveryOrders(
+            token
+          ),
+
           fetchAssignedDeliveryOrders(
             token
           ),
@@ -500,6 +513,10 @@ export default function DeliveryDashboardPage() {
             token
           ),
         ]);
+
+        setAvailableOrders(
+          availableOrderResult
+        );
 
         setOrders(
           orderResult.orders
@@ -646,6 +663,72 @@ export default function DeliveryDashboardPage() {
             updatedOrder.deliveryPartnerNote || "",
         })
       );
+    };
+
+  const handleAcceptAvailableOrder =
+    async (order: DeliveryOrder) => {
+      if (
+        !token ||
+        updatingOrderId
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Accept ${order.orderNumber}? After accepting, only you can deliver this order.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setUpdatingOrderId(
+        order._id
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const acceptedOrder =
+          await acceptAvailableDeliveryOrder(
+            token,
+            order._id
+          );
+
+        setAvailableOrders(
+          (currentOrders) =>
+            currentOrders.filter(
+              (currentOrder) =>
+                currentOrder._id !==
+                acceptedOrder._id
+            )
+        );
+
+        setOrders(
+          (currentOrders) => [
+            acceptedOrder,
+            ...currentOrders,
+          ]
+        );
+
+        setSuccess(
+          `${acceptedOrder.orderNumber} accepted successfully.`
+        );
+
+        await loadDashboard();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to accept this order."
+        );
+
+        await loadDashboard();
+      } finally {
+        setUpdatingOrderId(null);
+      }
     };
 
   const handleStatusChange =
@@ -973,7 +1056,7 @@ export default function DeliveryDashboardPage() {
           </h1>
 
           <p>
-            Complete assigned deliveries from this screen. Use Customer Mode only for personal bottle orders.
+            Accept open delivery orders, then complete assigned deliveries from this screen. Use Customer Mode only for personal bottle orders.
           </p>
 
           <div className="delivery-hero-progress">
@@ -1021,7 +1104,7 @@ export default function DeliveryDashboardPage() {
           </h2>
 
           <p>
-            This dashboard is only for assigned deliveries. Switch to Customer Mode when the delivery partner wants to place a personal bottle order.
+            This dashboard is only for delivery work. Open orders are shown to all delivery partners, but only the first person who accepts the order can deliver it.
           </p>
         </div>
 
@@ -1046,6 +1129,11 @@ export default function DeliveryDashboardPage() {
       ) : null}
 
       <section className="delivery-metric-grid">
+        <Metric
+          label="Available pool"
+          value={availableOrders.length}
+        />
+
         <Metric
           label="Active deliveries"
           value={performance.activeDeliveries}
@@ -1142,6 +1230,231 @@ export default function DeliveryDashboardPage() {
           />
         </div>
       </section>
+
+      <section className="delivery-available-heading">
+        <div>
+          <span>
+            AVAILABLE ORDERS
+          </span>
+
+          <h2>
+            Open delivery pool
+          </h2>
+
+          <p>
+            These orders are visible to all delivery partners. Once accepted, the order is locked to one delivery partner only.
+          </p>
+        </div>
+
+        <strong>
+          {availableOrders.length} open
+        </strong>
+      </section>
+
+      {availableOrders.length === 0 ? (
+        <div className="delivery-open-empty">
+          <span>✓</span>
+
+          <div>
+            <strong>
+              No open delivery orders
+            </strong>
+
+            <p>
+              New active orders will appear here automatically when they are ready for delivery acceptance.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <section className="delivery-open-order-list">
+          {availableOrders.map((order) => {
+            const customer =
+              order.user &&
+              typeof order.user === "object"
+                ? order.user
+                : null;
+
+            const customerPhone =
+              getCustomerPhone(order);
+
+            const address =
+              getFullAddress(order);
+
+            return (
+              <article
+                key={order._id}
+                className="delivery-open-order-card"
+              >
+                <div className="delivery-order-heading">
+                  <div>
+                    <div className="delivery-number-row">
+                      <strong>
+                        {order.orderNumber}
+                      </strong>
+
+                      <span className="delivery-open-badge">
+                        Open
+                      </span>
+                    </div>
+
+                    <span>
+                      {formatDate(order.createdAt)}
+                    </span>
+                  </div>
+
+                  <strong className="delivery-order-total">
+                    {formatCurrency(order.total)}
+                  </strong>
+                </div>
+
+                <div className="delivery-quick-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openCall(customerPhone)
+                    }
+                  >
+                    Call
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openWhatsApp(
+                        customerPhone,
+                        buildDeliverySummary(order)
+                      )
+                    }
+                  >
+                    WhatsApp
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openMaps(address)
+                    }
+                  >
+                    Maps
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleCopyOrder(order);
+                    }}
+                  >
+                    {copiedOrderId === order._id
+                      ? "Copied"
+                      : "Copy"}
+                  </button>
+                </div>
+
+                <div className="delivery-info-grid">
+                  <div>
+                    <span>
+                      Customer
+                    </span>
+
+                    <strong>
+                      {customer?.fullName ??
+                        order.deliveryAddress.fullName}
+                    </strong>
+
+                    <p>
+                      +91 {customerPhone}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>
+                      Delivery time
+                    </span>
+
+                    <strong>
+                      {order.deliverySchedule.deliveryDateLabel}
+                    </strong>
+
+                    <p>
+                      {order.deliverySchedule.deliverySlot}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>
+                      Payment
+                    </span>
+
+                    <strong>
+                      {order.paymentMethod === "cod"
+                        ? "Collect cash"
+                        : "Paid online"}
+                    </strong>
+
+                    <p>
+                      {formatCurrency(order.total)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="delivery-address-block">
+                  <span>
+                    Complete address
+                  </span>
+
+                  <p>
+                    {address}
+                  </p>
+                </div>
+
+                <div className="delivery-items-block">
+                  <span>
+                    Order items
+                  </span>
+
+                  {order.items.map((item) => (
+                    <div key={item.productId}>
+                      <p>
+                        {item.quantity} × {item.name}
+                      </p>
+
+                      <strong>
+                        {formatCurrency(item.lineTotal)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="delivery-accept-panel">
+                  <div>
+                    <span>
+                      Accept delivery
+                    </span>
+
+                    <p>
+                      After accepting, this order will disappear from other delivery partners and move to your assigned list.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={
+                      updatingOrderId === order._id
+                    }
+                    onClick={() => {
+                      void handleAcceptAvailableOrder(order);
+                    }}
+                  >
+                    {updatingOrderId === order._id
+                      ? "Accepting..."
+                      : "Accept this order"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
 
       <section className="delivery-performance-grid">
         <div className="delivery-feedback-panel">
@@ -1281,7 +1594,7 @@ export default function DeliveryDashboardPage() {
           </span>
 
           <h2>
-            Delivery operations
+            My delivery operations
           </h2>
         </div>
 
