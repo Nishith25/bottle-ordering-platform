@@ -12,6 +12,9 @@ const adminRoutes = require("./routes/admin");
 const adminBatchRoutes = require("./routes/adminBatches");
 const adminCostingRoutes = require("./routes/adminCosting");
 const adminCouponRoutes = require("./routes/adminCoupons");
+const adminDeliveryControlRoutes = require(
+  "./routes/adminDeliveryControl"
+);
 const adminDeliveryPartnerRoutes = require(
   "./routes/adminDeliveryPartners"
 );
@@ -434,6 +437,11 @@ app.use(
 );
 
 app.use(
+  "/api/admin/delivery-control",
+  adminDeliveryControlRoutes
+);
+
+app.use(
   "/api/admin/delivery-partners",
   adminDeliveryPartnerRoutes
 );
@@ -517,6 +525,7 @@ app.use(
   "/api/admin/activity-logs",
   adminActivityLogRoutes
 );
+
 app.use(
   "/api/admin/export-center",
   adminExportCenterRoutes

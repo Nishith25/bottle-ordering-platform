@@ -31,6 +31,9 @@ const PAGE_TITLES:
     "/production-control":
       "Production Control",
 
+    "/delivery-control":
+      "Delivery Control Center",
+
     "/products":
       "Bottle management",
 
@@ -51,6 +54,9 @@ const PAGE_TITLES:
 
     "/activity-log":
       "Activity Log",
+
+    "/export-center":
+      "Export Center",
 
     "/sales-report":
       "Sales & profit report",
@@ -93,9 +99,6 @@ const PAGE_TITLES:
 
     "/users":
       "Customer account management",
-
-      "/export-center":
-  "Export Center",
   };
 
 function getPageTitle(pathname: string) {
@@ -316,6 +319,15 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
+            to="/delivery-control"
+            icon="⇄"
+            label="Delivery Control"
+            onClick={
+              closeMobileMenu
+            }
+          />
+
+          <NavigationLink
             to="/products"
             icon="◫"
             label="Bottles"
@@ -385,13 +397,13 @@ export default function AdminLayout() {
           />
 
           <NavigationLink
-  to="/export-center"
-  icon="⇩"
-  label="Export Center"
-  onClick={
-    closeMobileMenu
-  }
-/>
+            to="/export-center"
+            icon="⇩"
+            label="Export Center"
+            onClick={
+              closeMobileMenu
+            }
+          />
 
           <NavigationLink
             to="/sales-report"

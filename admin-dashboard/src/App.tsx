@@ -16,10 +16,12 @@ import BatchRegisterPage from "./pages/BatchRegisterPage";
 import CostingPage from "./pages/CostingPage";
 import CouponsPage from "./pages/CouponsPage";
 import DashboardPage from "./pages/DashboardPage";
+import DeliveryControlPage from "./pages/DeliveryControlPage";
 import DeliveryDashboardPage from "./pages/DeliveryDashboardPage";
 import DeliveryPartnersPage from "./pages/DeliveryPartnersPage";
 import DeliveryReviewsPage from "./pages/DeliveryReviewsPage";
 import DeliverySlotsPage from "./pages/DeliverySlotsPage";
+import ExportCenterPage from "./pages/ExportCenterPage";
 import FollowUpsPage from "./pages/FollowUpsPage";
 import InvoicePrintPage from "./pages/InvoicePrintPage";
 import LocationsPage from "./pages/LocationsPage";
@@ -36,7 +38,6 @@ import SubscriptionChargesPage from "./pages/SubscriptionChargesPage";
 import SubscriptionDetailsPage from "./pages/SubscriptionDetailsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
-import ExportCenterPage from "./pages/ExportCenterPage";
 
 export default function App() {
   return (
@@ -82,6 +83,13 @@ export default function App() {
               path="/production-control"
               element={
                 <ProductionControlPage />
+              }
+            />
+
+            <Route
+              path="/delivery-control"
+              element={
+                <DeliveryControlPage />
               }
             />
 
@@ -135,11 +143,11 @@ export default function App() {
             />
 
             <Route
-  path="/export-center"
-  element={
-    <ExportCenterPage />
-  }
-/>
+              path="/export-center"
+              element={
+                <ExportCenterPage />
+              }
+            />
 
             <Route
               path="/sales-report"
