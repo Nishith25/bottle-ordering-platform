@@ -1,4 +1,6 @@
 import {
+  type Dispatch,
+  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
@@ -22,6 +24,13 @@ import {
   type DeliveryControlSummary,
   type DeliveryPartnerSummary,
 } from "../services/adminDeliveryControlApi";
+
+import {
+  fetchAdminDeliveryCashHandoverSummary,
+  verifyAdminDeliveryCashHandover,
+  type AdminDeliveryCashHandoverBatch,
+  type AdminDeliveryCashHandoverResult,
+} from "../services/adminDeliveryCashHandoverApi";
 
 import "./deliveryControl.css";
 
@@ -54,6 +63,26 @@ const EMPTY_RESULT:
     partnerSummaries: [],
   };
 
+const EMPTY_HANDOVER_RESULT:
+  AdminDeliveryCashHandoverResult = {
+    summary: {
+      dateId: "",
+      notSubmittedCount: 0,
+      notSubmittedAmount: 0,
+      submittedCount: 0,
+      submittedAmount: 0,
+      verifiedCount: 0,
+      verifiedAmount: 0,
+      shortAmount: 0,
+      totalRows: 0,
+    },
+
+    handoverBatches: [],
+    submittedBatches: [],
+    notSubmittedBatches: [],
+    verifiedBatches: [],
+  };
+
 const DELIVERY_LABELS:
   Record<string, string> = {
     unassigned: "Open pool",
@@ -83,6 +112,18 @@ const FAILURE_REASONS:
       "Vehicle issue",
     other:
       "Other",
+  };
+
+const HANDOVER_STATUS_LABELS:
+  Record<string, string> = {
+    not_submitted:
+      "Not submitted",
+    submitted:
+      "Submitted",
+    handed_over:
+      "Verified",
+    short_collected:
+      "Short collected",
   };
 
 function getTodayDateId() {
@@ -213,6 +254,14 @@ function getOrderBottleCount(order: DeliveryControlOrder) {
   );
 }
 
+function getHandoverStatusLabel(status: string) {
+  return (
+    HANDOVER_STATUS_LABELS[
+      status
+    ] || status
+  );
+}
+
 export default function DeliveryControlPage() {
   const navigate =
     useNavigate();
@@ -238,6 +287,14 @@ export default function DeliveryControlPage() {
     );
 
   const [
+    handoverData,
+    setHandoverData,
+  ] =
+    useState<AdminDeliveryCashHandoverResult>(
+      EMPTY_HANDOVER_RESULT
+    );
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -248,8 +305,23 @@ export default function DeliveryControlPage() {
   ] = useState<string | null>(null);
 
   const [
+    actionBatchId,
+    setActionBatchId,
+  ] = useState<string | null>(null);
+
+  const [
     noteByOrder,
     setNoteByOrder,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    receivedAmountByBatch,
+    setReceivedAmountByBatch,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    adminNoteByBatch,
+    setAdminNoteByBatch,
   ] = useState<Record<string, string>>({});
 
   const [
@@ -268,6 +340,11 @@ export default function DeliveryControlPage() {
         setData(
           EMPTY_RESULT
         );
+
+        setHandoverData(
+          EMPTY_HANDOVER_RESULT
+        );
+
         setLoading(false);
         return;
       }
@@ -276,13 +353,26 @@ export default function DeliveryControlPage() {
       setError(null);
 
       try {
-        const result =
-          await fetchDeliveryControlSummary(
-            token,
-            selectedDate
-          );
+        const [
+          result,
+          handoverResult,
+        ] =
+          await Promise.all([
+            fetchDeliveryControlSummary(
+              token,
+              selectedDate
+            ),
+
+            fetchAdminDeliveryCashHandoverSummary(
+              token,
+              selectedDate
+            ),
+          ]);
 
         setData(result);
+        setHandoverData(
+          handoverResult
+        );
 
         setNoteByOrder(
           (currentValues) => {
@@ -304,6 +394,51 @@ export default function DeliveryControlPage() {
               ) {
                 next[order._id] =
                   order.deliveryAdminNote ||
+                  "";
+              }
+            }
+
+            return next;
+          }
+        );
+
+        setReceivedAmountByBatch(
+          (currentValues) => {
+            const next = {
+              ...currentValues,
+            };
+
+            for (const batch of handoverResult.submittedBatches) {
+              if (
+                next[batch.batchId] ===
+                undefined
+              ) {
+                next[batch.batchId] =
+                  String(
+                    batch.submittedAmount ||
+                      batch.expectedAmount ||
+                      ""
+                  );
+              }
+            }
+
+            return next;
+          }
+        );
+
+        setAdminNoteByBatch(
+          (currentValues) => {
+            const next = {
+              ...currentValues,
+            };
+
+            for (const batch of handoverResult.handoverBatches) {
+              if (
+                next[batch.batchId] ===
+                undefined
+              ) {
+                next[batch.batchId] =
+                  batch.adminNote ||
                   "";
               }
             }
@@ -381,6 +516,7 @@ export default function DeliveryControlPage() {
     setActionOrderId(
       order._id
     );
+
     setError(null);
     setSuccess(null);
 
@@ -418,6 +554,7 @@ export default function DeliveryControlPage() {
     setActionOrderId(
       order._id
     );
+
     setError(null);
     setSuccess(null);
 
@@ -444,6 +581,91 @@ export default function DeliveryControlPage() {
     }
   }
 
+  async function handleVerifyHandover(
+    batch: AdminDeliveryCashHandoverBatch
+  ) {
+    if (
+      !token ||
+      actionBatchId
+    ) {
+      return;
+    }
+
+    const receivedAmount =
+      Number(
+        receivedAmountByBatch[batch.batchId] ||
+          batch.submittedAmount ||
+          batch.expectedAmount ||
+          0
+      );
+
+    if (
+      !Number.isFinite(receivedAmount) ||
+      receivedAmount < 0
+    ) {
+      setError(
+        "Enter a valid received cash amount."
+      );
+
+      return;
+    }
+
+    const shortAmount =
+      Math.max(
+        Number(batch.expectedAmount || 0) -
+          receivedAmount,
+        0
+      );
+
+    const confirmed =
+      window.confirm(
+        shortAmount > 0
+          ? `Verify ${batch.batchId} with short amount ${formatCurrency(shortAmount)}?`
+          : `Verify ${batch.batchId} as fully received?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActionBatchId(
+      batch.batchId
+    );
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await verifyAdminDeliveryCashHandover(
+        token,
+        batch.batchId,
+        {
+          receivedAmount,
+
+          adminNote:
+            adminNoteByBatch[batch.batchId] ||
+            "",
+        }
+      );
+
+      setSuccess(
+        shortAmount > 0
+          ? `${batch.batchId} verified with short amount ${formatCurrency(shortAmount)}.`
+          : `${batch.batchId} verified successfully.`
+      );
+
+      await loadControl();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to verify cash handover."
+      );
+    } finally {
+      setActionBatchId(null);
+    }
+  }
+
   function openOrder(order: DeliveryControlOrder) {
     navigate(
       `/orders?search=${encodeURIComponent(
@@ -465,7 +687,7 @@ export default function DeliveryControlPage() {
           </h2>
 
           <p>
-            Monitor open delivery pool, accepted orders, partner workload, failed attempts, COD collection and stuck deliveries without manually assigning partners.
+            Monitor open pool, accepted orders, partner workload, failed attempts, COD collection, cash handover and stuck deliveries without manually assigning partners.
           </p>
         </div>
 
@@ -558,23 +780,33 @@ export default function DeliveryControlPage() {
         />
 
         <Metric
-          label="COD collected"
+          label="Cash submitted"
           value={formatCurrency(
-            data.summary.codCollectedToday
-          )}
-        />
-
-        <Metric
-          label="Cash handover"
-          value={formatCurrency(
-            data.summary.pendingCashHandoverAmount
+            handoverData.summary.submittedAmount
           )}
           warning={
-            data.summary.pendingCashHandoverAmount >
+            handoverData.summary.submittedAmount >
             0
           }
         />
+
+        <Metric
+          label="Cash verified"
+          value={formatCurrency(
+            handoverData.summary.verifiedAmount
+          )}
+        />
       </section>
+
+      <CashSettlementPanel
+        handoverData={handoverData}
+        receivedAmountByBatch={receivedAmountByBatch}
+        setReceivedAmountByBatch={setReceivedAmountByBatch}
+        adminNoteByBatch={adminNoteByBatch}
+        setAdminNoteByBatch={setAdminNoteByBatch}
+        actionBatchId={actionBatchId}
+        onVerify={handleVerifyHandover}
+      />
 
       <section className="delivery-control-section-heading">
         <div>
@@ -793,6 +1025,492 @@ function Metric({
   );
 }
 
+function CashSettlementPanel({
+  handoverData,
+  receivedAmountByBatch,
+  setReceivedAmountByBatch,
+  adminNoteByBatch,
+  setAdminNoteByBatch,
+  actionBatchId,
+  onVerify,
+}: {
+  handoverData: AdminDeliveryCashHandoverResult;
+  receivedAmountByBatch: Record<string, string>;
+  setReceivedAmountByBatch: Dispatch<
+    SetStateAction<Record<string, string>>
+  >;
+  adminNoteByBatch: Record<string, string>;
+  setAdminNoteByBatch: Dispatch<
+    SetStateAction<Record<string, string>>
+  >;
+  actionBatchId: string | null;
+  onVerify: (
+    batch: AdminDeliveryCashHandoverBatch
+  ) => Promise<void>;
+}) {
+  return (
+    <section className="delivery-settlement-card">
+      <div className="delivery-settlement-top">
+        <div>
+          <span>
+            CASH SETTLEMENT CENTER
+          </span>
+
+          <h3>
+            Delivery cash handover
+          </h3>
+
+          <p>
+            Delivery partners submit COD cash at end shift. Verify received cash here and close the handover as verified or short collected.
+          </p>
+        </div>
+
+        <strong>
+          {handoverData.summary.dateId ||
+            "Today"}
+        </strong>
+      </div>
+
+      <div className="delivery-settlement-metrics">
+        <SettlementMetric
+          label="Not submitted"
+          value={formatCurrency(
+            handoverData.summary.notSubmittedAmount
+          )}
+          count={handoverData.summary.notSubmittedCount}
+          warning={
+            handoverData.summary.notSubmittedAmount >
+            0
+          }
+        />
+
+        <SettlementMetric
+          label="Submitted"
+          value={formatCurrency(
+            handoverData.summary.submittedAmount
+          )}
+          count={handoverData.summary.submittedCount}
+          warning={
+            handoverData.summary.submittedAmount >
+            0
+          }
+        />
+
+        <SettlementMetric
+          label="Verified"
+          value={formatCurrency(
+            handoverData.summary.verifiedAmount
+          )}
+          count={handoverData.summary.verifiedCount}
+        />
+
+        <SettlementMetric
+          label="Short amount"
+          value={formatCurrency(
+            handoverData.summary.shortAmount
+          )}
+          count={0}
+          danger={
+            handoverData.summary.shortAmount >
+            0
+          }
+        />
+      </div>
+
+      <div className="delivery-control-section-heading compact">
+        <div>
+          <span>
+            PENDING ADMIN VERIFICATION
+          </span>
+
+          <h3>
+            Submitted handovers
+          </h3>
+
+          <p>
+            Verify only after physically receiving the delivery partner’s cash.
+          </p>
+        </div>
+
+        <strong>
+          {handoverData.submittedBatches.length} batches
+        </strong>
+      </div>
+
+      {handoverData.submittedBatches.length === 0 ? (
+        <EmptyState
+          title="No submitted cash handovers"
+          description="When a delivery partner submits end-shift cash, it will appear here for admin verification."
+        />
+      ) : (
+        <section className="delivery-settlement-batch-grid">
+          {handoverData.submittedBatches.map(
+            (batch) => (
+              <HandoverBatchCard
+                key={batch.batchId}
+                batch={batch}
+                receivedAmount={
+                  receivedAmountByBatch[batch.batchId] ||
+                  ""
+                }
+                setReceivedAmount={(value) =>
+                  setReceivedAmountByBatch(
+                    (currentValues) => ({
+                      ...currentValues,
+                      [batch.batchId]:
+                        value,
+                    })
+                  )
+                }
+                adminNote={
+                  adminNoteByBatch[batch.batchId] ||
+                  ""
+                }
+                setAdminNote={(value) =>
+                  setAdminNoteByBatch(
+                    (currentValues) => ({
+                      ...currentValues,
+                      [batch.batchId]:
+                        value,
+                    })
+                  )
+                }
+                actionBatchId={actionBatchId}
+                onVerify={onVerify}
+                canVerify
+              />
+            )
+          )}
+        </section>
+      )}
+
+      <div className="delivery-control-section-heading compact">
+        <div>
+          <span>
+            PARTNER NOT SUBMITTED
+          </span>
+
+          <h3>
+            Collected but not handed over
+          </h3>
+        </div>
+
+        <strong>
+          {handoverData.notSubmittedBatches.length} rows
+        </strong>
+      </div>
+
+      {handoverData.notSubmittedBatches.length === 0 ? (
+        <EmptyState
+          title="No unsubmitted cash"
+          description="All collected COD cash has either been submitted or verified."
+        />
+      ) : (
+        <section className="delivery-settlement-batch-grid">
+          {handoverData.notSubmittedBatches.map(
+            (batch) => (
+              <HandoverBatchCard
+                key={batch.batchId}
+                batch={batch}
+                receivedAmount=""
+                setReceivedAmount={() => {}}
+                adminNote=""
+                setAdminNote={() => {}}
+                actionBatchId={actionBatchId}
+                onVerify={onVerify}
+              />
+            )
+          )}
+        </section>
+      )}
+
+      <div className="delivery-control-section-heading compact">
+        <div>
+          <span>
+            VERIFIED CASH
+          </span>
+
+          <h3>
+            Completed handovers
+          </h3>
+        </div>
+
+        <strong>
+          {handoverData.verifiedBatches.length} batches
+        </strong>
+      </div>
+
+      {handoverData.verifiedBatches.length === 0 ? (
+        <EmptyState
+          title="No verified handovers yet"
+          description="Verified or short-collected handovers will appear here."
+        />
+      ) : (
+        <section className="delivery-settlement-batch-grid">
+          {handoverData.verifiedBatches.map(
+            (batch) => (
+              <HandoverBatchCard
+                key={batch.batchId}
+                batch={batch}
+                receivedAmount=""
+                setReceivedAmount={() => {}}
+                adminNote=""
+                setAdminNote={() => {}}
+                actionBatchId={actionBatchId}
+                onVerify={onVerify}
+              />
+            )
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
+function SettlementMetric({
+  label,
+  value,
+  count,
+  warning = false,
+  danger = false,
+}: {
+  label: string;
+  value: string;
+  count: number;
+  warning?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <article
+      className={`delivery-settlement-metric ${
+        danger
+          ? "danger"
+          : warning
+            ? "warning"
+            : ""
+      }`}
+    >
+      <span>
+        {label}
+      </span>
+
+      <strong>
+        {value}
+      </strong>
+
+      {count > 0 ? (
+        <p>
+          {count} records
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function HandoverBatchCard({
+  batch,
+  receivedAmount,
+  setReceivedAmount,
+  adminNote,
+  setAdminNote,
+  actionBatchId,
+  onVerify,
+  canVerify = false,
+}: {
+  batch: AdminDeliveryCashHandoverBatch;
+  receivedAmount: string;
+  setReceivedAmount: (value: string) => void;
+  adminNote: string;
+  setAdminNote: (value: string) => void;
+  actionBatchId: string | null;
+  onVerify: (
+    batch: AdminDeliveryCashHandoverBatch
+  ) => Promise<void>;
+  canVerify?: boolean;
+}) {
+  const expectedAmount =
+    Number(batch.expectedAmount || 0);
+
+  const received =
+    Number(
+      receivedAmount ||
+      batch.receivedAmount ||
+      batch.submittedAmount ||
+      expectedAmount ||
+      0
+    );
+
+  const shortAmount =
+    canVerify
+      ? Math.max(
+          expectedAmount - received,
+          0
+        )
+      : Number(batch.shortAmount || 0);
+
+  return (
+    <article
+      className={`delivery-settlement-batch-card status-${batch.status}`}
+    >
+      <div className="settlement-batch-top">
+        <div>
+          <strong>
+            {batch.partner.fullName}
+          </strong>
+
+          <span>
+            {batch.partner.phone ||
+              batch.partner.email ||
+              "No contact"}
+          </span>
+        </div>
+
+        <b>
+          {getHandoverStatusLabel(batch.status)}
+        </b>
+      </div>
+
+      <div className="settlement-batch-id">
+        {batch.batchId}
+      </div>
+
+      <div className="settlement-batch-metrics">
+        <div>
+          <span>
+            Expected
+          </span>
+
+          <strong>
+            {formatCurrency(batch.expectedAmount)}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            Submitted
+          </span>
+
+          <strong>
+            {formatCurrency(batch.submittedAmount)}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            Orders
+          </span>
+
+          <strong>
+            {batch.orderCount}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            Short
+          </span>
+
+          <strong>
+            {formatCurrency(shortAmount)}
+          </strong>
+        </div>
+      </div>
+
+      {batch.partnerNote ? (
+        <p className="settlement-note">
+          Partner note: {batch.partnerNote}
+        </p>
+      ) : null}
+
+      {batch.adminNote ? (
+        <p className="settlement-note">
+          Admin note: {batch.adminNote}
+        </p>
+      ) : null}
+
+      {batch.orders.length > 0 ? (
+        <div className="settlement-order-list">
+          {batch.orders.slice(0, 6).map((order) => (
+            <div key={order.id}>
+              <span>
+                {order.orderNumber}
+              </span>
+
+              <strong>
+                {formatCurrency(order.amountCollected)}
+              </strong>
+            </div>
+          ))}
+
+          {batch.orders.length > 6 ? (
+            <small>
+              +{batch.orders.length - 6} more orders
+            </small>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canVerify ? (
+        <div className="settlement-verify-panel">
+          <label>
+            Amount received
+          </label>
+
+          <input
+            inputMode="numeric"
+            value={receivedAmount}
+            onChange={(event) =>
+              setReceivedAmount(
+                event.target.value.replace(
+                  /[^\d.]/g,
+                  ""
+                )
+              )
+            }
+            placeholder="Amount received from partner"
+          />
+
+          <label>
+            Admin note
+          </label>
+
+          <input
+            value={adminNote}
+            onChange={(event) =>
+              setAdminNote(
+                event.target.value
+              )
+            }
+            placeholder="Optional verification note"
+          />
+
+          {shortAmount > 0 ? (
+            <div className="settlement-short-warning">
+              Short amount: {formatCurrency(shortAmount)}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            disabled={
+              actionBatchId === batch.batchId
+            }
+            onClick={() => {
+              void onVerify(batch);
+            }}
+          >
+            {actionBatchId === batch.batchId
+              ? "Verifying..."
+              : shortAmount > 0
+                ? "Verify as short"
+                : "Verify cash received"}
+          </button>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function PartnerCard({
   row,
 }: {
@@ -884,8 +1602,8 @@ function OrderSection({
   emptyTitle: string;
   emptyDescription: string;
   noteByOrder: Record<string, string>;
-  setNoteByOrder: React.Dispatch<
-    React.SetStateAction<Record<string, string>>
+  setNoteByOrder: Dispatch<
+    SetStateAction<Record<string, string>>
   >;
   actionOrderId: string | null;
   onOpen: (order: DeliveryControlOrder) => void;

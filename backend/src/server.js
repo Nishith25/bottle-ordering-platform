@@ -12,6 +12,9 @@ const adminRoutes = require("./routes/admin");
 const adminBatchRoutes = require("./routes/adminBatches");
 const adminCostingRoutes = require("./routes/adminCosting");
 const adminCouponRoutes = require("./routes/adminCoupons");
+const adminDeliveryCashHandoverRoutes = require(
+  "./routes/adminDeliveryCashHandover"
+);
 const adminDeliveryControlRoutes = require(
   "./routes/adminDeliveryControl"
 );
@@ -63,6 +66,9 @@ const adminExportCenterRoutes = require(
 
 const authRoutes = require("./routes/auth");
 const couponRoutes = require("./routes/coupons");
+const deliveryCashHandoverRoutes = require(
+  "./routes/deliveryCashHandover"
+);
 const deliveryOrderRoutes = require(
   "./routes/deliveryOrders"
 );
@@ -434,6 +440,16 @@ app.use(
 app.use(
   "/api/delivery/orders",
   deliveryOrderRoutes
+);
+
+app.use(
+  "/api/delivery/cash-handover",
+  deliveryCashHandoverRoutes
+);
+
+app.use(
+  "/api/admin/delivery-cash-handover",
+  adminDeliveryCashHandoverRoutes
 );
 
 app.use(

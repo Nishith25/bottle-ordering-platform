@@ -1566,3 +1566,207 @@
     grid-template-columns: 1fr;
   }
 }
+.delivery-cash-handover-card {
+  margin-bottom: 16px;
+  padding: 17px;
+  border: 1px solid #ead9a9;
+  border-radius: 22px;
+  background: #fffaf0;
+}
+
+.delivery-cash-handover-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.delivery-cash-handover-top span {
+  color: #80641b;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.delivery-cash-handover-top h2 {
+  margin: 6px 0;
+  color: #3c2f0c;
+  font-size: 16px;
+}
+
+.delivery-cash-handover-top p {
+  margin: 0;
+  color: #705a1c;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.delivery-cash-handover-top input {
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid #decf9f;
+  border-radius: 13px;
+  background: #ffffff;
+  color: #3c2f0c;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.delivery-cash-handover-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.delivery-handover-order-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.delivery-handover-order-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #ead9a9;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.delivery-handover-order-list span {
+  color: #80641b;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.delivery-handover-order-list strong {
+  color: #3c2f0c;
+  font-size: 10px;
+}
+
+.delivery-handover-empty {
+  margin-top: 13px;
+  padding: 12px;
+  border: 1px solid #ead9a9;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #80641b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.delivery-handover-action {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.delivery-handover-action label {
+  display: block;
+  margin-bottom: 6px;
+  color: #80641b;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.delivery-handover-action input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #decf9f;
+  border-radius: 13px;
+  background: #ffffff;
+  color: #3c2f0c;
+  font-size: 10px;
+  font-weight: 800;
+  outline: none;
+}
+
+.delivery-handover-action input:focus {
+  border-color: #bc9f58;
+  box-shadow: 0 0 0 3px rgba(188, 159, 88, 0.16);
+}
+
+.delivery-handover-action button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 14px;
+  background: #80641b;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.delivery-handover-action button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.delivery-handover-batches {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #ead9a9;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.delivery-handover-batches > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #3c2f0c;
+  font-size: 10px;
+}
+
+.delivery-handover-batches div {
+  padding: 8px 0;
+  border-top: 1px solid #f0e5c4;
+}
+
+.delivery-handover-batches div:first-of-type {
+  border-top: 0;
+}
+
+.delivery-handover-batches span {
+  display: block;
+  color: #80641b;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.delivery-handover-batches p {
+  margin: 4px 0 0;
+  color: #594515;
+  font-size: 9px;
+}
+
+@media (max-width: 900px) {
+  .delivery-cash-handover-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .delivery-handover-action {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .delivery-cash-handover-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .delivery-cash-handover-top input,
+  .delivery-handover-action button {
+    width: 100%;
+  }
+}

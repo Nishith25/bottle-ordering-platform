@@ -27,6 +27,12 @@ import {
   type DeliveryPerformanceReview,
 } from "../services/adminDeliveryApi";
 
+import {
+  fetchDeliveryCashHandoverSummary,
+  submitDeliveryCashHandover,
+  type DeliveryCashHandoverResult,
+} from "../services/deliveryCashHandoverApi";
+
 import "./deliveryDashboard.css";
 
 const CUSTOMER_APP_URL = (
@@ -69,69 +75,79 @@ const EMPTY_CASH_SUMMARY:
     deliveredBottleCountToday: 0,
   };
 
-const DELIVERY_LABELS = {
+const EMPTY_HANDOVER_RESULT:
+  DeliveryCashHandoverResult = {
+    summary: {
+      dateId: "",
+      pendingSubmitCount: 0,
+      pendingSubmitAmount: 0,
+      submittedCount: 0,
+      submittedAmount: 0,
+      verifiedCount: 0,
+      verifiedAmount: 0,
+      shortAmount: 0,
+      totalRows: 0,
+    },
+    pendingCollections: [],
+    submittedBatches: [],
+    verifiedBatches: [],
+  };
+
+const DELIVERY_LABELS: Record<string, string> = {
   unassigned: "Unassigned",
   assigned: "Assigned",
   picked_up: "Picked up",
-  out_for_delivery:
-    "Out for delivery",
+  out_for_delivery: "Out for delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
-} as const;
+};
 
 const FAILURE_REASONS: Array<{
   value: DeliveryFailureReason;
   label: string;
 }> = [
   {
-    value:
-      "customer_not_available",
-    label:
-      "Customer not available",
+    value: "customer_not_available",
+    label: "Customer not available",
   },
   {
-    value:
-      "customer_no_response",
-    label:
-      "No response",
+    value: "customer_no_response",
+    label: "No response",
   },
   {
-    value:
-      "wrong_address",
-    label:
-      "Wrong address",
+    value: "wrong_address",
+    label: "Wrong address",
   },
   {
-    value:
-      "payment_issue",
-    label:
-      "Payment issue",
+    value: "payment_issue",
+    label: "Payment issue",
   },
   {
-    value:
-      "otp_issue",
-    label:
-      "OTP issue",
+    value: "otp_issue",
+    label: "OTP issue",
   },
   {
-    value:
-      "customer_requested_later",
-    label:
-      "Requested later",
+    value: "customer_requested_later",
+    label: "Requested later",
   },
   {
-    value:
-      "vehicle_issue",
-    label:
-      "Vehicle issue",
+    value: "vehicle_issue",
+    label: "Vehicle issue",
   },
   {
-    value:
-      "other",
-    label:
-      "Other",
+    value: "other",
+    label: "Other",
   },
 ];
+
+function getTodayDateId() {
+  return new Date().toLocaleDateString(
+    "en-CA",
+    {
+      timeZone: "Asia/Kolkata",
+    }
+  );
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat(
@@ -149,8 +165,7 @@ function formatDate(value?: string | null) {
     return "Unavailable";
   }
 
-  const parsedDate =
-    new Date(value);
+  const parsedDate = new Date(value);
 
   if (
     Number.isNaN(
@@ -173,17 +188,20 @@ function formatDate(value?: string | null) {
 }
 
 function cleanIndianPhone(value?: string | null) {
-  const digits =
-    String(value || "").replace(
-      /\D/g,
-      ""
-    );
+  const digits = String(value || "").replace(
+    /\D/g,
+    ""
+  );
 
   if (digits.length >= 10) {
     return digits.slice(-10);
   }
 
   return digits;
+}
+
+function getDeliveryStatusLabel(value?: string) {
+  return DELIVERY_LABELS[value || ""] || value || "Unknown";
 }
 
 function getCustomerName(order: DeliveryOrder) {
@@ -213,28 +231,24 @@ function getCustomerPhone(order: DeliveryOrder) {
 }
 
 function getReviewCustomerName(
-  review:
-    DeliveryPerformanceReview
+  review: DeliveryPerformanceReview
 ) {
   if (
     review.user &&
-    typeof review.user ===
-      "object" &&
+    typeof review.user === "object" &&
     review.user.fullName
   ) {
     return review.user.fullName;
   }
 
   return (
-    review.customerSnapshot
-      ?.fullName ||
+    review.customerSnapshot?.fullName ||
     "Customer"
   );
 }
 
 function getFullAddress(order: DeliveryOrder) {
-  const address =
-    order.deliveryAddress;
+  const address = order.deliveryAddress;
 
   return [
     address.houseDetails,
@@ -253,8 +267,7 @@ function getFullAddress(order: DeliveryOrder) {
 function getFailureReasonLabel(value?: string) {
   return (
     FAILURE_REASONS.find(
-      (reason) =>
-        reason.value === value
+      (reason) => reason.value === value
     )?.label ||
     "Failed delivery"
   );
@@ -265,7 +278,7 @@ function buildDeliverySummary(order: DeliveryOrder) {
     `Order: ${order.orderNumber}`,
     `Customer: ${getCustomerName(order)}`,
     `Phone: +91 ${getCustomerPhone(order)}`,
-    `Status: ${DELIVERY_LABELS[order.deliveryStatus]}`,
+    `Status: ${getDeliveryStatusLabel(order.deliveryStatus)}`,
     `Payment: ${
       order.paymentMethod === "cod"
         ? "Collect cash"
@@ -276,31 +289,27 @@ function buildDeliverySummary(order: DeliveryOrder) {
     `Address: ${getFullAddress(order)}`,
     `Items: ${order.items
       .map(
-        (item) =>
-          `${item.quantity} x ${item.name}`
+        (item) => `${item.quantity} x ${item.name}`
       )
       .join(", ")}`,
   ].join("\n");
 }
 
 function openCall(phone: string) {
-  const cleanPhone =
-    cleanIndianPhone(phone);
+  const cleanPhone = cleanIndianPhone(phone);
 
   if (!cleanPhone) {
     return;
   }
 
-  window.location.href =
-    `tel:+91${cleanPhone}`;
+  window.location.href = `tel:+91${cleanPhone}`;
 }
 
 function openWhatsApp(
   phone: string,
   message: string
 ) {
-  const cleanPhone =
-    cleanIndianPhone(phone);
+  const cleanPhone = cleanIndianPhone(phone);
 
   if (!cleanPhone) {
     return;
@@ -342,9 +351,7 @@ async function copyText(text: string) {
     navigator.clipboard &&
     navigator.clipboard.writeText
   ) {
-    await navigator.clipboard.writeText(
-      text
-    );
+    await navigator.clipboard.writeText(text);
     return;
   }
 
@@ -369,6 +376,11 @@ export default function DeliveryDashboardPage() {
   } = useAdminAuth();
 
   const [
+    selectedHandoverDate,
+    setSelectedHandoverDate,
+  ] = useState(getTodayDateId());
+
+  const [
     availableOrders,
     setAvailableOrders,
   ] = useState<DeliveryOrder[]>([]);
@@ -381,26 +393,30 @@ export default function DeliveryDashboardPage() {
   const [
     statusCounts,
     setStatusCounts,
-  ] =
-    useState<DeliveryOrderStatusCounts>(
-      EMPTY_COUNTS
-    );
+  ] = useState<DeliveryOrderStatusCounts>(
+    EMPTY_COUNTS
+  );
 
   const [
     performance,
     setPerformance,
-  ] =
-    useState<DeliveryPerformance>(
-      EMPTY_PERFORMANCE
-    );
+  ] = useState<DeliveryPerformance>(
+    EMPTY_PERFORMANCE
+  );
 
   const [
     cashSummary,
     setCashSummary,
-  ] =
-    useState<DeliveryCashSummary>(
-      EMPTY_CASH_SUMMARY
-    );
+  ] = useState<DeliveryCashSummary>(
+    EMPTY_CASH_SUMMARY
+  );
+
+  const [
+    handoverData,
+    setHandoverData,
+  ] = useState<DeliveryCashHandoverResult>(
+    EMPTY_HANDOVER_RESULT
+  );
 
   const [
     filter,
@@ -421,6 +437,21 @@ export default function DeliveryDashboardPage() {
     savingNoteOrderId,
     setSavingNoteOrderId,
   ] = useState<string | null>(null);
+
+  const [
+    submittingHandover,
+    setSubmittingHandover,
+  ] = useState(false);
+
+  const [
+    handoverAmount,
+    setHandoverAmount,
+  ] = useState("");
+
+  const [
+    handoverNote,
+    setHandoverNote,
+  ] = useState("");
 
   const [
     otpByOrder,
@@ -445,8 +476,7 @@ export default function DeliveryDashboardPage() {
   const [
     failureReasonByOrder,
     setFailureReasonByOrder,
-  ] =
-    useState<Record<string, DeliveryFailureReason>>({});
+  ] = useState<Record<string, DeliveryFailureReason>>({});
 
   const [
     failureNoteByOrder,
@@ -473,17 +503,11 @@ export default function DeliveryDashboardPage() {
       if (!token) {
         setAvailableOrders([]);
         setOrders([]);
-        setStatusCounts(
-          EMPTY_COUNTS
-        );
-        setPerformance(
-          EMPTY_PERFORMANCE
-        );
-        setCashSummary(
-          EMPTY_CASH_SUMMARY
-        );
+        setStatusCounts(EMPTY_COUNTS);
+        setPerformance(EMPTY_PERFORMANCE);
+        setCashSummary(EMPTY_CASH_SUMMARY);
+        setHandoverData(EMPTY_HANDOVER_RESULT);
         setLoading(false);
-
         return;
       }
 
@@ -496,21 +520,15 @@ export default function DeliveryDashboardPage() {
           orderResult,
           performanceResult,
           cashSummaryResult,
+          handoverResult,
         ] = await Promise.all([
-          fetchAvailableDeliveryOrders(
-            token
-          ),
-
-          fetchAssignedDeliveryOrders(
-            token
-          ),
-
-          fetchDeliveryPerformance(
-            token
-          ),
-
-          fetchDeliveryCashSummary(
-            token
+          fetchAvailableDeliveryOrders(token),
+          fetchAssignedDeliveryOrders(token),
+          fetchDeliveryPerformance(token),
+          fetchDeliveryCashSummary(token),
+          fetchDeliveryCashHandoverSummary(
+            token,
+            selectedHandoverDate
           ),
         ]);
 
@@ -518,22 +536,29 @@ export default function DeliveryDashboardPage() {
           availableOrderResult
         );
 
-        setOrders(
-          orderResult.orders
-        );
+        setOrders(orderResult.orders);
 
         setStatusCounts({
           ...EMPTY_COUNTS,
           ...orderResult.statusCounts,
         });
 
-        setPerformance(
-          performanceResult
-        );
+        setPerformance(performanceResult);
+        setCashSummary(cashSummaryResult);
+        setHandoverData(handoverResult);
 
-        setCashSummary(
-          cashSummaryResult
-        );
+        if (
+          !handoverAmount ||
+          Number(handoverAmount) === 0
+        ) {
+          setHandoverAmount(
+            handoverResult.summary.pendingSubmitAmount > 0
+              ? String(
+                  handoverResult.summary.pendingSubmitAmount
+                )
+              : ""
+          );
+        }
 
         setNoteByOrder(
           (currentValues) => {
@@ -543,8 +568,7 @@ export default function DeliveryDashboardPage() {
 
             for (const order of orderResult.orders) {
               if (
-                next[order._id] ===
-                undefined
+                next[order._id] === undefined
               ) {
                 next[order._id] =
                   order.deliveryPartnerNote || "";
@@ -563,8 +587,7 @@ export default function DeliveryDashboardPage() {
 
             for (const order of orderResult.orders) {
               if (
-                next[order._id] ===
-                undefined
+                next[order._id] === undefined
               ) {
                 next[order._id] =
                   String(order.total || "");
@@ -583,8 +606,7 @@ export default function DeliveryDashboardPage() {
 
             for (const order of orderResult.orders) {
               if (
-                next[order._id] ===
-                undefined
+                next[order._id] === undefined
               ) {
                 next[order._id] =
                   "customer_not_available";
@@ -603,11 +625,17 @@ export default function DeliveryDashboardPage() {
       } finally {
         setLoading(false);
       }
-    }, [token]);
+    }, [
+      token,
+      selectedHandoverDate,
+      handoverAmount,
+    ]);
 
   useEffect(() => {
     void loadDashboard();
-  }, [loadDashboard]);
+  }, [
+    loadDashboard,
+  ]);
 
   const visibleOrders =
     useMemo(() => {
@@ -622,9 +650,7 @@ export default function DeliveryDashboardPage() {
               "assigned",
               "picked_up",
               "out_for_delivery",
-            ].includes(
-              order.deliveryStatus
-            )
+            ].includes(order.deliveryStatus)
         );
       }
 
@@ -638,10 +664,12 @@ export default function DeliveryDashboardPage() {
 
       return orders.filter(
         (order) =>
-          order.deliveryStatus ===
-          filter
+          order.deliveryStatus === filter
       );
-    }, [orders, filter]);
+    }, [
+      orders,
+      filter,
+    ]);
 
   const updateLocalOrder =
     (updatedOrder: DeliveryOrder) => {
@@ -649,8 +677,7 @@ export default function DeliveryDashboardPage() {
         (currentOrders) =>
           currentOrders.map(
             (order) =>
-              order._id ===
-              updatedOrder._id
+              order._id === updatedOrder._id
                 ? updatedOrder
                 : order
           )
@@ -663,6 +690,83 @@ export default function DeliveryDashboardPage() {
             updatedOrder.deliveryPartnerNote || "",
         })
       );
+    };
+
+  const handleSubmitCashHandover =
+    async () => {
+      if (
+        !token ||
+        submittingHandover
+      ) {
+        return;
+      }
+
+      const amount =
+        Number(handoverAmount);
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        setError(
+          "Enter a valid cash handover amount."
+        );
+        return;
+      }
+
+      if (
+        handoverData.summary.pendingSubmitAmount <= 0
+      ) {
+        setError(
+          "There is no collected COD cash pending for handover."
+        );
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          `Submit ${formatCurrency(amount)} as cash handover to admin?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setSubmittingHandover(true);
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const batch =
+          await submitDeliveryCashHandover(
+            token,
+            {
+              dateId:
+                selectedHandoverDate,
+              amountSubmitted:
+                amount,
+              note:
+                handoverNote,
+            }
+          );
+
+        setSuccess(
+          `Cash handover ${batch.batchId} submitted to admin.`
+        );
+
+        setHandoverAmount("");
+        setHandoverNote("");
+
+        await loadDashboard();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to submit cash handover."
+        );
+      } finally {
+        setSubmittingHandover(false);
+      }
     };
 
   const handleAcceptAvailableOrder =
@@ -683,10 +787,7 @@ export default function DeliveryDashboardPage() {
         return;
       }
 
-      setUpdatingOrderId(
-        order._id
-      );
-
+      setUpdatingOrderId(order._id);
       setError(null);
       setSuccess(null);
 
@@ -714,7 +815,7 @@ export default function DeliveryDashboardPage() {
         );
 
         setSuccess(
-          `${acceptedOrder.orderNumber} accepted successfully. Scroll to My delivery operations to continue.`
+          `${acceptedOrder.orderNumber} accepted successfully.`
         );
 
         setFilter("active");
@@ -747,10 +848,7 @@ export default function DeliveryDashboardPage() {
         return;
       }
 
-      setUpdatingOrderId(
-        order._id
-      );
-
+      setUpdatingOrderId(order._id);
       setError(null);
       setSuccess(null);
 
@@ -762,9 +860,7 @@ export default function DeliveryDashboardPage() {
             nextStatus
           );
 
-        updateLocalOrder(
-          updatedOrder
-        );
+        updateLocalOrder(updatedOrder);
 
         setSuccess(
           nextStatus === "picked_up"
@@ -780,9 +876,7 @@ export default function DeliveryDashboardPage() {
             : "Unable to update delivery status."
         );
       } finally {
-        setUpdatingOrderId(
-          null
-        );
+        setUpdatingOrderId(null);
       }
     };
 
@@ -795,10 +889,7 @@ export default function DeliveryDashboardPage() {
         return;
       }
 
-      setSavingNoteOrderId(
-        order._id
-      );
-
+      setSavingNoteOrderId(order._id);
       setError(null);
       setSuccess(null);
 
@@ -810,9 +901,7 @@ export default function DeliveryDashboardPage() {
             noteByOrder[order._id] || ""
           );
 
-        updateLocalOrder(
-          updatedOrder
-        );
+        updateLocalOrder(updatedOrder);
 
         setSuccess(
           `${order.orderNumber} delivery note saved.`
@@ -853,10 +942,7 @@ export default function DeliveryDashboardPage() {
         return;
       }
 
-      setUpdatingOrderId(
-        order._id
-      );
-
+      setUpdatingOrderId(order._id);
       setError(null);
       setSuccess(null);
 
@@ -871,9 +957,7 @@ export default function DeliveryDashboardPage() {
             }
           );
 
-        updateLocalOrder(
-          updatedOrder
-        );
+        updateLocalOrder(updatedOrder);
 
         setFailureNoteByOrder(
           (currentValues) => ({
@@ -908,15 +992,13 @@ export default function DeliveryDashboardPage() {
       }
 
       const otp = (
-        otpByOrder[order._id] ||
-        ""
+        otpByOrder[order._id] || ""
       ).replace(/\D/g, "");
 
       if (otp.length !== 4) {
         setError(
           "Enter the customer's 4-digit delivery OTP."
         );
-
         return;
       }
 
@@ -933,11 +1015,13 @@ export default function DeliveryDashboardPage() {
             0
         );
 
-      if (isCod && !codConfirmed) {
+      if (
+        isCod &&
+        !codConfirmed
+      ) {
         setError(
           "Confirm COD cash collection before verifying OTP."
         );
-
         return;
       }
 
@@ -948,14 +1032,10 @@ export default function DeliveryDashboardPage() {
         setError(
           "Collected cash amount must be equal to the order total."
         );
-
         return;
       }
 
-      setUpdatingOrderId(
-        order._id
-      );
-
+      setUpdatingOrderId(order._id);
       setError(null);
       setSuccess(null);
 
@@ -974,9 +1054,7 @@ export default function DeliveryDashboardPage() {
               : undefined
           );
 
-        updateLocalOrder(
-          updatedOrder
-        );
+        updateLocalOrder(updatedOrder);
 
         setOtpByOrder(
           (currentValues) => ({
@@ -1015,16 +1093,13 @@ export default function DeliveryDashboardPage() {
           buildDeliverySummary(order)
         );
 
-        setCopiedOrderId(
-          order._id
-        );
+        setCopiedOrderId(order._id);
 
         window.setTimeout(
           () => {
             setCopiedOrderId(
               (currentValue) =>
-                currentValue ===
-                order._id
+                currentValue === order._id
                   ? null
                   : currentValue
             );
@@ -1058,7 +1133,7 @@ export default function DeliveryDashboardPage() {
           </h1>
 
           <p>
-            Your accepted deliveries appear first. Open orders are shown below, and only the first delivery partner who accepts gets the order.
+            Your accepted deliveries appear first. Complete COD orders, then submit cash handover at the end of your shift.
           </p>
 
           <div className="delivery-hero-progress">
@@ -1146,9 +1221,9 @@ export default function DeliveryDashboardPage() {
         />
 
         <Metric
-          label="Collected today"
+          label="Cash to handover"
           value={formatCurrency(
-            cashSummary.collectedTodayAmount
+            handoverData.summary.pendingSubmitAmount
           )}
         />
 
@@ -1156,6 +1231,169 @@ export default function DeliveryDashboardPage() {
           label="Average rating"
           value={ratingValue}
         />
+      </section>
+
+      <section className="delivery-cash-handover-card">
+        <div className="delivery-cash-handover-top">
+          <div>
+            <span>
+              END SHIFT CASH HANDOVER
+            </span>
+
+            <h2>
+              Submit COD cash to admin
+            </h2>
+
+            <p>
+              After completing COD deliveries, submit your collected cash here. Admin will verify and close your cash balance.
+            </p>
+          </div>
+
+          <input
+            type="date"
+            value={selectedHandoverDate}
+            onChange={(event) => {
+              setSelectedHandoverDate(
+                event.target.value
+              );
+              setHandoverAmount("");
+            }}
+          />
+        </div>
+
+        <div className="delivery-cash-handover-metrics">
+          <CashItem
+            label="Pending submit"
+            value={formatCurrency(
+              handoverData.summary.pendingSubmitAmount
+            )}
+          />
+
+          <CashItem
+            label="Pending orders"
+            value={handoverData.summary.pendingSubmitCount}
+          />
+
+          <CashItem
+            label="Submitted"
+            value={formatCurrency(
+              handoverData.summary.submittedAmount
+            )}
+          />
+
+          <CashItem
+            label="Verified"
+            value={formatCurrency(
+              handoverData.summary.verifiedAmount
+            )}
+          />
+
+          <CashItem
+            label="Short amount"
+            value={formatCurrency(
+              handoverData.summary.shortAmount
+            )}
+          />
+        </div>
+
+        {handoverData.pendingCollections.length > 0 ? (
+          <div className="delivery-handover-order-list">
+            {handoverData.pendingCollections.map((row) => (
+              <div key={row._id}>
+                <span>
+                  {row.orderNumber}
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    Number(
+                      row.amountCollected ||
+                        row.amountDue ||
+                        0
+                    )
+                  )}
+                </strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="delivery-handover-empty">
+            No collected COD cash pending for handover.
+          </div>
+        )}
+
+        <div className="delivery-handover-action">
+          <div>
+            <label>
+              Amount submitting
+            </label>
+
+            <input
+              inputMode="numeric"
+              value={handoverAmount}
+              onChange={(event) =>
+                setHandoverAmount(
+                  event.target.value.replace(
+                    /[^\d.]/g,
+                    ""
+                  )
+                )
+              }
+              placeholder="Enter cash amount"
+            />
+          </div>
+
+          <div>
+            <label>
+              Note
+            </label>
+
+            <input
+              value={handoverNote}
+              onChange={(event) =>
+                setHandoverNote(
+                  event.target.value
+                )
+              }
+              placeholder="Optional note for admin"
+            />
+          </div>
+
+          <button
+            type="button"
+            disabled={
+              submittingHandover ||
+              handoverData.summary.pendingSubmitAmount <= 0
+            }
+            onClick={() => {
+              void handleSubmitCashHandover();
+            }}
+          >
+            {submittingHandover
+              ? "Submitting..."
+              : "Submit handover"}
+          </button>
+        </div>
+
+        {handoverData.submittedBatches.length > 0 ? (
+          <div className="delivery-handover-batches">
+            <strong>
+              Waiting for admin verification
+            </strong>
+
+            {handoverData.submittedBatches.map((batch) => (
+              <div key={batch.batchId}>
+                <span>
+                  {batch.batchId}
+                </span>
+
+                <p>
+                  {batch.orderCount} orders · submitted {formatCurrency(batch.submittedAmount || batch.expectedAmount)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="delivery-orders-heading">
@@ -1261,11 +1499,7 @@ export default function DeliveryDashboardPage() {
                       <span
                         className={`delivery-status status-${order.deliveryStatus}`}
                       >
-                        {
-                          DELIVERY_LABELS[
-                            order.deliveryStatus
-                          ]
-                        }
+                        {getDeliveryStatusLabel(order.deliveryStatus)}
                       </span>
 
                       {order.lastDeliveryAttemptStatus === "failed" ? (
