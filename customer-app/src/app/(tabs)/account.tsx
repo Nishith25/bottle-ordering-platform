@@ -64,9 +64,7 @@ type PasswordForm = {
   confirmPassword: string;
 };
 
-function getPushTokenPreview(
-  token: string | null
-) {
+function getPushTokenPreview(token: string | null) {
   if (!token) {
     return "";
   }
@@ -103,9 +101,7 @@ function createAddressEditForm(
   };
 }
 
-function validateAddressEditForm(
-  form: AddressEditForm
-) {
+function validateAddressEditForm(form: AddressEditForm) {
   if (!form.label.trim()) {
     return "Address label is required.";
   }
@@ -141,9 +137,7 @@ function validateAddressEditForm(
   return "";
 }
 
-function validateProfileForm(
-  form: ProfileEditForm
-) {
+function validateProfileForm(form: ProfileEditForm) {
   if (form.fullName.trim().length < 2) {
     return "Full name must contain at least 2 characters.";
   }
@@ -163,9 +157,7 @@ function validateProfileForm(
   return "";
 }
 
-function validatePasswordForm(
-  form: PasswordForm
-) {
+function validatePasswordForm(form: PasswordForm) {
   if (!form.currentPassword) {
     return "Current password is required.";
   }
@@ -194,7 +186,6 @@ export default function AccountScreen() {
     loading,
     isAuthenticated,
     logout,
-    refreshUser,
     updateUser,
   } = useAuth();
 
@@ -210,72 +201,23 @@ export default function AccountScreen() {
     disableCurrentDevice,
   } = usePushNotifications();
 
-  const [
-    loggingOut,
-    setLoggingOut,
-  ] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [updatingAddressId, setUpdatingAddressId] = useState<string | null>(null);
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<AddressEditForm | null>(null);
 
-  const [
-    updatingAddressId,
-    setUpdatingAddressId,
-  ] = useState<string | null>(
-    null
-  );
-
-  const [
-    deletingAddressId,
-    setDeletingAddressId,
-  ] = useState<string | null>(
-    null
-  );
-
-  const [
-    editingAddressId,
-    setEditingAddressId,
-  ] = useState<string | null>(
-    null
-  );
-
-  const [
-    editForm,
-    setEditForm,
-  ] = useState<AddressEditForm | null>(
-    null
-  );
-
-  const [
-    editingProfile,
-    setEditingProfile,
-  ] = useState(false);
-
-  const [
-    savingProfile,
-    setSavingProfile,
-  ] = useState(false);
-
-  const [
-    profileForm,
-    setProfileForm,
-  ] = useState<ProfileEditForm>({
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileEditForm>({
     fullName: "",
     email: "",
     phone: "",
   });
 
-  const [
-    changingPassword,
-    setChangingPassword,
-  ] = useState(false);
-
-  const [
-    savingPassword,
-    setSavingPassword,
-  ] = useState(false);
-
-  const [
-    passwordForm,
-    setPasswordForm,
-  ] = useState<PasswordForm>({
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
@@ -290,26 +232,20 @@ export default function AccountScreen() {
         Platform.OS === "web" &&
         typeof window !== "undefined"
       ) {
-        const openedWindow =
-          window.open(
-            dashboardUrl,
-            "_blank",
-            "noopener,noreferrer"
-          );
+        const openedWindow = window.open(
+          dashboardUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
 
         if (!openedWindow) {
-          window.location.assign(
-            dashboardUrl
-          );
+          window.location.assign(dashboardUrl);
         }
 
         return;
       }
 
-      const supported =
-        await Linking.canOpenURL(
-          dashboardUrl
-        );
+      const supported = await Linking.canOpenURL(dashboardUrl);
 
       if (!supported) {
         Alert.alert(
@@ -320,9 +256,7 @@ export default function AccountScreen() {
         return;
       }
 
-      await Linking.openURL(
-        dashboardUrl
-      );
+      await Linking.openURL(dashboardUrl);
     } catch {
       Alert.alert(
         `Unable to open ${dashboardName}`,
@@ -331,121 +265,101 @@ export default function AccountScreen() {
     }
   };
 
-  const openNotificationSettings =
-    async () => {
-      if (Platform.OS === "web") {
-        Alert.alert(
-          "Mobile app required",
-          "Notification settings are available inside the Android or iOS app."
-        );
-
-        return;
-      }
-
-      try {
-        await Linking.openSettings();
-      } catch {
-        Alert.alert(
-          "Unable to open settings",
-          "Open your phone settings and allow notifications for SipBite."
-        );
-      }
-    };
-
-  const handleEnableNotifications =
-    async () => {
-      if (
-        registering ||
-        disabling
-      ) {
-        return;
-      }
-
-      const registeredToken =
-        await registerCurrentDevice();
-
-      if (registeredToken) {
-        Alert.alert(
-          "Notifications enabled",
-          "This device will now receive important order, delivery and subscription updates."
-        );
-      }
-    };
-
-  const handleSendTestNotification =
-    async () => {
-      if (
-        testing ||
-        registering ||
-        disabling
-      ) {
-        return;
-      }
-
-      const result =
-        await sendRemoteTest();
-
-      if (result) {
-        Alert.alert(
-          "Test notification sent",
-          "Minimize SipBite and check your phone notification tray."
-        );
-      }
-    };
-
-  const confirmDisableNotifications =
-    () => {
-      if (
-        disabling ||
-        registering
-      ) {
-        return;
-      }
-
+  const openNotificationSettings = async () => {
+    if (Platform.OS === "web") {
       Alert.alert(
-        "Disable notifications?",
-        "This device will stop receiving SipBite push notifications until notifications are enabled again.",
+        "Mobile app required",
+        "Notification settings are available inside the Android or iOS app."
+      );
+
+      return;
+    }
+
+    try {
+      await Linking.openSettings();
+    } catch {
+      Alert.alert(
+        "Unable to open settings",
+        "Open your phone settings and allow notifications for SipBite."
+      );
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    if (registering || disabling) {
+      return;
+    }
+
+    const registeredToken = await registerCurrentDevice();
+
+    if (registeredToken) {
+      Alert.alert(
+        "Notifications enabled",
+        "This device will now receive important order, delivery and subscription updates."
+      );
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    if (testing || registering || disabling) {
+      return;
+    }
+
+    const result = await sendRemoteTest();
+
+    if (result) {
+      Alert.alert(
+        "Test notification sent",
+        "Minimize SipBite and check your phone notification tray."
+      );
+    }
+  };
+
+  const confirmDisableNotifications = () => {
+    if (disabling || registering) {
+      return;
+    }
+
+    Alert.alert(
+      "Disable notifications?",
+      "This device will stop receiving SipBite push notifications until notifications are enabled again.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Disable",
+          style: "destructive",
+          onPress: () => {
+            void handleDisableNotifications();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDisableNotifications = async () => {
+    const disabled = await disableCurrentDevice();
+
+    if (disabled) {
+      Alert.alert(
+        "Notifications disabled",
+        "This device was removed from your registered notification devices.",
         [
           {
-            text: "Cancel",
-            style: "cancel",
+            text: "Done",
           },
           {
-            text: "Disable",
-            style: "destructive",
-
+            text: "Phone settings",
             onPress: () => {
-              void handleDisableNotifications();
+              void openNotificationSettings();
             },
           },
         ]
       );
-    };
-
-  const handleDisableNotifications =
-    async () => {
-      const disabled =
-        await disableCurrentDevice();
-
-      if (disabled) {
-        Alert.alert(
-          "Notifications disabled",
-          "This device was removed from your registered notification devices.",
-          [
-            {
-              text: "Done",
-            },
-            {
-              text: "Phone settings",
-
-              onPress: () => {
-                void openNotificationSettings();
-              },
-            },
-          ]
-        );
-      }
-    };
+    }
+  };
 
   const startEditingProfile = () => {
     if (!user) {
@@ -474,47 +388,25 @@ export default function AccountScreen() {
   };
 
   const saveProfile = async () => {
-    if (
-      !token ||
-      !user ||
-      savingProfile
-    ) {
+    if (!token || !user || savingProfile) {
       return;
     }
 
-    const validationError =
-      validateProfileForm(
-        profileForm
-      );
+    const validationError = validateProfileForm(profileForm);
 
     if (validationError) {
-      Alert.alert(
-        "Check profile details",
-        validationError
-      );
-
+      Alert.alert("Check profile details", validationError);
       return;
     }
 
     setSavingProfile(true);
 
     try {
-      const updatedUser =
-        await updateCustomerProfile(
-          token,
-          {
-            fullName:
-              profileForm.fullName.trim(),
-
-            email:
-              profileForm.email
-                .trim()
-                .toLowerCase(),
-
-            phone:
-              profileForm.phone,
-          }
-        );
+      const updatedUser = await updateCustomerProfile(token, {
+        fullName: profileForm.fullName.trim(),
+        email: profileForm.email.trim().toLowerCase(),
+        phone: profileForm.phone,
+      });
 
       updateUser(updatedUser);
       setEditingProfile(false);
@@ -556,44 +448,26 @@ export default function AccountScreen() {
   };
 
   const savePassword = async () => {
-    if (
-      !token ||
-      savingPassword
-    ) {
+    if (!token || savingPassword) {
       return;
     }
 
-    const validationError =
-      validatePasswordForm(
-        passwordForm
-      );
+    const validationError = validatePasswordForm(passwordForm);
 
     if (validationError) {
-      Alert.alert(
-        "Check password details",
-        validationError
-      );
-
+      Alert.alert("Check password details", validationError);
       return;
     }
 
     setSavingPassword(true);
 
     try {
-      const updatedUser =
-        await changeCustomerPassword(
-          token,
-          {
-            currentPassword:
-              passwordForm.currentPassword,
-
-            newPassword:
-              passwordForm.newPassword,
-          }
-        );
+      const updatedUser = await changeCustomerPassword(token, {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
 
       updateUser(updatedUser);
-
       setChangingPassword(false);
 
       setPasswordForm({
@@ -620,25 +494,20 @@ export default function AccountScreen() {
 
   const handleSetDefaultAddress =
     async (address: SavedDeliveryAddress) => {
-      if (
-        !token ||
-        updatingAddressId ||
-        address.isDefault
-      ) {
+      if (!token || updatingAddressId || address.isDefault) {
         return;
       }
 
       setUpdatingAddressId(address.id);
 
       try {
-        const result =
-          await updateCustomerAddress(
-            token,
-            address.id,
-            {
-              isDefault: true,
-            }
-          );
+        const result = await updateCustomerAddress(
+          token,
+          address.id,
+          {
+            isDefault: true,
+          }
+        );
 
         updateUser(result.user);
       } catch (requestError) {
@@ -653,20 +522,13 @@ export default function AccountScreen() {
       }
     };
 
-  const startEditingAddress = (
-    address: SavedDeliveryAddress
-  ) => {
-    if (
-      updatingAddressId ||
-      deletingAddressId
-    ) {
+  const startEditingAddress = (address: SavedDeliveryAddress) => {
+    if (updatingAddressId || deletingAddressId) {
       return;
     }
 
     setEditingAddressId(address.id);
-    setEditForm(
-      createAddressEditForm(address)
-    );
+    setEditForm(createAddressEditForm(address));
   };
 
   const cancelEditingAddress = () => {
@@ -691,70 +553,37 @@ export default function AccountScreen() {
   };
 
   const saveEditedAddress =
-    async (
-      address: SavedDeliveryAddress
-    ) => {
-      if (
-        !token ||
-        !editForm ||
-        updatingAddressId
-      ) {
+    async (address: SavedDeliveryAddress) => {
+      if (!token || !editForm || updatingAddressId) {
         return;
       }
 
-      const validationError =
-        validateAddressEditForm(
-          editForm
-        );
+      const validationError = validateAddressEditForm(editForm);
 
       if (validationError) {
-        Alert.alert(
-          "Check address details",
-          validationError
-        );
-
+        Alert.alert("Check address details", validationError);
         return;
       }
 
       setUpdatingAddressId(address.id);
 
       try {
-        const result =
-          await updateCustomerAddress(
-            token,
-            address.id,
-            {
-              label:
-                editForm.label.trim(),
-
-              fullName:
-                editForm.fullName.trim(),
-
-              phone:
-                editForm.phone,
-
-              pincode:
-                editForm.pincode,
-
-              houseDetails:
-                editForm.houseDetails.trim(),
-
-              areaDetails:
-                editForm.areaDetails.trim(),
-
-              landmark:
-                editForm.landmark.trim(),
-
-              area:
-                editForm.area.trim(),
-
-              city:
-                editForm.city.trim(),
-
-              isDefault:
-                editForm.isDefault,
-            }
-          );
+        const result = await updateCustomerAddress(
+          token,
+          address.id,
+          {
+            label: editForm.label.trim(),
+            fullName: editForm.fullName.trim(),
+            phone: editForm.phone,
+            pincode: editForm.pincode,
+            houseDetails: editForm.houseDetails.trim(),
+            areaDetails: editForm.areaDetails.trim(),
+            landmark: editForm.landmark.trim(),
+            area: editForm.area.trim(),
+            city: editForm.city.trim(),
+            isDefault: editForm.isDefault,
+          }
+        );
 
         updateUser(result.user);
 
@@ -774,53 +603,44 @@ export default function AccountScreen() {
 
   const handleDeleteAddress =
     async (address: SavedDeliveryAddress) => {
-      if (
-        !token ||
-        deletingAddressId
-      ) {
+      if (!token || deletingAddressId) {
         return;
       }
 
-      const deleteNow =
-        async () => {
-          setDeletingAddressId(address.id);
+      const deleteNow = async () => {
+        setDeletingAddressId(address.id);
 
-          try {
-            const updatedUser =
-              await deleteCustomerAddress(
-                token,
-                address.id
-              );
+        try {
+          const updatedUser = await deleteCustomerAddress(
+            token,
+            address.id
+          );
 
-            if (
-              editingAddressId ===
-              address.id
-            ) {
-              setEditingAddressId(null);
-              setEditForm(null);
-            }
-
-            updateUser(updatedUser);
-          } catch (requestError) {
-            Alert.alert(
-              "Unable to delete address",
-              requestError instanceof Error
-                ? requestError.message
-                : "Please try again."
-            );
-          } finally {
-            setDeletingAddressId(null);
+          if (editingAddressId === address.id) {
+            setEditingAddressId(null);
+            setEditForm(null);
           }
-        };
+
+          updateUser(updatedUser);
+        } catch (requestError) {
+          Alert.alert(
+            "Unable to delete address",
+            requestError instanceof Error
+              ? requestError.message
+              : "Please try again."
+          );
+        } finally {
+          setDeletingAddressId(null);
+        }
+      };
 
       if (
         Platform.OS === "web" &&
         typeof window !== "undefined"
       ) {
-        const confirmed =
-          window.confirm(
-            `Delete saved address "${address.label}"?`
-          );
+        const confirmed = window.confirm(
+          `Delete saved address "${address.label}"?`
+        );
 
         if (confirmed) {
           await deleteNow();
@@ -864,20 +684,11 @@ export default function AccountScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={styles.safeArea}
-      >
-        <View
-          style={styles.centerState}
-        >
-          <ActivityIndicator
-            size="large"
-            color="#245C42"
-          />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#245C42" />
 
-          <Text
-            style={styles.loadingText}
-          >
+          <Text style={styles.loadingText}>
             Loading your account
           </Text>
         </View>
@@ -885,25 +696,14 @@ export default function AccountScreen() {
     );
   }
 
-  if (
-    !isAuthenticated ||
-    !user
-  ) {
+  if (!isAuthenticated || !user) {
     return (
-      <SafeAreaView
-        style={styles.safeArea}
-      >
+      <SafeAreaView style={styles.safeArea}>
         <ScrollView
-          showsVerticalScrollIndicator={
-            false
-          }
-          contentContainerStyle={
-            styles.guestContent
-          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.guestContent}
         >
-          <View
-            style={styles.guestIcon}
-          >
+          <View style={styles.guestIcon}>
             <Ionicons
               name="person-outline"
               size={39}
@@ -911,70 +711,43 @@ export default function AccountScreen() {
             />
           </View>
 
-          <Text
-            style={styles.guestTitle}
-          >
+          <Text style={styles.guestTitle}>
             Your account
           </Text>
 
-          <Text
-            style={
-              styles.guestDescription
-            }
-          >
-            Log in to save orders, manage
-            subscriptions and view your
-            delivery history.
+          <Text style={styles.guestDescription}>
+            Log in to save orders, manage subscriptions and view your delivery history.
           </Text>
 
           <Pressable
-            onPress={() =>
-              router.push("/login")
-            }
+            onPress={() => router.push("/login")}
             style={({ pressed }) => [
               styles.primaryButton,
-              pressed &&
-                styles.pressed,
+              pressed && styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.primaryButtonText
-              }
-            >
+            <Text style={styles.primaryButtonText}>
               Log in
             </Text>
           </Pressable>
 
           <Pressable
-            onPress={() =>
-              router.push("/register")
-            }
+            onPress={() => router.push("/register")}
             style={({ pressed }) => [
               styles.secondaryButton,
-              pressed &&
-                styles.pressed,
+              pressed && styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.secondaryButtonText
-              }
-            >
+            <Text style={styles.secondaryButtonText}>
               Create account
             </Text>
           </Pressable>
 
           <Pressable
-            onPress={() =>
-              router.push(
-                "/(tabs)/bottles"
-              )
-            }
+            onPress={() => router.push("/(tabs)/bottles")}
             style={({ pressed }) => [
               styles.browseButton,
-              pressed &&
-                styles.pressed,
+              pressed && styles.pressed,
             ]}
           >
             <Ionicons
@@ -983,11 +756,7 @@ export default function AccountScreen() {
               color="#35694E"
             />
 
-            <Text
-              style={
-                styles.browseButtonText
-              }
-            >
+            <Text style={styles.browseButtonText}>
               Continue browsing bottles
             </Text>
           </Pressable>
@@ -996,15 +765,9 @@ export default function AccountScreen() {
     );
   }
 
-  const isAdmin =
-    user.role === "admin";
-
-  const isDeliveryPartner =
-    user.role === "delivery";
-
-  const hasOperationsDashboard =
-    isAdmin ||
-    isDeliveryPartner;
+  const isAdmin = user.role === "admin";
+  const isDeliveryPartner = user.role === "delivery";
+  const showRoleBadge = isAdmin || isDeliveryPartner;
 
   const accountType = isAdmin
     ? "Customer and administrator"
@@ -1018,43 +781,8 @@ export default function AccountScreen() {
       ? "Delivery partner"
       : "";
 
-  const roleBadgeIcon:
-    keyof typeof Ionicons.glyphMap =
-    isAdmin
-      ? "shield-checkmark"
-      : "car-outline";
-
-  const dashboardUrl = isAdmin
-    ? ADMIN_DASHBOARD_URL
-    : DELIVERY_DASHBOARD_URL;
-
-  const dashboardName = isAdmin
-    ? "admin dashboard"
-    : "delivery dashboard";
-
-  const dashboardTitle = isAdmin
-    ? "Administrator dashboard"
-    : "Delivery dashboard";
-
-  const dashboardDescription =
-    isAdmin
-      ? "Manage bottle prices, stock, orders, delivery areas, coupons and subscription plans."
-      : "View assigned orders, update delivery progress and complete deliveries securely.";
-
-  const dashboardButtonText =
-    isAdmin
-      ? "Open Admin Dashboard"
-      : "Open Delivery Dashboard";
-
-  const dashboardIcon:
-    keyof typeof Ionicons.glyphMap =
-    isAdmin
-      ? "settings-outline"
-      : "navigate-outline";
-
-  const roleNotice = isAdmin
-    ? "Your administrator account can also buy bottles and subscribe through this customer app."
-    : "Your delivery partner account can also place personal bottle orders and subscriptions without changing roles.";
+  const roleBadgeIcon: keyof typeof Ionicons.glyphMap =
+    isAdmin ? "shield-checkmark" : "car-outline";
 
   const notificationsEnabled =
     permissionState === "granted" &&
@@ -1090,8 +818,7 @@ export default function AccountScreen() {
               "SipBite could not register this device for push notifications."
             : "Enable notifications to receive important updates even when SipBite is closed.";
 
-  const notificationIcon:
-    keyof typeof Ionicons.glyphMap =
+  const notificationIcon: keyof typeof Ionicons.glyphMap =
     notificationsEnabled
       ? "notifications"
       : permissionState === "denied"
@@ -1100,63 +827,46 @@ export default function AccountScreen() {
           ? "alert-circle-outline"
           : "notifications-outline";
 
-  const tokenPreview =
-    getPushTokenPreview(
-      expoPushToken
-    );
+  const tokenPreview = getPushTokenPreview(expoPushToken);
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-    >
+    <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        showsVerticalScrollIndicator={
-          false
-        }
-        contentContainerStyle={
-          styles.scrollContent
-        }
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
         <Text style={styles.eyebrow}>
           MY ACCOUNT
         </Text>
 
         <Text style={styles.title}>
-          Hello,{" "}
-          {user.fullName.split(" ")[0]}
+          Hello, {user.fullName.split(" ")[0]}
         </Text>
 
         <Text style={styles.subtitle}>
           {isDeliveryPartner
-            ? "Manage your assigned deliveries, personal orders and recurring plans."
+            ? "You are in Customer Mode. Order bottles here or switch to Delivery Mode for assigned deliveries."
             : "Manage your orders, recurring plans and account details."}
         </Text>
 
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {user.fullName
-                .charAt(0)
-                .toUpperCase()}
+              {user.fullName.charAt(0).toUpperCase()}
             </Text>
           </View>
 
-          <View
-            style={styles.profileDetails}
-          >
+          <View style={styles.profileDetails}>
             <View style={styles.nameRow}>
-              <Text
-                style={styles.profileName}
-              >
+              <Text style={styles.profileName}>
                 {user.fullName}
               </Text>
 
-              {hasOperationsDashboard ? (
+              {showRoleBadge ? (
                 <View
                   style={[
                     styles.roleBadge,
-                    isDeliveryPartner &&
-                      styles.deliveryBadge,
+                    isDeliveryPartner && styles.deliveryBadge,
                   ]}
                 >
                   <Ionicons
@@ -1165,73 +875,41 @@ export default function AccountScreen() {
                     color="#FFFFFF"
                   />
 
-                  <Text
-                    style={
-                      styles.roleBadgeText
-                    }
-                  >
+                  <Text style={styles.roleBadgeText}>
                     {roleBadgeText}
                   </Text>
                 </View>
               ) : null}
             </View>
 
-            <Text
-              style={styles.profileEmail}
-            >
+            <Text style={styles.profileEmail}>
               {user.email}
             </Text>
 
-            <Text
-              style={styles.profilePhone}
-            >
+            <Text style={styles.profilePhone}>
               +91 {user.phone}
             </Text>
           </View>
         </View>
 
-        {hasOperationsDashboard ? (
-          <View
-            style={[
-              styles.operationsCard,
-              isDeliveryPartner &&
-                styles.deliveryOperationsCard,
-            ]}
-          >
-            <View
-              style={styles.operationsCardTop}
-            >
-              <View
-                style={
-                  styles.operationsIcon
-                }
-              >
+        {isDeliveryPartner ? (
+          <View style={styles.operationsCard}>
+            <View style={styles.operationsCardTop}>
+              <View style={styles.operationsIcon}>
                 <Ionicons
-                  name={dashboardIcon}
+                  name="swap-horizontal-outline"
                   size={24}
                   color="#245C42"
                 />
               </View>
 
-              <View
-                style={
-                  styles.operationsCardContent
-                }
-              >
-                <Text
-                  style={
-                    styles.operationsCardTitle
-                  }
-                >
-                  {dashboardTitle}
+              <View style={styles.operationsCardContent}>
+                <Text style={styles.operationsCardTitle}>
+                  Customer Mode active
                 </Text>
 
-                <Text
-                  style={
-                    styles.operationsCardDescription
-                  }
-                >
-                  {dashboardDescription}
+                <Text style={styles.operationsCardDescription}>
+                  You can order bottles here as a customer. Switch to Delivery Mode only when you need to manage assigned deliveries.
                 </Text>
               </View>
             </View>
@@ -1239,14 +917,64 @@ export default function AccountScreen() {
             <Pressable
               onPress={() => {
                 void openDashboard(
-                  dashboardUrl,
-                  dashboardName
+                  DELIVERY_DASHBOARD_URL,
+                  "delivery dashboard"
                 );
               }}
               style={({ pressed }) => [
                 styles.dashboardButton,
-                pressed &&
-                  styles.pressed,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="car-outline"
+                size={18}
+                color="#FFFFFF"
+              />
+
+              <Text style={styles.dashboardButtonText}>
+                Switch to Delivery Mode
+              </Text>
+            </Pressable>
+
+            <Text style={styles.roleNotice}>
+              This switch is shown only for delivery partner accounts.
+            </Text>
+          </View>
+        ) : null}
+
+        {isAdmin ? (
+          <View style={styles.adminToolsCard}>
+            <View style={styles.operationsCardTop}>
+              <View style={styles.operationsIcon}>
+                <Ionicons
+                  name="settings-outline"
+                  size={24}
+                  color="#245C42"
+                />
+              </View>
+
+              <View style={styles.operationsCardContent}>
+                <Text style={styles.operationsCardTitle}>
+                  Administrator dashboard
+                </Text>
+
+                <Text style={styles.operationsCardDescription}>
+                  Manage bottle prices, stock, orders, delivery areas, coupons and subscription plans.
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                void openDashboard(
+                  ADMIN_DASHBOARD_URL,
+                  "admin dashboard"
+                );
+              }}
+              style={({ pressed }) => [
+                styles.dashboardButton,
+                pressed && styles.pressed,
               ]}
             >
               <Ionicons
@@ -1255,20 +983,10 @@ export default function AccountScreen() {
                 color="#FFFFFF"
               />
 
-              <Text
-                style={
-                  styles.dashboardButtonText
-                }
-              >
-                {dashboardButtonText}
+              <Text style={styles.dashboardButtonText}>
+                Open Admin Dashboard
               </Text>
             </Pressable>
-
-            <Text
-              style={styles.roleNotice}
-            >
-              {roleNotice}
-            </Text>
           </View>
         ) : null}
 
@@ -1280,33 +998,21 @@ export default function AccountScreen() {
           icon="nutrition-outline"
           title="Browse bottles"
           description="Order fresh bottles for delivery"
-          onPress={() =>
-            router.push(
-              "/(tabs)/bottles"
-            )
-          }
+          onPress={() => router.push("/(tabs)/bottles")}
         />
 
         <MenuButton
           icon="receipt-outline"
           title="My orders"
           description="Track and review your bottle orders"
-          onPress={() =>
-            router.push(
-              "/(tabs)/orders"
-            )
-          }
+          onPress={() => router.push("/(tabs)/orders")}
         />
 
         <MenuButton
           icon="repeat-outline"
           title="My subscriptions"
           description="Manage recurring bottle plans"
-          onPress={() =>
-            router.push(
-              "/(tabs)/plans"
-            )
-          }
+          onPress={() => router.push("/(tabs)/plans")}
         />
 
         <Text style={styles.sectionTitle}>
@@ -1439,13 +1145,10 @@ export default function AccountScreen() {
               </Text>
 
               <Pressable
-                onPress={() =>
-                  router.push("/cart")
-                }
+                onPress={() => router.push("/cart")}
                 style={({ pressed }) => [
                   styles.addAddressButton,
-                  pressed &&
-                    styles.pressed,
+                  pressed && styles.pressed,
                 ]}
               >
                 <Text style={styles.addAddressButtonText}>
@@ -1455,17 +1158,11 @@ export default function AccountScreen() {
             </View>
           ) : (
             user.savedAddresses.map((address) => {
-              const updating =
-                updatingAddressId ===
-                address.id;
-
-              const deleting =
-                deletingAddressId ===
-                address.id;
+              const updating = updatingAddressId === address.id;
+              const deleting = deletingAddressId === address.id;
 
               const editing =
-                editingAddressId ===
-                address.id &&
+                editingAddressId === address.id &&
                 editForm !== null;
 
               if (editing) {
@@ -1477,9 +1174,7 @@ export default function AccountScreen() {
                     onChange={updateEditField}
                     onCancel={cancelEditingAddress}
                     onSave={() => {
-                      void saveEditedAddress(
-                        address
-                      );
+                      void saveEditedAddress(address);
                     }}
                   />
                 );
@@ -1524,9 +1219,7 @@ export default function AccountScreen() {
 
                       <Text style={styles.savedAddressText}>
                         {address.houseDetails}, {address.areaDetails}
-                        {address.landmark
-                          ? `, ${address.landmark}`
-                          : ""}
+                        {address.landmark ? `, ${address.landmark}` : ""}
                       </Text>
 
                       <Text style={styles.savedAddressMeta}>
@@ -1537,20 +1230,11 @@ export default function AccountScreen() {
 
                   <View style={styles.savedAddressActions}>
                     <Pressable
-                      disabled={
-                        updating ||
-                        deleting
-                      }
-                      onPress={() =>
-                        startEditingAddress(
-                          address
-                        )
-                      }
+                      disabled={updating || deleting}
+                      onPress={() => startEditingAddress(address)}
                       style={({ pressed }) => [
                         styles.addressActionButton,
-                        (updating ||
-                          deleting) &&
-                          styles.disabledButton,
+                        (updating || deleting) && styles.disabledButton,
                         pressed &&
                           !updating &&
                           !deleting &&
@@ -1564,20 +1248,13 @@ export default function AccountScreen() {
 
                     {!address.isDefault ? (
                       <Pressable
-                        disabled={
-                          updating ||
-                          deleting
-                        }
+                        disabled={updating || deleting}
                         onPress={() => {
-                          void handleSetDefaultAddress(
-                            address
-                          );
+                          void handleSetDefaultAddress(address);
                         }}
                         style={({ pressed }) => [
                           styles.addressActionButton,
-                          (updating ||
-                            deleting) &&
-                            styles.disabledButton,
+                          (updating || deleting) && styles.disabledButton,
                           pressed &&
                             !updating &&
                             !deleting &&
@@ -1598,20 +1275,13 @@ export default function AccountScreen() {
                     ) : null}
 
                     <Pressable
-                      disabled={
-                        updating ||
-                        deleting
-                      }
+                      disabled={updating || deleting}
                       onPress={() => {
-                        void handleDeleteAddress(
-                          address
-                        );
+                        void handleDeleteAddress(address);
                       }}
                       style={({ pressed }) => [
                         styles.addressDeleteButton,
-                        (updating ||
-                          deleting) &&
-                          styles.disabledButton,
+                        (updating || deleting) && styles.disabledButton,
                         pressed &&
                           !updating &&
                           !deleting &&
@@ -1640,17 +1310,12 @@ export default function AccountScreen() {
           Notifications
         </Text>
 
-        <View
-          style={styles.notificationCard}
-        >
-          <View
-            style={styles.notificationTop}
-          >
+        <View style={styles.notificationCard}>
+          <View style={styles.notificationTop}>
             <View
               style={[
                 styles.notificationIcon,
-                notificationsEnabled &&
-                  styles.notificationIconEnabled,
+                notificationsEnabled && styles.notificationIconEnabled,
                 permissionState === "denied" &&
                   styles.notificationIconBlocked,
               ]}
@@ -1661,29 +1326,16 @@ export default function AccountScreen() {
                 color={
                   notificationsEnabled
                     ? "#245C42"
-                    : permissionState ===
-                        "denied"
+                    : permissionState === "denied"
                       ? "#A34848"
                       : "#5C7165"
                 }
               />
             </View>
 
-            <View
-              style={
-                styles.notificationContent
-              }
-            >
-              <View
-                style={
-                  styles.notificationTitleRow
-                }
-              >
-                <Text
-                  style={
-                    styles.notificationTitle
-                  }
-                >
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationTitleRow}>
+                <Text style={styles.notificationTitle}>
                   Push notifications
                 </Text>
 
@@ -1692,10 +1344,8 @@ export default function AccountScreen() {
                     styles.notificationStatusBadge,
                     notificationsEnabled
                       ? styles.notificationStatusEnabled
-                      : permissionState ===
-                            "denied" ||
-                          permissionState ===
-                            "error"
+                      : permissionState === "denied" ||
+                          permissionState === "error"
                         ? styles.notificationStatusError
                         : styles.notificationStatusIdle,
                   ]}
@@ -1711,10 +1361,8 @@ export default function AccountScreen() {
                         styles.notificationStatusText,
                         notificationsEnabled
                           ? styles.notificationStatusTextEnabled
-                          : permissionState ===
-                                "denied" ||
-                              permissionState ===
-                                "error"
+                          : permissionState === "denied" ||
+                              permissionState === "error"
                             ? styles.notificationStatusTextError
                             : styles.notificationStatusTextIdle,
                       ]}
@@ -1725,53 +1373,36 @@ export default function AccountScreen() {
                 </View>
               </View>
 
-              <Text
-                style={
-                  styles.notificationDescription
-                }
-              >
+              <Text style={styles.notificationDescription}>
                 {notificationDescription}
               </Text>
             </View>
           </View>
 
-          {pushError &&
-          permissionState !==
-            "denied" ? (
-            <View
-              style={styles.pushErrorBox}
-            >
+          {pushError && permissionState !== "denied" ? (
+            <View style={styles.pushErrorBox}>
               <Ionicons
                 name="alert-circle-outline"
                 size={16}
                 color="#9C4C4C"
               />
 
-              <Text
-                style={styles.pushErrorText}
-              >
+              <Text style={styles.pushErrorText}>
                 {pushError}
               </Text>
             </View>
           ) : null}
 
-          {notificationsEnabled &&
-          tokenPreview ? (
-            <View
-              style={styles.tokenBox}
-            >
-              <View
-                style={styles.tokenLabelRow}
-              >
+          {notificationsEnabled && tokenPreview ? (
+            <View style={styles.tokenBox}>
+              <View style={styles.tokenLabelRow}>
                 <Ionicons
                   name="phone-portrait-outline"
                   size={15}
                   color="#587063"
                 />
 
-                <Text
-                  style={styles.tokenLabel}
-                >
+                <Text style={styles.tokenLabel}>
                   Registered device
                 </Text>
               </View>
@@ -1786,28 +1417,18 @@ export default function AccountScreen() {
             </View>
           ) : null}
 
-          <View
-            style={
-              styles.notificationButtons
-            }
-          >
+          <View style={styles.notificationButtons}>
             {!notificationsEnabled &&
-            permissionState !==
-              "unsupported" ? (
+            permissionState !== "unsupported" ? (
               <Pressable
-                disabled={
-                  notificationBusy
-                }
+                disabled={notificationBusy}
                 onPress={() => {
                   void handleEnableNotifications();
                 }}
                 style={({ pressed }) => [
                   styles.notificationPrimaryButton,
-                  notificationBusy &&
-                    styles.disabledButton,
-                  pressed &&
-                    !notificationBusy &&
-                    styles.pressed,
+                  notificationBusy && styles.disabledButton,
+                  pressed && !notificationBusy && styles.pressed,
                 ]}
               >
                 {registering ? (
@@ -1823,33 +1444,22 @@ export default function AccountScreen() {
                   />
                 )}
 
-                <Text
-                  style={
-                    styles.notificationPrimaryButtonText
-                  }
-                >
-                  {registering
-                    ? "Enabling..."
-                    : "Enable notifications"}
+                <Text style={styles.notificationPrimaryButtonText}>
+                  {registering ? "Enabling..." : "Enable notifications"}
                 </Text>
               </Pressable>
             ) : null}
 
             {notificationsEnabled ? (
               <Pressable
-                disabled={
-                  notificationBusy
-                }
+                disabled={notificationBusy}
                 onPress={() => {
                   void handleSendTestNotification();
                 }}
                 style={({ pressed }) => [
                   styles.notificationPrimaryButton,
-                  notificationBusy &&
-                    styles.disabledButton,
-                  pressed &&
-                    !notificationBusy &&
-                    styles.pressed,
+                  notificationBusy && styles.disabledButton,
+                  pressed && !notificationBusy && styles.pressed,
                 ]}
               >
                 {testing ? (
@@ -1865,38 +1475,25 @@ export default function AccountScreen() {
                   />
                 )}
 
-                <Text
-                  style={
-                    styles.notificationPrimaryButtonText
-                  }
-                >
-                  {testing
-                    ? "Sending..."
-                    : "Send test"}
+                <Text style={styles.notificationPrimaryButtonText}>
+                  {testing ? "Sending..." : "Send test"}
                 </Text>
               </Pressable>
             ) : null}
 
-            {(permissionState ===
-              "denied" ||
-              permissionState ===
-                "error" ||
+            {(permissionState === "denied" ||
+              permissionState === "error" ||
               notificationsEnabled) &&
             Platform.OS !== "web" ? (
               <Pressable
-                disabled={
-                  notificationBusy
-                }
+                disabled={notificationBusy}
                 onPress={() => {
                   void openNotificationSettings();
                 }}
                 style={({ pressed }) => [
                   styles.notificationSecondaryButton,
-                  notificationBusy &&
-                    styles.disabledButton,
-                  pressed &&
-                    !notificationBusy &&
-                    styles.pressed,
+                  notificationBusy && styles.disabledButton,
+                  pressed && !notificationBusy && styles.pressed,
                 ]}
               >
                 <Ionicons
@@ -1905,11 +1502,7 @@ export default function AccountScreen() {
                   color="#245C42"
                 />
 
-                <Text
-                  style={
-                    styles.notificationSecondaryButtonText
-                  }
-                >
+                <Text style={styles.notificationSecondaryButtonText}>
                   Phone settings
                 </Text>
               </Pressable>
@@ -1917,19 +1510,12 @@ export default function AccountScreen() {
 
             {notificationsEnabled ? (
               <Pressable
-                disabled={
-                  notificationBusy
-                }
-                onPress={
-                  confirmDisableNotifications
-                }
+                disabled={notificationBusy}
+                onPress={confirmDisableNotifications}
                 style={({ pressed }) => [
                   styles.notificationDangerButton,
-                  notificationBusy &&
-                    styles.disabledButton,
-                  pressed &&
-                    !notificationBusy &&
-                    styles.pressed,
+                  notificationBusy && styles.disabledButton,
+                  pressed && !notificationBusy && styles.pressed,
                 ]}
               >
                 {disabling ? (
@@ -1945,27 +1531,16 @@ export default function AccountScreen() {
                   />
                 )}
 
-                <Text
-                  style={
-                    styles.notificationDangerButtonText
-                  }
-                >
-                  {disabling
-                    ? "Disabling..."
-                    : "Disable"}
+                <Text style={styles.notificationDangerButtonText}>
+                  {disabling ? "Disabling..." : "Disable"}
                 </Text>
               </Pressable>
             ) : null}
           </View>
 
           {notificationsEnabled ? (
-            <Text
-              style={styles.notificationNote}
-            >
-              Disabling removes this device
-              from your account. Use phone
-              settings to keep notifications
-              permanently blocked.
+            <Text style={styles.notificationNote}>
+              Disabling removes this device from your account. Use phone settings to keep notifications permanently blocked.
             </Text>
           ) : null}
         </View>
@@ -1974,9 +1549,7 @@ export default function AccountScreen() {
           Account information
         </Text>
 
-        <View
-          style={styles.informationCard}
-        >
+        <View style={styles.informationCard}>
           <InformationRow
             icon="mail-outline"
             label="Email"
@@ -2004,11 +1577,7 @@ export default function AccountScreen() {
           <InformationRow
             icon="checkmark-circle-outline"
             label="Account status"
-            value={
-              user.active
-                ? "Active"
-                : "Inactive"
-            }
+            value={user.active ? "Active" : "Inactive"}
             last
           />
         </View>
@@ -2020,11 +1589,8 @@ export default function AccountScreen() {
           }}
           style={({ pressed }) => [
             styles.logoutButton,
-            loggingOut &&
-              styles.logoutButtonDisabled,
-            pressed &&
-              !loggingOut &&
-              styles.pressed,
+            loggingOut && styles.logoutButtonDisabled,
+            pressed && !loggingOut && styles.pressed,
           ]}
         >
           <Ionicons
@@ -2033,12 +1599,8 @@ export default function AccountScreen() {
             color="#A34848"
           />
 
-          <Text
-            style={styles.logoutText}
-          >
-            {loggingOut
-              ? "Logging out..."
-              : "Log out"}
+          <Text style={styles.logoutText}>
+            {loggingOut ? "Logging out..." : "Log out"}
           </Text>
         </Pressable>
       </ScrollView>
@@ -2052,9 +1614,7 @@ function MenuButton({
   description,
   onPress,
 }: {
-  icon:
-    keyof typeof Ionicons.glyphMap;
-
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
   onPress: () => void;
@@ -2064,8 +1624,7 @@ function MenuButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.menuButton,
-        pressed &&
-          styles.pressed,
+        pressed && styles.pressed,
       ]}
     >
       <View style={styles.menuIcon}>
@@ -2081,11 +1640,7 @@ function MenuButton({
           {title}
         </Text>
 
-        <Text
-          style={
-            styles.menuDescription
-          }
-        >
+        <Text style={styles.menuDescription}>
           {description}
         </Text>
       </View>
@@ -2120,18 +1675,14 @@ function ProfileEditCard({
       <EditInput
         label="Full name"
         value={form.fullName}
-        onChangeText={(value) =>
-          onChange("fullName", value)
-        }
+        onChangeText={(value) => onChange("fullName", value)}
         placeholder="Your full name"
       />
 
       <EditInput
         label="Email address"
         value={form.email}
-        onChangeText={(value) =>
-          onChange("email", value)
-        }
+        onChangeText={(value) => onChange("email", value)}
         placeholder="your@email.com"
         keyboardType="default"
       />
@@ -2140,10 +1691,7 @@ function ProfileEditCard({
         label="Mobile number"
         value={form.phone}
         onChangeText={(value) =>
-          onChange(
-            "phone",
-            normalisePhone(value)
-          )
+          onChange("phone", normalisePhone(value))
         }
         placeholder="10-digit mobile number"
         keyboardType="phone-pad"
@@ -2156,11 +1704,8 @@ function ProfileEditCard({
           onPress={onCancel}
           style={({ pressed }) => [
             styles.editCancelButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           <Text style={styles.editCancelText}>
@@ -2173,11 +1718,8 @@ function ProfileEditCard({
           onPress={onSave}
           style={({ pressed }) => [
             styles.editSaveButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           {saving ? (
@@ -2217,9 +1759,7 @@ function PasswordEditCard({
       <EditInput
         label="Current password"
         value={form.currentPassword}
-        onChangeText={(value) =>
-          onChange("currentPassword", value)
-        }
+        onChangeText={(value) => onChange("currentPassword", value)}
         placeholder="Enter current password"
         secureTextEntry
       />
@@ -2227,9 +1767,7 @@ function PasswordEditCard({
       <EditInput
         label="New password"
         value={form.newPassword}
-        onChangeText={(value) =>
-          onChange("newPassword", value)
-        }
+        onChangeText={(value) => onChange("newPassword", value)}
         placeholder="At least 8 characters"
         secureTextEntry
       />
@@ -2237,9 +1775,7 @@ function PasswordEditCard({
       <EditInput
         label="Confirm new password"
         value={form.confirmPassword}
-        onChangeText={(value) =>
-          onChange("confirmPassword", value)
-        }
+        onChangeText={(value) => onChange("confirmPassword", value)}
         placeholder="Re-enter new password"
         secureTextEntry
       />
@@ -2250,11 +1786,8 @@ function PasswordEditCard({
           onPress={onCancel}
           style={({ pressed }) => [
             styles.editCancelButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           <Text style={styles.editCancelText}>
@@ -2267,11 +1800,8 @@ function PasswordEditCard({
           onPress={onSave}
           style={({ pressed }) => [
             styles.editSaveButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           {saving ? (
@@ -2331,18 +1861,14 @@ function AddressEditCard({
       <EditInput
         label="Label"
         value={form.label}
-        onChangeText={(value) =>
-          onChange("label", value)
-        }
+        onChangeText={(value) => onChange("label", value)}
         placeholder="Home, Office, Hostel"
       />
 
       <EditInput
         label="Full name"
         value={form.fullName}
-        onChangeText={(value) =>
-          onChange("fullName", value)
-        }
+        onChangeText={(value) => onChange("fullName", value)}
         placeholder="Customer name"
       />
 
@@ -2350,10 +1876,7 @@ function AddressEditCard({
         label="Mobile number"
         value={form.phone}
         onChangeText={(value) =>
-          onChange(
-            "phone",
-            normalisePhone(value)
-          )
+          onChange("phone", normalisePhone(value))
         }
         placeholder="10-digit mobile number"
         keyboardType="phone-pad"
@@ -2364,10 +1887,7 @@ function AddressEditCard({
         label="Pincode"
         value={form.pincode}
         onChangeText={(value) =>
-          onChange(
-            "pincode",
-            normalisePincode(value)
-          )
+          onChange("pincode", normalisePincode(value))
         }
         placeholder="6-digit pincode"
         keyboardType="number-pad"
@@ -2377,24 +1897,14 @@ function AddressEditCard({
       <EditInput
         label="House, flat or building"
         value={form.houseDetails}
-        onChangeText={(value) =>
-          onChange(
-            "houseDetails",
-            value
-          )
-        }
+        onChangeText={(value) => onChange("houseDetails", value)}
         placeholder="Flat number, house or building"
       />
 
       <EditInput
         label="Area and street"
         value={form.areaDetails}
-        onChangeText={(value) =>
-          onChange(
-            "areaDetails",
-            value
-          )
-        }
+        onChangeText={(value) => onChange("areaDetails", value)}
         placeholder="Area, street or locality"
         multiline
       />
@@ -2402,9 +1912,7 @@ function AddressEditCard({
       <EditInput
         label="Landmark"
         value={form.landmark}
-        onChangeText={(value) =>
-          onChange("landmark", value)
-        }
+        onChangeText={(value) => onChange("landmark", value)}
         placeholder="Nearby landmark"
       />
 
@@ -2413,9 +1921,7 @@ function AddressEditCard({
           <EditInput
             label="Area"
             value={form.area}
-            onChangeText={(value) =>
-              onChange("area", value)
-            }
+            onChangeText={(value) => onChange("area", value)}
             placeholder="Area"
           />
         </View>
@@ -2424,9 +1930,7 @@ function AddressEditCard({
           <EditInput
             label="City"
             value={form.city}
-            onChangeText={(value) =>
-              onChange("city", value)
-            }
+            onChangeText={(value) => onChange("city", value)}
             placeholder="City"
           />
         </View>
@@ -2434,10 +1938,7 @@ function AddressEditCard({
 
       <Pressable
         onPress={() =>
-          onChange(
-            "isDefault",
-            !form.isDefault
-          )
+          onChange("isDefault", !form.isDefault)
         }
         style={({ pressed }) => [
           styles.defaultToggle,
@@ -2447,8 +1948,7 @@ function AddressEditCard({
         <View
           style={[
             styles.defaultCheckbox,
-            form.isDefault &&
-              styles.defaultCheckboxChecked,
+            form.isDefault && styles.defaultCheckboxChecked,
           ]}
         >
           {form.isDefault ? (
@@ -2477,11 +1977,8 @@ function AddressEditCard({
           onPress={onCancel}
           style={({ pressed }) => [
             styles.editCancelButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           <Text style={styles.editCancelText}>
@@ -2494,11 +1991,8 @@ function AddressEditCard({
           onPress={onSave}
           style={({ pressed }) => [
             styles.editSaveButton,
-            saving &&
-              styles.disabledButton,
-            pressed &&
-              !saving &&
-              styles.pressed,
+            saving && styles.disabledButton,
+            pressed && !saving && styles.pressed,
           ]}
         >
           {saving ? (
@@ -2551,13 +2045,10 @@ function EditInput({
         maxLength={maxLength}
         multiline={multiline}
         secureTextEntry={secureTextEntry}
-        textAlignVertical={
-          multiline ? "top" : "center"
-        }
+        textAlignVertical={multiline ? "top" : "center"}
         style={[
           styles.editInput,
-          multiline &&
-            styles.editInputMultiline,
+          multiline && styles.editInputMultiline,
         ]}
       />
     </View>
@@ -2570,9 +2061,7 @@ function InformationRow({
   value,
   last = false,
 }: {
-  icon:
-    keyof typeof Ionicons.glyphMap;
-
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
   last?: boolean;
@@ -2581,13 +2070,10 @@ function InformationRow({
     <View
       style={[
         styles.informationRow,
-        last &&
-          styles.lastInformationRow,
+        last && styles.lastInformationRow,
       ]}
     >
-      <View
-        style={styles.informationIcon}
-      >
+      <View style={styles.informationIcon}>
         <Ionicons
           name={icon}
           size={18}
@@ -2595,24 +2081,14 @@ function InformationRow({
         />
       </View>
 
-      <View
-        style={
-          styles.informationContent
-        }
-      >
-        <Text
-          style={
-            styles.informationLabel
-          }
-        >
+      <View style={styles.informationContent}>
+        <Text style={styles.informationLabel}>
           {label}
         </Text>
 
         <Text
           numberOfLines={2}
-          style={
-            styles.informationValue
-          }
+          style={styles.informationValue}
         >
           {value}
         </Text>
@@ -2737,15 +2213,19 @@ const styles = StyleSheet.create({
   operationsCard: {
     padding: 17,
     borderRadius: 24,
+    backgroundColor: "#E5EFF3",
+    borderWidth: 1,
+    borderColor: "#CEDFE6",
+    marginTop: 14,
+  },
+
+  adminToolsCard: {
+    padding: 17,
+    borderRadius: 24,
     backgroundColor: "#E2EFE4",
     borderWidth: 1,
     borderColor: "#CFE0D2",
     marginTop: 14,
-  },
-
-  deliveryOperationsCard: {
-    backgroundColor: "#E5EFF3",
-    borderColor: "#CEDFE6",
   },
 
   operationsCardTop: {
