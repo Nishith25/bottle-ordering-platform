@@ -11,9 +11,14 @@ import {
 
 import {
   fetchAssignedDeliveryOrders,
+  fetchDeliveryCashSummary,
   fetchDeliveryPerformance,
+  reportFailedDelivery,
+  saveDeliveryOrderNote,
   updateDeliveryOrderStatus,
   verifyDeliveryOrderOtp,
+  type DeliveryCashSummary,
+  type DeliveryFailureReason,
   type DeliveryOrder,
   type DeliveryOrderStatusCounts,
   type DeliveryPerformance,
@@ -33,6 +38,7 @@ const EMPTY_COUNTS:
     picked_up: 0,
     out_for_delivery: 0,
     delivered: 0,
+    failed_attempts: 0,
   };
 
 const EMPTY_PERFORMANCE:
@@ -48,6 +54,19 @@ const EMPTY_PERFORMANCE:
     recentDeliveries: [],
   };
 
+const EMPTY_CASH_SUMMARY:
+  DeliveryCashSummary = {
+    dateId: "",
+    activeOrderCount: 0,
+    activeBottleCount: 0,
+    pendingCodOrderCount: 0,
+    pendingCodAmount: 0,
+    collectedTodayOrderCount: 0,
+    collectedTodayAmount: 0,
+    deliveredTodayOrderCount: 0,
+    deliveredBottleCountToday: 0,
+  };
+
 const DELIVERY_LABELS = {
   unassigned: "Unassigned",
   assigned: "Assigned",
@@ -58,9 +77,61 @@ const DELIVERY_LABELS = {
   cancelled: "Cancelled",
 } as const;
 
-function formatCurrency(
-  value: number
-) {
+const FAILURE_REASONS: Array<{
+  value: DeliveryFailureReason;
+  label: string;
+}> = [
+  {
+    value:
+      "customer_not_available",
+    label:
+      "Customer not available",
+  },
+  {
+    value:
+      "customer_no_response",
+    label:
+      "No response",
+  },
+  {
+    value:
+      "wrong_address",
+    label:
+      "Wrong address",
+  },
+  {
+    value:
+      "payment_issue",
+    label:
+      "Payment issue",
+  },
+  {
+    value:
+      "otp_issue",
+    label:
+      "OTP issue",
+  },
+  {
+    value:
+      "customer_requested_later",
+    label:
+      "Requested later",
+  },
+  {
+    value:
+      "vehicle_issue",
+    label:
+      "Vehicle issue",
+  },
+  {
+    value:
+      "other",
+    label:
+      "Other",
+  },
+];
+
+function formatCurrency(value: number) {
   return new Intl.NumberFormat(
     "en-IN",
     {
@@ -68,12 +139,10 @@ function formatCurrency(
       currency: "INR",
       maximumFractionDigits: 0,
     }
-  ).format(value);
+  ).format(value || 0);
 }
 
-function formatDate(
-  value?: string | null
-) {
+function formatDate(value?: string | null) {
   if (!value) {
     return "Unavailable";
   }
@@ -101,9 +170,7 @@ function formatDate(
   );
 }
 
-function cleanIndianPhone(
-  value?: string | null
-) {
+function cleanIndianPhone(value?: string | null) {
   const digits =
     String(value || "").replace(
       /\D/g,
@@ -117,9 +184,7 @@ function cleanIndianPhone(
   return digits;
 }
 
-function getCustomerName(
-  order: DeliveryOrder
-) {
+function getCustomerName(order: DeliveryOrder) {
   if (
     order.user &&
     typeof order.user === "object"
@@ -133,9 +198,7 @@ function getCustomerName(
   return order.deliveryAddress.fullName;
 }
 
-function getCustomerPhone(
-  order: DeliveryOrder
-) {
+function getCustomerPhone(order: DeliveryOrder) {
   if (
     order.user &&
     typeof order.user === "object" &&
@@ -167,9 +230,7 @@ function getReviewCustomerName(
   );
 }
 
-function getFullAddress(
-  order: DeliveryOrder
-) {
+function getFullAddress(order: DeliveryOrder) {
   const address =
     order.deliveryAddress;
 
@@ -187,9 +248,17 @@ function getFullAddress(
     .join(", ");
 }
 
-function buildDeliverySummary(
-  order: DeliveryOrder
-) {
+function getFailureReasonLabel(value?: string) {
+  return (
+    FAILURE_REASONS.find(
+      (reason) =>
+        reason.value === value
+    )?.label ||
+    "Failed delivery"
+  );
+}
+
+function buildDeliverySummary(order: DeliveryOrder) {
   return [
     `Order: ${order.orderNumber}`,
     `Customer: ${getCustomerName(order)}`,
@@ -212,9 +281,7 @@ function buildDeliverySummary(
   ].join("\n");
 }
 
-function openCall(
-  phone: string
-) {
+function openCall(phone: string) {
   const cleanPhone =
     cleanIndianPhone(phone);
 
@@ -246,9 +313,7 @@ function openWhatsApp(
   );
 }
 
-function openMaps(
-  address: string
-) {
+function openMaps(address: string) {
   if (!address.trim()) {
     return;
   }
@@ -270,9 +335,7 @@ function openCustomerMode() {
   );
 }
 
-async function copyText(
-  text: string
-) {
+async function copyText(text: string) {
   if (
     navigator.clipboard &&
     navigator.clipboard.writeText
@@ -306,9 +369,7 @@ export default function DeliveryDashboardPage() {
   const [
     orders,
     setOrders,
-  ] = useState<
-    DeliveryOrder[]
-  >([]);
+  ] = useState<DeliveryOrder[]>([]);
 
   const [
     statusCounts,
@@ -327,6 +388,14 @@ export default function DeliveryDashboardPage() {
     );
 
   const [
+    cashSummary,
+    setCashSummary,
+  ] =
+    useState<DeliveryCashSummary>(
+      EMPTY_CASH_SUMMARY
+    );
+
+  const [
     filter,
     setFilter,
   ] = useState("active");
@@ -339,37 +408,58 @@ export default function DeliveryDashboardPage() {
   const [
     updatingOrderId,
     setUpdatingOrderId,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
+
+  const [
+    savingNoteOrderId,
+    setSavingNoteOrderId,
+  ] = useState<string | null>(null);
 
   const [
     otpByOrder,
     setOtpByOrder,
-  ] = useState<
-    Record<string, string>
-  >({});
+  ] = useState<Record<string, string>>({});
+
+  const [
+    noteByOrder,
+    setNoteByOrder,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    codCollectedByOrder,
+    setCodCollectedByOrder,
+  ] = useState<Record<string, boolean>>({});
+
+  const [
+    codAmountByOrder,
+    setCodAmountByOrder,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    failureReasonByOrder,
+    setFailureReasonByOrder,
+  ] =
+    useState<Record<string, DeliveryFailureReason>>({});
+
+  const [
+    failureNoteByOrder,
+    setFailureNoteByOrder,
+  ] = useState<Record<string, string>>({});
 
   const [
     copiedOrderId,
     setCopiedOrderId,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
 
   const [
     error,
     setError,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
 
   const [
     success,
     setSuccess,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
 
   const loadDashboard =
     useCallback(async () => {
@@ -380,6 +470,9 @@ export default function DeliveryDashboardPage() {
         );
         setPerformance(
           EMPTY_PERFORMANCE
+        );
+        setCashSummary(
+          EMPTY_CASH_SUMMARY
         );
         setLoading(false);
 
@@ -393,6 +486,7 @@ export default function DeliveryDashboardPage() {
         const [
           orderResult,
           performanceResult,
+          cashSummaryResult,
         ] = await Promise.all([
           fetchAssignedDeliveryOrders(
             token
@@ -401,18 +495,87 @@ export default function DeliveryDashboardPage() {
           fetchDeliveryPerformance(
             token
           ),
+
+          fetchDeliveryCashSummary(
+            token
+          ),
         ]);
 
         setOrders(
           orderResult.orders
         );
 
-        setStatusCounts(
-          orderResult.statusCounts
-        );
+        setStatusCounts({
+          ...EMPTY_COUNTS,
+          ...orderResult.statusCounts,
+        });
 
         setPerformance(
           performanceResult
+        );
+
+        setCashSummary(
+          cashSummaryResult
+        );
+
+        setNoteByOrder(
+          (currentValues) => {
+            const next = {
+              ...currentValues,
+            };
+
+            for (const order of orderResult.orders) {
+              if (
+                next[order._id] ===
+                undefined
+              ) {
+                next[order._id] =
+                  order.deliveryPartnerNote || "";
+              }
+            }
+
+            return next;
+          }
+        );
+
+        setCodAmountByOrder(
+          (currentValues) => {
+            const next = {
+              ...currentValues,
+            };
+
+            for (const order of orderResult.orders) {
+              if (
+                next[order._id] ===
+                undefined
+              ) {
+                next[order._id] =
+                  String(order.total || "");
+              }
+            }
+
+            return next;
+          }
+        );
+
+        setFailureReasonByOrder(
+          (currentValues) => {
+            const next = {
+              ...currentValues,
+            };
+
+            for (const order of orderResult.orders) {
+              if (
+                next[order._id] ===
+                undefined
+              ) {
+                next[order._id] =
+                  "customer_not_available";
+              }
+            }
+
+            return next;
+          }
         );
       } catch (requestError) {
         setError(
@@ -435,9 +598,7 @@ export default function DeliveryDashboardPage() {
         return orders;
       }
 
-      if (
-        filter === "active"
-      ) {
+      if (filter === "active") {
         return orders.filter(
           (order) =>
             [
@@ -450,6 +611,14 @@ export default function DeliveryDashboardPage() {
         );
       }
 
+      if (filter === "failed") {
+        return orders.filter(
+          (order) =>
+            order.lastDeliveryAttemptStatus ===
+            "failed"
+        );
+      }
+
       return orders.filter(
         (order) =>
           order.deliveryStatus ===
@@ -457,56 +626,31 @@ export default function DeliveryDashboardPage() {
       );
     }, [orders, filter]);
 
-  const codActiveOrders =
-    useMemo(
-      () =>
-        orders.filter(
-          (order) =>
-            order.paymentMethod ===
-              "cod" &&
-            [
-              "assigned",
-              "picked_up",
-              "out_for_delivery",
-            ].includes(
-              order.deliveryStatus
-            )
-        ),
-      [orders]
-    );
+  const updateLocalOrder =
+    (updatedOrder: DeliveryOrder) => {
+      setOrders(
+        (currentOrders) =>
+          currentOrders.map(
+            (order) =>
+              order._id ===
+              updatedOrder._id
+                ? updatedOrder
+                : order
+          )
+      );
 
-  const codAmountToCollect =
-    useMemo(
-      () =>
-        codActiveOrders.reduce(
-          (total, order) =>
-            total +
-            Number(order.total || 0),
-          0
-        ),
-      [codActiveOrders]
-    );
-
-  const updateLocalOrder = (
-    updatedOrder:
-      DeliveryOrder
-  ) => {
-    setOrders(
-      (currentOrders) =>
-        currentOrders.map(
-          (order) =>
-            order._id ===
-            updatedOrder._id
-              ? updatedOrder
-              : order
-        )
-    );
-  };
+      setNoteByOrder(
+        (currentValues) => ({
+          ...currentValues,
+          [updatedOrder._id]:
+            updatedOrder.deliveryPartnerNote || "",
+        })
+      );
+    };
 
   const handleStatusChange =
     async (
       order: DeliveryOrder,
-
       nextStatus:
         | "picked_up"
         | "out_for_delivery"
@@ -538,8 +682,7 @@ export default function DeliveryDashboardPage() {
         );
 
         setSuccess(
-          nextStatus ===
-          "picked_up"
+          nextStatus === "picked_up"
             ? `${order.orderNumber} marked as picked up.`
             : `${order.orderNumber} is now out for delivery.`
         );
@@ -558,10 +701,120 @@ export default function DeliveryDashboardPage() {
       }
     };
 
+  const handleSaveNote =
+    async (order: DeliveryOrder) => {
+      if (
+        !token ||
+        savingNoteOrderId
+      ) {
+        return;
+      }
+
+      setSavingNoteOrderId(
+        order._id
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const updatedOrder =
+          await saveDeliveryOrderNote(
+            token,
+            order._id,
+            noteByOrder[order._id] || ""
+          );
+
+        updateLocalOrder(
+          updatedOrder
+        );
+
+        setSuccess(
+          `${order.orderNumber} delivery note saved.`
+        );
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to save delivery note."
+        );
+      } finally {
+        setSavingNoteOrderId(null);
+      }
+    };
+
+  const handleReportFailure =
+    async (order: DeliveryOrder) => {
+      if (
+        !token ||
+        updatingOrderId
+      ) {
+        return;
+      }
+
+      const reason =
+        failureReasonByOrder[order._id] ||
+        "customer_not_available";
+
+      const notes =
+        failureNoteByOrder[order._id] || "";
+
+      const confirmed =
+        window.confirm(
+          `Mark ${order.orderNumber} as failed delivery? The order will go back to assigned status for retry.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setUpdatingOrderId(
+        order._id
+      );
+
+      setError(null);
+      setSuccess(null);
+
+      try {
+        const updatedOrder =
+          await reportFailedDelivery(
+            token,
+            order._id,
+            {
+              reason,
+              notes,
+            }
+          );
+
+        updateLocalOrder(
+          updatedOrder
+        );
+
+        setFailureNoteByOrder(
+          (currentValues) => ({
+            ...currentValues,
+            [order._id]: "",
+          })
+        );
+
+        setSuccess(
+          `${order.orderNumber} failed delivery recorded.`
+        );
+
+        await loadDashboard();
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to report failed delivery."
+        );
+      } finally {
+        setUpdatingOrderId(null);
+      }
+    };
+
   const handleOtpVerification =
-    async (
-      order: DeliveryOrder
-    ) => {
+    async (order: DeliveryOrder) => {
       if (
         !token ||
         updatingOrderId
@@ -582,6 +835,38 @@ export default function DeliveryDashboardPage() {
         return;
       }
 
+      const isCod =
+        order.paymentMethod === "cod";
+
+      const codConfirmed =
+        codCollectedByOrder[order._id] === true;
+
+      const codAmount =
+        Number(
+          codAmountByOrder[order._id] ||
+            order.total ||
+            0
+        );
+
+      if (isCod && !codConfirmed) {
+        setError(
+          "Confirm COD cash collection before verifying OTP."
+        );
+
+        return;
+      }
+
+      if (
+        isCod &&
+        codAmount < Number(order.total || 0)
+      ) {
+        setError(
+          "Collected cash amount must be equal to the order total."
+        );
+
+        return;
+      }
+
       setUpdatingOrderId(
         order._id
       );
@@ -594,7 +879,14 @@ export default function DeliveryDashboardPage() {
           await verifyDeliveryOrderOtp(
             token,
             order._id,
-            otp
+            otp,
+            isCod
+              ? {
+                  codCollected: true,
+                  codAmountCollected:
+                    codAmount,
+                }
+              : undefined
           );
 
         updateLocalOrder(
@@ -605,6 +897,13 @@ export default function DeliveryDashboardPage() {
           (currentValues) => ({
             ...currentValues,
             [order._id]: "",
+          })
+        );
+
+        setCodCollectedByOrder(
+          (currentValues) => ({
+            ...currentValues,
+            [order._id]: false,
           })
         );
 
@@ -620,16 +919,12 @@ export default function DeliveryDashboardPage() {
             : "Unable to verify the delivery OTP."
         );
       } finally {
-        setUpdatingOrderId(
-          null
-        );
+        setUpdatingOrderId(null);
       }
     };
 
   const handleCopyOrder =
-    async (
-      order: DeliveryOrder
-    ) => {
+    async (order: DeliveryOrder) => {
       try {
         await copyText(
           buildDeliverySummary(order)
@@ -678,18 +973,12 @@ export default function DeliveryDashboardPage() {
           </h1>
 
           <p>
-            Complete assigned deliveries from
-            this screen. Use Customer Mode if
-            the delivery partner also wants to
-            place personal bottle orders.
+            Complete assigned deliveries from this screen. Use Customer Mode only for personal bottle orders.
           </p>
 
           <div className="delivery-hero-progress">
             <strong>
-              {performance.completionRate.toFixed(
-                1
-              )}
-              %
+              {performance.completionRate.toFixed(1)}%
             </strong>
 
             <span>
@@ -728,15 +1017,11 @@ export default function DeliveryDashboardPage() {
           </span>
 
           <h2>
-            Delivery person can also act as a customer
+            Delivery Mode is active
           </h2>
 
           <p>
-            This button opens the customer app.
-            The same delivery person can log in
-            there and place orders like a normal
-            customer, then come back here for
-            assigned delivery actions.
+            This dashboard is only for assigned deliveries. Switch to Customer Mode when the delivery partner wants to place a personal bottle order.
           </p>
         </div>
 
@@ -763,57 +1048,99 @@ export default function DeliveryDashboardPage() {
       <section className="delivery-metric-grid">
         <Metric
           label="Active deliveries"
-          value={
-            performance.activeDeliveries
-          }
+          value={performance.activeDeliveries}
         />
 
         <Metric
           label="Assigned"
-          value={
-            statusCounts.assigned
-          }
+          value={statusCounts.assigned}
         />
 
         <Metric
           label="Picked up"
-          value={
-            statusCounts.picked_up
-          }
+          value={statusCounts.picked_up}
         />
 
         <Metric
           label="Out for delivery"
-          value={
-            statusCounts.out_for_delivery
-          }
+          value={statusCounts.out_for_delivery}
+        />
+
+        <Metric
+          label="Failed attempts"
+          value={statusCounts.failed_attempts || 0}
         />
 
         <Metric
           label="COD to collect"
           value={formatCurrency(
-            codAmountToCollect
+            cashSummary.pendingCodAmount
           )}
         />
 
         <Metric
-          label="Completed"
-          value={
-            performance.completedDeliveries
-          }
+          label="Collected today"
+          value={formatCurrency(
+            cashSummary.collectedTodayAmount
+          )}
         />
 
         <Metric
           label="Average rating"
           value={ratingValue}
         />
+      </section>
 
-        <Metric
-          label="Five-star reviews"
-          value={
-            performance.fiveStarReviews
-          }
-        />
+      <section className="delivery-cash-summary-card">
+        <div>
+          <span>
+            CASH AND CLOSING
+          </span>
+
+          <h2>
+            Today’s delivery closing
+          </h2>
+
+          <p>
+            Track COD collection and completed deliveries before ending the shift.
+          </p>
+        </div>
+
+        <div className="delivery-cash-grid">
+          <CashItem
+            label="Active orders"
+            value={cashSummary.activeOrderCount}
+          />
+
+          <CashItem
+            label="Active bottles"
+            value={cashSummary.activeBottleCount}
+          />
+
+          <CashItem
+            label="Pending COD orders"
+            value={cashSummary.pendingCodOrderCount}
+          />
+
+          <CashItem
+            label="Pending COD amount"
+            value={formatCurrency(
+              cashSummary.pendingCodAmount
+            )}
+          />
+
+          <CashItem
+            label="COD collected today"
+            value={formatCurrency(
+              cashSummary.collectedTodayAmount
+            )}
+          />
+
+          <CashItem
+            label="Delivered today"
+            value={cashSummary.deliveredTodayOrderCount}
+          />
+        </div>
       </section>
 
       <section className="delivery-performance-grid">
@@ -830,23 +1157,16 @@ export default function DeliveryDashboardPage() {
             </div>
 
             <strong>
-              {
-                performance.reviewCount
-              }{" "}
-              total
+              {performance.reviewCount} total
             </strong>
           </div>
 
-          {performance
-            .recentReviews.length ===
-          0 ? (
+          {performance.recentReviews.length === 0 ? (
             <div className="delivery-mini-empty">
               <span>★</span>
 
               <p>
-                Customer feedback will
-                appear after completed
-                orders are reviewed.
+                Customer feedback will appear after completed orders are reviewed.
               </p>
             </div>
           ) : (
@@ -854,30 +1174,22 @@ export default function DeliveryDashboardPage() {
               {performance.recentReviews.map(
                 (review) => (
                   <article
-                    key={
-                      review._id
-                    }
+                    key={review._id}
                     className="delivery-feedback-card"
                   >
                     <div className="delivery-feedback-top">
                       <div>
                         <strong>
-                          {getReviewCustomerName(
-                            review
-                          )}
+                          {getReviewCustomerName(review)}
                         </strong>
 
                         <span>
-                          {
-                            review.orderNumber
-                          }
+                          {review.orderNumber}
                         </span>
                       </div>
 
                       <StarDisplay
-                        value={
-                          review.deliveryRating
-                        }
+                        value={review.deliveryRating}
                       />
                     </div>
 
@@ -912,22 +1224,16 @@ export default function DeliveryDashboardPage() {
             </div>
 
             <strong>
-              {
-                performance.completedDeliveries
-              }{" "}
-              completed
+              {performance.completedDeliveries} completed
             </strong>
           </div>
 
-          {performance
-            .recentDeliveries.length ===
-          0 ? (
+          {performance.recentDeliveries.length === 0 ? (
             <div className="delivery-mini-empty">
               <span>✓</span>
 
               <p>
-                Completed deliveries
-                will appear here.
+                Completed deliveries will appear here.
               </p>
             </div>
           ) : (
@@ -935,30 +1241,22 @@ export default function DeliveryDashboardPage() {
               {performance.recentDeliveries.map(
                 (order) => (
                   <article
-                    key={
-                      order._id
-                    }
+                    key={order._id}
                     className="delivery-history-row"
                   >
                     <div>
                       <strong>
-                        {
-                          order.orderNumber
-                        }
+                        {order.orderNumber}
                       </strong>
 
                       <span>
-                        {getCustomerName(
-                          order
-                        )}
+                        {getCustomerName(order)}
                       </span>
                     </div>
 
                     <div>
                       <strong>
-                        {formatCurrency(
-                          order.total
-                        )}
+                        {formatCurrency(order.total)}
                       </strong>
 
                       <span>
@@ -988,66 +1286,38 @@ export default function DeliveryDashboardPage() {
         </div>
 
         <strong>
-          {
-            visibleOrders.length
-          }{" "}
-          shown
+          {visibleOrders.length} shown
         </strong>
       </section>
 
       <section className="delivery-filter-row">
         {[
-          [
-            "active",
-            "Active",
-          ],
-
-          [
-            "assigned",
-            "Assigned",
-          ],
-
-          [
-            "picked_up",
-            "Picked up",
-          ],
-
-          [
-            "out_for_delivery",
-            "Out for delivery",
-          ],
-
-          [
-            "delivered",
-            "Delivered",
-          ],
-
-          [
-            "all",
-            "All",
-          ],
-        ].map(
-          ([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={
-                filter === value
-                  ? "delivery-filter-active"
-                  : ""
-              }
-              onClick={() =>
-                setFilter(value)
-              }
-            >
-              {label}
-            </button>
-          )
-        )}
+          ["active", "Active"],
+          ["assigned", "Assigned"],
+          ["picked_up", "Picked up"],
+          ["out_for_delivery", "Out for delivery"],
+          ["failed", "Failed attempts"],
+          ["delivered", "Delivered"],
+          ["all", "All"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={
+              filter === value
+                ? "delivery-filter-active"
+                : ""
+            }
+            onClick={() =>
+              setFilter(value)
+            }
+          >
+            {label}
+          </button>
+        ))}
       </section>
 
-      {loading &&
-      orders.length === 0 ? (
+      {loading && orders.length === 0 ? (
         <div className="delivery-empty-state">
           <div className="spinner" />
 
@@ -1055,8 +1325,7 @@ export default function DeliveryDashboardPage() {
             Loading assigned deliveries
           </p>
         </div>
-      ) : visibleOrders.length ===
-        0 ? (
+      ) : visibleOrders.length === 0 ? (
         <div className="delivery-empty-state">
           <div className="delivery-empty-icon">
             ✓
@@ -1067,279 +1336,352 @@ export default function DeliveryDashboardPage() {
           </h2>
 
           <p>
-            There are no orders matching
-            this delivery filter.
+            There are no orders matching this delivery filter.
           </p>
         </div>
       ) : (
         <section className="delivery-order-list">
-          {visibleOrders.map(
-            (order) => {
-              const customer =
-                order.user &&
-                typeof order.user ===
-                  "object"
-                  ? order.user
-                  : null;
+          {visibleOrders.map((order) => {
+            const customer =
+              order.user &&
+              typeof order.user === "object"
+                ? order.user
+                : null;
 
-              const customerPhone =
-                getCustomerPhone(order);
+            const customerPhone =
+              getCustomerPhone(order);
 
-              const address =
-                getFullAddress(order);
+            const address =
+              getFullAddress(order);
 
-              return (
-                <article
-                  key={order._id}
-                  className="delivery-order-card"
-                >
-                  <div className="delivery-order-heading">
-                    <div>
-                      <div className="delivery-number-row">
-                        <strong>
-                          {
-                            order.orderNumber
-                          }
-                        </strong>
+            const isCod =
+              order.paymentMethod === "cod";
 
-                        <span
-                          className={`delivery-status status-${order.deliveryStatus}`}
-                        >
-                          {
-                            DELIVERY_LABELS[
-                              order
-                                .deliveryStatus
-                            ]
-                          }
+            const orderFailureReason =
+              getFailureReasonLabel(
+                order.failedDeliveryReason
+              );
+
+            return (
+              <article
+                key={order._id}
+                className="delivery-order-card"
+              >
+                <div className="delivery-order-heading">
+                  <div>
+                    <div className="delivery-number-row">
+                      <strong>
+                        {order.orderNumber}
+                      </strong>
+
+                      <span
+                        className={`delivery-status status-${order.deliveryStatus}`}
+                      >
+                        {
+                          DELIVERY_LABELS[
+                            order.deliveryStatus
+                          ]
+                        }
+                      </span>
+
+                      {order.lastDeliveryAttemptStatus === "failed" ? (
+                        <span className="delivery-failed-badge">
+                          Failed attempt
                         </span>
-                      </div>
-
-                      <span>
-                        {formatDate(
-                          order.createdAt
-                        )}
-                      </span>
+                      ) : null}
                     </div>
 
-                    <strong className="delivery-order-total">
-                      {formatCurrency(
-                        order.total
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="delivery-quick-actions">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openCall(
-                          customerPhone
-                        )
-                      }
-                    >
-                      Call
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openWhatsApp(
-                          customerPhone,
-                          buildDeliverySummary(
-                            order
-                          )
-                        )
-                      }
-                    >
-                      WhatsApp
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openMaps(address)
-                      }
-                    >
-                      Maps
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleCopyOrder(
-                          order
-                        );
-                      }}
-                    >
-                      {copiedOrderId ===
-                      order._id
-                        ? "Copied"
-                        : "Copy"}
-                    </button>
-                  </div>
-
-                  <div className="delivery-info-grid">
-                    <div>
-                      <span>
-                        Customer
-                      </span>
-
-                      <strong>
-                        {customer?.fullName ??
-                          order
-                            .deliveryAddress
-                            .fullName}
-                      </strong>
-
-                      <p>
-                        +91{" "}
-                        {
-                          customerPhone
-                        }
-                      </p>
-                    </div>
-
-                    <div>
-                      <span>
-                        Delivery time
-                      </span>
-
-                      <strong>
-                        {
-                          order
-                            .deliverySchedule
-                            .deliveryDateLabel
-                        }
-                      </strong>
-
-                      <p>
-                        {
-                          order
-                            .deliverySchedule
-                            .deliverySlot
-                        }
-                      </p>
-                    </div>
-
-                    <div>
-                      <span>
-                        Payment
-                      </span>
-
-                      <strong>
-                        {order.paymentMethod ===
-                        "cod"
-                          ? "Collect cash"
-                          : "Paid online"}
-                      </strong>
-
-                      <p>
-                        {formatCurrency(
-                          order.total
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="delivery-address-block">
                     <span>
-                      Complete address
+                      {formatDate(order.createdAt)}
+                    </span>
+                  </div>
+
+                  <strong className="delivery-order-total">
+                    {formatCurrency(order.total)}
+                  </strong>
+                </div>
+
+                {order.lastDeliveryAttemptStatus === "failed" ? (
+                  <div className="delivery-failed-summary">
+                    <strong>
+                      Last failed reason: {orderFailureReason}
+                    </strong>
+
+                    <span>
+                      {formatDate(order.failedDeliveryAt)}
                     </span>
 
+                    {order.failedDeliveryNotes ? (
+                      <p>
+                        {order.failedDeliveryNotes}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="delivery-quick-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openCall(customerPhone)
+                    }
+                  >
+                    Call
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openWhatsApp(
+                        customerPhone,
+                        buildDeliverySummary(order)
+                      )
+                    }
+                  >
+                    WhatsApp
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openMaps(address)
+                    }
+                  >
+                    Maps
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleCopyOrder(order);
+                    }}
+                  >
+                    {copiedOrderId === order._id
+                      ? "Copied"
+                      : "Copy"}
+                  </button>
+                </div>
+
+                <div className="delivery-info-grid">
+                  <div>
+                    <span>
+                      Customer
+                    </span>
+
+                    <strong>
+                      {customer?.fullName ??
+                        order.deliveryAddress.fullName}
+                    </strong>
+
                     <p>
-                      {address}
+                      +91 {customerPhone}
                     </p>
                   </div>
 
-                  <div className="delivery-items-block">
+                  <div>
                     <span>
-                      Order items
+                      Delivery time
                     </span>
 
-                    {order.items.map(
-                      (item) => (
-                        <div
-                          key={
-                            item.productId
-                          }
-                        >
-                          <p>
-                            {
-                              item.quantity
-                            }{" "}
-                            ×{" "}
-                            {item.name}
-                          </p>
+                    <strong>
+                      {order.deliverySchedule.deliveryDateLabel}
+                    </strong>
 
-                          <strong>
-                            {formatCurrency(
-                              item.lineTotal
-                            )}
-                          </strong>
-                        </div>
-                      )
-                    )}
+                    <p>
+                      {order.deliverySchedule.deliverySlot}
+                    </p>
                   </div>
 
-                  <div className="delivery-action-block">
-                    {order.deliveryStatus ===
-                    "assigned" ? (
-                      <button
-                        type="button"
-                        disabled={
-                          updatingOrderId ===
-                          order._id
-                        }
-                        onClick={() => {
-                          void handleStatusChange(
-                            order,
-                            "picked_up"
-                          );
-                        }}
-                      >
-                        {updatingOrderId ===
-                        order._id
-                          ? "Updating..."
+                  <div>
+                    <span>
+                      Payment
+                    </span>
+
+                    <strong>
+                      {isCod
+                        ? "Collect cash"
+                        : "Paid online"}
+                    </strong>
+
+                    <p>
+                      {formatCurrency(order.total)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="delivery-address-block">
+                  <span>
+                    Complete address
+                  </span>
+
+                  <p>
+                    {address}
+                  </p>
+                </div>
+
+                <div className="delivery-items-block">
+                  <span>
+                    Order items
+                  </span>
+
+                  {order.items.map((item) => (
+                    <div key={item.productId}>
+                      <p>
+                        {item.quantity} × {item.name}
+                      </p>
+
+                      <strong>
+                        {formatCurrency(item.lineTotal)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="delivery-note-panel">
+                  <div>
+                    <span>
+                      Delivery partner note
+                    </span>
+
+                    <p>
+                      Add address, customer or cash notes for this order.
+                    </p>
+                  </div>
+
+                  <textarea
+                    value={noteByOrder[order._id] || ""}
+                    onChange={(event) =>
+                      setNoteByOrder(
+                        (currentValues) => ({
+                          ...currentValues,
+                          [order._id]:
+                            event.target.value,
+                        })
+                      )
+                    }
+                    placeholder="Example: call before reaching, gate code, customer prefers evening retry..."
+                  />
+
+                  <button
+                    type="button"
+                    disabled={
+                      savingNoteOrderId === order._id
+                    }
+                    onClick={() => {
+                      void handleSaveNote(order);
+                    }}
+                  >
+                    {savingNoteOrderId === order._id
+                      ? "Saving note..."
+                      : "Save note"}
+                  </button>
+                </div>
+
+                <div className="delivery-action-block">
+                  {order.deliveryStatus === "assigned" ? (
+                    <button
+                      type="button"
+                      disabled={
+                        updatingOrderId === order._id
+                      }
+                      onClick={() => {
+                        void handleStatusChange(
+                          order,
+                          "picked_up"
+                        );
+                      }}
+                    >
+                      {updatingOrderId === order._id
+                        ? "Updating..."
+                        : order.lastDeliveryAttemptStatus === "failed"
+                          ? "Retry pickup"
                           : "Mark as picked up"}
-                      </button>
-                    ) : null}
+                    </button>
+                  ) : null}
 
-                    {order.deliveryStatus ===
-                    "picked_up" ? (
-                      <button
-                        type="button"
-                        disabled={
-                          updatingOrderId ===
-                          order._id
-                        }
-                        onClick={() => {
-                          void handleStatusChange(
-                            order,
-                            "out_for_delivery"
-                          );
-                        }}
-                      >
-                        {updatingOrderId ===
-                        order._id
-                          ? "Updating..."
-                          : "Start delivery"}
-                      </button>
-                    ) : null}
+                  {order.deliveryStatus === "picked_up" ? (
+                    <button
+                      type="button"
+                      disabled={
+                        updatingOrderId === order._id
+                      }
+                      onClick={() => {
+                        void handleStatusChange(
+                          order,
+                          "out_for_delivery"
+                        );
+                      }}
+                    >
+                      {updatingOrderId === order._id
+                        ? "Updating..."
+                        : "Start delivery"}
+                    </button>
+                  ) : null}
 
-                    {order.deliveryStatus ===
-                    "out_for_delivery" ? (
+                  {order.deliveryStatus === "out_for_delivery" ? (
+                    <>
+                      {isCod ? (
+                        <div className="delivery-cod-confirm-panel">
+                          <div>
+                            <span>
+                              COD cash collection
+                            </span>
+
+                            <p>
+                              Confirm cash before verifying customer OTP.
+                            </p>
+                          </div>
+
+                          <input
+                            inputMode="numeric"
+                            value={
+                              codAmountByOrder[order._id] ??
+                              String(order.total || "")
+                            }
+                            onChange={(event) =>
+                              setCodAmountByOrder(
+                                (currentValues) => ({
+                                  ...currentValues,
+                                  [order._id]:
+                                    event.target.value.replace(
+                                      /[^\d.]/g,
+                                      ""
+                                    ),
+                                })
+                              )
+                            }
+                          />
+
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={
+                                codCollectedByOrder[order._id] === true
+                              }
+                              onChange={(event) =>
+                                setCodCollectedByOrder(
+                                  (currentValues) => ({
+                                    ...currentValues,
+                                    [order._id]:
+                                      event.target.checked,
+                                  })
+                                )
+                              }
+                            />
+
+                            Cash collected from customer
+                          </label>
+                        </div>
+                      ) : null}
+
                       <div className="delivery-otp-form">
                         <div>
                           <span>
-                            Customer delivery
-                            OTP
+                            Customer delivery OTP
                           </span>
 
                           <p>
-                            Ask the customer
-                            for the four-digit
-                            code shown in their
-                            app.
+                            Ask the customer for the four-digit code shown in their app.
                           </p>
                         </div>
 
@@ -1347,29 +1689,16 @@ export default function DeliveryDashboardPage() {
                           inputMode="numeric"
                           maxLength={4}
                           value={
-                            otpByOrder[
-                              order._id
-                            ] || ""
+                            otpByOrder[order._id] || ""
                           }
-                          onChange={(
-                            event
-                          ) =>
+                          onChange={(event) =>
                             setOtpByOrder(
-                              (
-                                currentValues
-                              ) => ({
+                              (currentValues) => ({
                                 ...currentValues,
-
                                 [order._id]:
                                   event.target.value
-                                    .replace(
-                                      /\D/g,
-                                      ""
-                                    )
-                                    .slice(
-                                      0,
-                                      4
-                                    ),
+                                    .replace(/\D/g, "")
+                                    .slice(0, 4),
                               })
                             )
                           }
@@ -1379,35 +1708,95 @@ export default function DeliveryDashboardPage() {
                         <button
                           type="button"
                           disabled={
-                            updatingOrderId ===
-                            order._id
+                            updatingOrderId === order._id
                           }
                           onClick={() => {
-                            void handleOtpVerification(
-                              order
-                            );
+                            void handleOtpVerification(order);
                           }}
                         >
-                          {updatingOrderId ===
-                          order._id
+                          {updatingOrderId === order._id
                             ? "Verifying..."
                             : "Verify OTP and deliver"}
                         </button>
                       </div>
-                    ) : null}
 
-                    {order.deliveryStatus ===
-                    "delivered" ? (
-                      <div className="delivery-complete-message">
-                        Delivery completed
-                        successfully.
+                      <div className="delivery-failure-panel">
+                        <div>
+                          <span>
+                            Failed delivery
+                          </span>
+
+                          <p>
+                            Use only when customer is unavailable, address is wrong, payment failed, or OTP cannot be verified.
+                          </p>
+                        </div>
+
+                        <div className="failure-reason-grid">
+                          {FAILURE_REASONS.map((reason) => (
+                            <button
+                              type="button"
+                              key={reason.value}
+                              className={
+                                failureReasonByOrder[order._id] === reason.value
+                                  ? "failure-reason-active"
+                                  : ""
+                              }
+                              onClick={() =>
+                                setFailureReasonByOrder(
+                                  (currentValues) => ({
+                                    ...currentValues,
+                                    [order._id]:
+                                      reason.value,
+                                  })
+                                )
+                              }
+                            >
+                              {reason.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <textarea
+                          value={failureNoteByOrder[order._id] || ""}
+                          onChange={(event) =>
+                            setFailureNoteByOrder(
+                              (currentValues) => ({
+                                ...currentValues,
+                                [order._id]:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                          placeholder="Add failed delivery note..."
+                        />
+
+                        <button
+                          type="button"
+                          className="failed-delivery-button"
+                          disabled={
+                            updatingOrderId === order._id
+                          }
+                          onClick={() => {
+                            void handleReportFailure(order);
+                          }}
+                        >
+                          {updatingOrderId === order._id
+                            ? "Recording..."
+                            : "Report failed delivery"}
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            }
-          )}
+                    </>
+                  ) : null}
+
+                  {order.deliveryStatus === "delivered" ? (
+                    <div className="delivery-complete-message">
+                      Delivery completed successfully.
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </section>
       )}
     </div>
@@ -1434,6 +1823,26 @@ function Metric({
   );
 }
 
+function CashItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div className="delivery-cash-item">
+      <span>
+        {label}
+      </span>
+
+      <strong>
+        {value}
+      </strong>
+    </div>
+  );
+}
+
 function StarDisplay({
   value,
 }: {
@@ -1444,20 +1853,18 @@ function StarDisplay({
       className="delivery-star-display"
       aria-label={`${value} out of 5 stars`}
     >
-      {[1, 2, 3, 4, 5].map(
-        (star) => (
-          <span
-            key={star}
-            className={
-              star <= value
-                ? "delivery-star-filled"
-                : "delivery-star-empty"
-            }
-          >
-            ★
-          </span>
-        )
-      )}
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span
+          key={star}
+          className={
+            star <= value
+              ? "delivery-star-filled"
+              : "delivery-star-empty"
+          }
+        >
+          ★
+        </span>
+      ))}
     </div>
   );
 }

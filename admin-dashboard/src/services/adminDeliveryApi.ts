@@ -41,11 +41,22 @@ export type DeliveryPartnerPayload = {
   active?: boolean;
 };
 
+export type DeliveryFailureReason =
+  | "customer_not_available"
+  | "customer_no_response"
+  | "wrong_address"
+  | "payment_issue"
+  | "otp_issue"
+  | "customer_requested_later"
+  | "vehicle_issue"
+  | "other";
+
 export type DeliveryOrderStatusCounts = {
   assigned: number;
   picked_up: number;
   out_for_delivery: number;
   delivered: number;
+  failed_attempts?: number;
 };
 
 export type DeliveryOrder = Omit<
@@ -62,6 +73,38 @@ export type DeliveryOrder = Omit<
 
   deliveryStatus:
     AdminDeliveryStatus;
+
+  lastDeliveryAttemptStatus?:
+    | ""
+    | "failed"
+    | "completed";
+
+  failedDeliveryReason?:
+    | DeliveryFailureReason
+    | "";
+
+  failedDeliveryNotes?: string;
+  failedDeliveryAt?: string | null;
+  failedDeliveryAttemptCount?: number;
+
+  deliveryPartnerNote?: string;
+  deliveryPartnerNoteUpdatedAt?: string | null;
+
+  codCollectedByDeliveryPartner?: boolean;
+  codCollectedAmount?: number;
+  codCollectedAt?: string | null;
+};
+
+export type DeliveryCashSummary = {
+  dateId: string;
+  activeOrderCount: number;
+  activeBottleCount: number;
+  pendingCodOrderCount: number;
+  pendingCodAmount: number;
+  collectedTodayOrderCount: number;
+  collectedTodayAmount: number;
+  deliveredTodayOrderCount: number;
+  deliveredBottleCountToday: number;
 };
 
 export type DeliveryPerformanceReview = {
@@ -133,6 +176,14 @@ type OrderResponse =
     };
   };
 
+type DeliveryOrderResponse =
+  ApiResponse & {
+    data: {
+      order:
+        DeliveryOrder;
+    };
+  };
+
 type DeliveryOrdersResponse =
   ApiResponse & {
     count: number;
@@ -151,6 +202,14 @@ type DeliveryPerformanceResponse =
     data: {
       performance:
         DeliveryPerformance;
+    };
+  };
+
+type DeliveryCashSummaryResponse =
+  ApiResponse & {
+    data: {
+      cashSummary:
+        DeliveryCashSummary;
     };
   };
 
@@ -204,9 +263,7 @@ async function request<T>(
 
     try {
       payload = responseText
-        ? JSON.parse(
-            responseText
-          )
+        ? JSON.parse(responseText)
         : ({
             success:
               response.ok,
@@ -277,7 +334,6 @@ export async function fetchDeliveryPartners(
 
 export async function createDeliveryPartner(
   token: string,
-
   payload: Required<
     Pick<
       DeliveryPartnerPayload,
@@ -379,23 +435,43 @@ export async function fetchDeliveryPerformance(
   return response.data.performance;
 }
 
+export async function fetchDeliveryCashSummary(
+  token: string,
+  dateId = ""
+): Promise<DeliveryCashSummary> {
+  const params =
+    new URLSearchParams();
+
+  if (dateId.trim()) {
+    params.set(
+      "date",
+      dateId.trim()
+    );
+  }
+
+  const query =
+    params.toString();
+
+  const response =
+    await request<DeliveryCashSummaryResponse>(
+      `/api/delivery/orders/cash-summary${
+        query ? `?${query}` : ""
+      }`,
+      token
+    );
+
+  return response.data.cashSummary;
+}
+
 export async function updateDeliveryOrderStatus(
   token: string,
   orderId: string,
-
   deliveryStatus:
     | "picked_up"
     | "out_for_delivery"
 ): Promise<DeliveryOrder> {
   const response =
-    await request<
-      ApiResponse & {
-        data: {
-          order:
-            DeliveryOrder;
-        };
-      }
-    >(
+    await request<DeliveryOrderResponse>(
       `/api/delivery/orders/${encodeURIComponent(
         orderId
       )}/status`,
@@ -412,20 +488,67 @@ export async function updateDeliveryOrderStatus(
   return response.data.order;
 }
 
+export async function saveDeliveryOrderNote(
+  token: string,
+  orderId: string,
+  note: string
+): Promise<DeliveryOrder> {
+  const response =
+    await request<DeliveryOrderResponse>(
+      `/api/delivery/orders/${encodeURIComponent(
+        orderId
+      )}/notes`,
+      token,
+      {
+        method: "PATCH",
+
+        body: JSON.stringify({
+          note,
+        }),
+      }
+    );
+
+  return response.data.order;
+}
+
+export async function reportFailedDelivery(
+  token: string,
+  orderId: string,
+  payload: {
+    reason:
+      DeliveryFailureReason;
+    notes?: string;
+  }
+): Promise<DeliveryOrder> {
+  const response =
+    await request<DeliveryOrderResponse>(
+      `/api/delivery/orders/${encodeURIComponent(
+        orderId
+      )}/failed-delivery`,
+      token,
+      {
+        method: "POST",
+
+        body: JSON.stringify(
+          payload
+        ),
+      }
+    );
+
+  return response.data.order;
+}
+
 export async function verifyDeliveryOrderOtp(
   token: string,
   orderId: string,
-  otp: string
+  otp: string,
+  options?: {
+    codCollected?: boolean;
+    codAmountCollected?: number;
+  }
 ): Promise<DeliveryOrder> {
   const response =
-    await request<
-      ApiResponse & {
-        data: {
-          order:
-            DeliveryOrder;
-        };
-      }
-    >(
+    await request<DeliveryOrderResponse>(
       `/api/delivery/orders/${encodeURIComponent(
         orderId
       )}/verify-otp`,
@@ -435,6 +558,7 @@ export async function verifyDeliveryOrderOtp(
 
         body: JSON.stringify({
           otp,
+          ...(options ?? {}),
         }),
       }
     );
