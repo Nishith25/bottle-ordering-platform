@@ -33,6 +33,7 @@ export type ExportCenterFilters = {
   dateTo?: string;
   date?: string;
   status?: string;
+  customerStatus?: string;
   productId?: string;
 };
 
@@ -79,6 +80,13 @@ function buildQuery(filters: ExportCenterFilters = {}) {
     params.set(
       "status",
       filters.status
+    );
+  }
+
+  if (filters.customerStatus) {
+    params.set(
+      "customerStatus",
+      filters.customerStatus
     );
   }
 
@@ -152,11 +160,17 @@ async function request<T>(
 }
 
 export async function fetchExportCenterSummary(
-  token: string
+  token: string,
+  filters: ExportCenterFilters = {}
 ): Promise<ExportCenterSummaryResult> {
+  const query =
+    buildQuery(filters);
+
   const response =
     await request<ExportSummaryResponse>(
-      "/api/admin/export-center/summary",
+      `/api/admin/export-center/summary${
+        query ? `?${query}` : ""
+      }`,
       token
     );
 

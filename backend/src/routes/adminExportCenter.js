@@ -276,17 +276,91 @@ router.get(
             24 * 60 * 60 * 1000
         );
 
+      const status =
+        cleanText(req.query.status);
+
+      const customerStatus =
+        cleanText(req.query.customerStatus);
+
+      const productId =
+        cleanText(req.query.productId);
+
+      const orderFilter = {
+        ...buildDateFilter({
+          dateFrom:
+            req.query.dateFrom,
+          dateTo:
+            req.query.dateTo,
+          field:
+            "createdAt",
+        }),
+      };
+
+      if (
+        status &&
+        status !== "all"
+      ) {
+        if (
+          !ORDER_STATUSES.includes(
+            status
+          )
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Invalid order status.",
+          });
+        }
+
+        orderFilter.orderStatus =
+          status;
+      }
+
+      const customerFilter = {
+        role:
+          "customer",
+      };
+
+      if (
+        customerStatus === "active"
+      ) {
+        customerFilter.active = true;
+      }
+
+      if (
+        customerStatus === "inactive"
+      ) {
+        customerFilter.active = false;
+      }
+
+      const inventoryFilter = {
+        ...buildDateFilter({
+          dateFrom:
+            req.query.dateFrom,
+          dateTo:
+            req.query.dateTo,
+          field:
+            "createdAt",
+        }),
+      };
+
+      if (productId) {
+        inventoryFilter.productId =
+          productId;
+      }
+
       const [
         totalOrders,
         todayOrders,
         totalCustomers,
-        lowStockProducts,
-        outOfStockProducts,
+        products,
         pendingCodOrders,
         pendingCashHandover,
         inventoryMovements24h,
       ] = await Promise.all([
-        Order.countDocuments(),
+        Order.countDocuments(
+          orderFilter
+        ),
 
         Order.countDocuments({
           createdAt: {
@@ -295,38 +369,32 @@ router.get(
             $lte:
               dayRange.end,
           },
+          ...(status &&
+          status !== "all"
+            ? {
+                orderStatus:
+                  status,
+              }
+            : {}),
         }),
 
-        User.countDocuments({
-          role:
-            "customer",
-        }),
+        User.countDocuments(
+          customerFilter
+        ),
 
-        Product.countDocuments({
+        Product.find({
           active: {
             $ne:
               false,
           },
-          $expr: {
-            $lte: [
-              "$stockQuantity",
-              "$lowStockThreshold",
-            ],
-          },
-        }),
-
-        Product.countDocuments({
-          active: {
-            $ne:
-              false,
-          },
-          stockQuantity: {
-            $lte:
-              0,
-          },
-        }),
+        })
+          .select(
+            "stockQuantity lowStockThreshold active productId"
+          )
+          .lean(),
 
         Order.countDocuments({
+          ...orderFilter,
           paymentMethod:
             "cod",
           paymentStatus: {
@@ -346,15 +414,53 @@ router.get(
               "short_collected",
             ],
           },
+          ...buildDateFilter({
+            dateFrom:
+              req.query.dateFrom,
+            dateTo:
+              req.query.dateTo,
+            field:
+              "createdAt",
+          }),
         }),
 
         InventoryMovement.countDocuments({
-          createdAt: {
-            $gte:
-              last24Hours,
-          },
+          ...inventoryFilter,
+          createdAt:
+            inventoryFilter.createdAt || {
+              $gte:
+                last24Hours,
+            },
         }),
       ]);
+
+      const filteredProducts =
+        productId
+          ? products.filter(
+              (product) =>
+                product.productId ===
+                productId
+            )
+          : products;
+
+      const lowStockProducts =
+        filteredProducts.filter(
+          (product) =>
+            Number(
+              product.stockQuantity || 0
+            ) <=
+            Number(
+              product.lowStockThreshold || 0
+            )
+        ).length;
+
+      const outOfStockProducts =
+        filteredProducts.filter(
+          (product) =>
+            Number(
+              product.stockQuantity || 0
+            ) <= 0
+        ).length;
 
       return res.status(200).json({
         success: true,

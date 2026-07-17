@@ -198,7 +198,17 @@ export default function ExportCenterPage() {
       try {
         const result =
           await fetchExportCenterSummary(
-            token
+            token,
+            {
+              dateFrom,
+              dateTo,
+              date:
+                closingDate,
+              status:
+                orderStatus,
+              customerStatus,
+              productId,
+            }
           );
 
         setSummary(
@@ -215,6 +225,12 @@ export default function ExportCenterPage() {
       }
     }, [
       token,
+      dateFrom,
+      dateTo,
+      closingDate,
+      orderStatus,
+      customerStatus,
+      productId,
     ]);
 
   useEffect(() => {
@@ -314,12 +330,17 @@ export default function ExportCenterPage() {
           dateTo,
           date:
             closingDate,
+
           status:
             type === "orders"
               ? orderStatus
-              : type === "customers"
-                ? customerStatus
-                : undefined,
+              : undefined,
+
+          customerStatus:
+            type === "customers"
+              ? customerStatus
+              : undefined,
+
           productId:
             type ===
             "inventory-movements"
@@ -331,6 +352,8 @@ export default function ExportCenterPage() {
       setSuccess(
         `${formatLabel(type)} CSV downloaded.`
       );
+
+      await loadSummary();
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -340,6 +363,26 @@ export default function ExportCenterPage() {
     } finally {
       setExportingType(null);
     }
+  }
+
+  function resetFilters() {
+    setDateFrom(
+      getDateOffsetId(-30)
+    );
+
+    setDateTo(
+      getTodayDateId()
+    );
+
+    setClosingDate(
+      getTodayDateId()
+    );
+
+    setOrderStatus("all");
+    setCustomerStatus("all");
+    setProductId("");
+    setSuccess(null);
+    setError(null);
   }
 
   return (
@@ -358,18 +401,35 @@ export default function ExportCenterPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loading}
-          onClick={() => {
-            void loadSummary();
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            justifyContent: "flex-end",
           }}
         >
-          {loading
-            ? "Refreshing..."
-            : "Refresh summary"}
-        </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={resetFilters}
+          >
+            Reset filters
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading}
+            onClick={() => {
+              void loadSummary();
+            }}
+          >
+            {loading
+              ? "Refreshing..."
+              : "Refresh summary"}
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -386,7 +446,7 @@ export default function ExportCenterPage() {
 
       <div className="export-summary-grid">
         <SummaryCard
-          label="Total orders"
+          label="Filtered orders"
           value={
             summary.totalOrders
           }
@@ -556,7 +616,7 @@ export default function ExportCenterPage() {
         </div>
 
         <div className="export-filter-help">
-          Orders, COD and inventory exports use the selected date range. Daily closing uses the daily closing date only.
+          Summary cards and downloads now use the selected filters. Orders, COD and inventory exports use the selected date range. Daily closing uses the daily closing date only.
         </div>
       </section>
 

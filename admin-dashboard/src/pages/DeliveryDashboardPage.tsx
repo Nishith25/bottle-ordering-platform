@@ -22,6 +22,11 @@ import {
 
 import "./deliveryDashboard.css";
 
+const CUSTOMER_APP_URL = (
+  import.meta.env.VITE_CUSTOMER_APP_URL ??
+  "https://sipbite-customer-tan.vercel.app"
+).replace(/\/$/, "");
+
 const EMPTY_COUNTS:
   DeliveryOrderStatusCounts = {
     assigned: 0,
@@ -96,6 +101,22 @@ function formatDate(
   );
 }
 
+function cleanIndianPhone(
+  value?: string | null
+) {
+  const digits =
+    String(value || "").replace(
+      /\D/g,
+      ""
+    );
+
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+
+  return digits;
+}
+
 function getCustomerName(
   order: DeliveryOrder
 ) {
@@ -110,6 +131,20 @@ function getCustomerName(
   }
 
   return order.deliveryAddress.fullName;
+}
+
+function getCustomerPhone(
+  order: DeliveryOrder
+) {
+  if (
+    order.user &&
+    typeof order.user === "object" &&
+    order.user.phone
+  ) {
+    return order.user.phone;
+  }
+
+  return order.deliveryAddress.phone;
 }
 
 function getReviewCustomerName(
@@ -130,6 +165,136 @@ function getReviewCustomerName(
       ?.fullName ||
     "Customer"
   );
+}
+
+function getFullAddress(
+  order: DeliveryOrder
+) {
+  const address =
+    order.deliveryAddress;
+
+  return [
+    address.houseDetails,
+    address.areaDetails,
+    address.landmark
+      ? `near ${address.landmark}`
+      : "",
+    address.area,
+    address.city,
+    address.pincode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function buildDeliverySummary(
+  order: DeliveryOrder
+) {
+  return [
+    `Order: ${order.orderNumber}`,
+    `Customer: ${getCustomerName(order)}`,
+    `Phone: +91 ${getCustomerPhone(order)}`,
+    `Status: ${DELIVERY_LABELS[order.deliveryStatus]}`,
+    `Payment: ${
+      order.paymentMethod === "cod"
+        ? "Collect cash"
+        : "Paid online"
+    }`,
+    `Amount: ${formatCurrency(order.total)}`,
+    `Delivery: ${order.deliverySchedule.deliveryDateLabel} · ${order.deliverySchedule.deliverySlot}`,
+    `Address: ${getFullAddress(order)}`,
+    `Items: ${order.items
+      .map(
+        (item) =>
+          `${item.quantity} x ${item.name}`
+      )
+      .join(", ")}`,
+  ].join("\n");
+}
+
+function openCall(
+  phone: string
+) {
+  const cleanPhone =
+    cleanIndianPhone(phone);
+
+  if (!cleanPhone) {
+    return;
+  }
+
+  window.location.href =
+    `tel:+91${cleanPhone}`;
+}
+
+function openWhatsApp(
+  phone: string,
+  message: string
+) {
+  const cleanPhone =
+    cleanIndianPhone(phone);
+
+  if (!cleanPhone) {
+    return;
+  }
+
+  window.open(
+    `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(
+      message
+    )}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+function openMaps(
+  address: string
+) {
+  if (!address.trim()) {
+    return;
+  }
+
+  window.open(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      address
+    )}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+function openCustomerMode() {
+  window.open(
+    CUSTOMER_APP_URL,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+async function copyText(
+  text: string
+) {
+  if (
+    navigator.clipboard &&
+    navigator.clipboard.writeText
+  ) {
+    await navigator.clipboard.writeText(
+      text
+    );
+    return;
+  }
+
+  const textarea =
+    document.createElement("textarea");
+
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
 }
 
 export default function DeliveryDashboardPage() {
@@ -184,6 +349,13 @@ export default function DeliveryDashboardPage() {
   ] = useState<
     Record<string, string>
   >({});
+
+  const [
+    copiedOrderId,
+    setCopiedOrderId,
+  ] = useState<
+    string | null
+  >(null);
 
   const [
     error,
@@ -284,6 +456,36 @@ export default function DeliveryDashboardPage() {
           filter
       );
     }, [orders, filter]);
+
+  const codActiveOrders =
+    useMemo(
+      () =>
+        orders.filter(
+          (order) =>
+            order.paymentMethod ===
+              "cod" &&
+            [
+              "assigned",
+              "picked_up",
+              "out_for_delivery",
+            ].includes(
+              order.deliveryStatus
+            )
+        ),
+      [orders]
+    );
+
+  const codAmountToCollect =
+    useMemo(
+      () =>
+        codActiveOrders.reduce(
+          (total, order) =>
+            total +
+            Number(order.total || 0),
+          0
+        ),
+      [codActiveOrders]
+    );
 
   const updateLocalOrder = (
     updatedOrder:
@@ -424,6 +626,38 @@ export default function DeliveryDashboardPage() {
       }
     };
 
+  const handleCopyOrder =
+    async (
+      order: DeliveryOrder
+    ) => {
+      try {
+        await copyText(
+          buildDeliverySummary(order)
+        );
+
+        setCopiedOrderId(
+          order._id
+        );
+
+        window.setTimeout(
+          () => {
+            setCopiedOrderId(
+              (currentValue) =>
+                currentValue ===
+                order._id
+                  ? null
+                  : currentValue
+            );
+          },
+          1600
+        );
+      } catch {
+        setError(
+          "Unable to copy delivery summary."
+        );
+      }
+    };
+
   const ratingValue =
     performance.reviewCount > 0
       ? `${performance.averageDeliveryRating.toFixed(
@@ -436,7 +670,7 @@ export default function DeliveryDashboardPage() {
       <section className="delivery-hero">
         <div>
           <span>
-            GOOD DAY
+            DELIVERY MODE ACTIVE
           </span>
 
           <h1>
@@ -444,11 +678,10 @@ export default function DeliveryDashboardPage() {
           </h1>
 
           <p>
-            Complete only the deliveries
-            assigned to your account. Ask
-            the customer for the OTP only
-            after reaching the delivery
-            address.
+            Complete assigned deliveries from
+            this screen. Use Customer Mode if
+            the delivery partner also wants to
+            place personal bottle orders.
           </p>
 
           <div className="delivery-hero-progress">
@@ -465,16 +698,53 @@ export default function DeliveryDashboardPage() {
           </div>
         </div>
 
+        <div className="delivery-hero-actions">
+          <button
+            type="button"
+            className="delivery-mode-switch-button"
+            onClick={openCustomerMode}
+          >
+            Switch to Customer Mode
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              void loadDashboard();
+            }}
+          >
+            {loading
+              ? "Refreshing..."
+              : "Refresh dashboard"}
+          </button>
+        </div>
+      </section>
+
+      <section className="delivery-mode-card">
+        <div>
+          <span>
+            ROLE SWITCH
+          </span>
+
+          <h2>
+            Delivery person can also act as a customer
+          </h2>
+
+          <p>
+            This button opens the customer app.
+            The same delivery person can log in
+            there and place orders like a normal
+            customer, then come back here for
+            assigned delivery actions.
+          </p>
+        </div>
+
         <button
           type="button"
-          disabled={loading}
-          onClick={() => {
-            void loadDashboard();
-          }}
+          onClick={openCustomerMode}
         >
-          {loading
-            ? "Refreshing..."
-            : "Refresh dashboard"}
+          Open Customer App
         </button>
       </section>
 
@@ -520,6 +790,13 @@ export default function DeliveryDashboardPage() {
         />
 
         <Metric
+          label="COD to collect"
+          value={formatCurrency(
+            codAmountToCollect
+          )}
+        />
+
+        <Metric
           label="Completed"
           value={
             performance.completedDeliveries
@@ -529,13 +806,6 @@ export default function DeliveryDashboardPage() {
         <Metric
           label="Average rating"
           value={ratingValue}
-        />
-
-        <Metric
-          label="Customer reviews"
-          value={
-            performance.reviewCount
-          }
         />
 
         <Metric
@@ -812,6 +1082,12 @@ export default function DeliveryDashboardPage() {
                   ? order.user
                   : null;
 
+              const customerPhone =
+                getCustomerPhone(order);
+
+              const address =
+                getFullAddress(order);
+
               return (
                 <article
                   key={order._id}
@@ -852,6 +1128,56 @@ export default function DeliveryDashboardPage() {
                     </strong>
                   </div>
 
+                  <div className="delivery-quick-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openCall(
+                          customerPhone
+                        )
+                      }
+                    >
+                      Call
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openWhatsApp(
+                          customerPhone,
+                          buildDeliverySummary(
+                            order
+                          )
+                        )
+                      }
+                    >
+                      WhatsApp
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openMaps(address)
+                      }
+                    >
+                      Maps
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleCopyOrder(
+                          order
+                        );
+                      }}
+                    >
+                      {copiedOrderId ===
+                      order._id
+                        ? "Copied"
+                        : "Copy"}
+                    </button>
+                  </div>
+
                   <div className="delivery-info-grid">
                     <div>
                       <span>
@@ -867,10 +1193,9 @@ export default function DeliveryDashboardPage() {
 
                       <p>
                         +91{" "}
-                        {customer?.phone ??
-                          order
-                            .deliveryAddress
-                            .phone}
+                        {
+                          customerPhone
+                        }
                       </p>
                     </div>
 
@@ -922,40 +1247,7 @@ export default function DeliveryDashboardPage() {
                     </span>
 
                     <p>
-                      {
-                        order
-                          .deliveryAddress
-                          .houseDetails
-                      }
-                      ,{" "}
-                      {
-                        order
-                          .deliveryAddress
-                          .areaDetails
-                      }
-                      {order
-                        .deliveryAddress
-                        .landmark
-                        ? `, near ${order.deliveryAddress.landmark}`
-                        : ""}
-                      ,{" "}
-                      {
-                        order
-                          .deliveryAddress
-                          .area
-                      }
-                      ,{" "}
-                      {
-                        order
-                          .deliveryAddress
-                          .city
-                      }{" "}
-                      –{" "}
-                      {
-                        order
-                          .deliveryAddress
-                          .pincode
-                      }
+                      {address}
                     </p>
                   </div>
 
